@@ -181,7 +181,8 @@ export async function generatePDF(ticketId, venta) {
                 img.onload = () => {
                     const imgWidth = 60;
                     logoHeight = (img.height * imgWidth) / img.width;
-                    doc.addImage(img, 'PNG', margin, topY, imgWidth, logoHeight);
+                    // doc.addImage(img, 'PNG', margin, topY, imgWidth, logoHeight);
+                    doc.addImage(img, 'PNG', margin, topY, imgWidth, logoHeight, null, 'FAST');
                     resolve();
                 };
                 img.onerror = () => { resolve(); };
@@ -264,7 +265,7 @@ export async function generatePDF(ticketId, venta) {
     const subtotalVenta = venta.productos.reduce((sum, item) => sum + (item.precio * item.cantidad), 0);
     const montoCreditoSinRecargo = venta.pagos.credito / (1 + (venta.pagos.recargoCredito / 100));
     const recargoMonto = venta.pagos.credito - montoCreditoSinRecargo;
-    const totalColumnX = pageWidth - 80;
+    const totalColumnX = pageWidth - 90;
     y += lineHeight;
     drawText('Subtotal:', totalColumnX, y, 12, 'normal');
     drawText(formatCurrency(subtotalVenta), pageWidth - margin, y, 12, 'bold', 'right');

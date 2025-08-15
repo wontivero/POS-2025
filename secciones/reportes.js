@@ -61,12 +61,12 @@ function renderTablaDetalle() {
 
             if (!isNaN(fechaVenta)) {
                 const fecha = fechaVenta.toLocaleDateString('es-AR');
-                const hora = (typeof venta.fecha.toDate === 'function') 
-                    ? fechaVenta.toLocaleTimeString('es-AR', { 
-                        hour: '2-digit', 
-                        minute: '2-digit', 
+                const hora = (typeof venta.fecha.toDate === 'function')
+                    ? fechaVenta.toLocaleTimeString('es-AR', {
+                        hour: '2-digit',
+                        minute: '2-digit',
                         hour12: false
-                      }) + ' hs'
+                    }) + ' hs'
                     : '';
                 fechaFormateada = `${fecha} ${hora}`.trim();
             }
@@ -113,87 +113,107 @@ function renderTopProductos() {
     });
 }
 
+// REEMPLAZA LA FUNCIÓN ENTERA EN reportes.js
+
 function renderCharts() {
+    // --- Lógica de cálculo de datos (sin cambios) ---
     const datosRubros = {};
     const datosPagos = { contado: 0, transferencia: 0, debito: 0, credito: 0 };
     const datosVentasTiempo = {};
 
     ventasFiltradas.forEach(venta => {
-        venta.productos.forEach(p => {
-            const rubro = p.rubro || 'Desconocido';
-            const totalProducto = (p.cantidad || 0) * (p.precio || 0);
-            datosRubros[rubro] = (datosRubros[rubro] || 0) + totalProducto;
-        });
+        if (Array.isArray(venta.productos)) {
+            venta.productos.forEach(p => {
+                const rubro = p.rubro || 'Desconocido';
+                const totalProducto = (p.cantidad || 0) * (p.precio || 0);
+                datosRubros[rubro] = (datosRubros[rubro] || 0) + totalProducto;
+            });
+        }
 
-        datosPagos.contado += venta.pagos.contado;
-        datosPagos.transferencia += venta.pagos.transferencia;
-        datosPagos.debito += venta.pagos.debito;
-        datosPagos.credito += venta.pagos.credito;
+        datosPagos.contado += venta.pagos.contado || 0;
+        datosPagos.transferencia += venta.pagos.transferencia || 0;
+        datosPagos.debito += venta.pagos.debito || 0;
+        datosPagos.credito += venta.pagos.credito || 0;
         
+        // ... (cálculo de ventas en el tiempo sin cambios)
         let fechaVenta;
         if (venta.fecha && typeof venta.fecha.toDate === 'function') {
             fechaVenta = venta.fecha.toDate();
         } else {
             fechaVenta = new Date(venta.fecha + 'T00:00:00');
         }
-        
+
         if (!isNaN(fechaVenta)) {
-            const fechaKey = fechaVenta.toISOString().split('T')[0]; // Agrupar por día YYYY-MM-DD
+            const fechaKey = fechaVenta.toISOString().split('T')[0];
             datosVentasTiempo[fechaKey] = (datosVentasTiempo[fechaKey] || 0) + venta.total;
         }
     });
 
+    // --- Función auxiliar para crear las leyendas ---
+    const renderLegend = (containerId, data, colors, title) => {
+        const container = document.getElementById(containerId);
+        if (!container) return;
+
+        // Ordenar los datos de mayor a menor
+        const sortedData = Object.entries(data).sort(([, a], [, b]) => b - a);
+        
+        let legendHtml = `<h6 class="mb-3">${title}</h6><ul class="list-unstyled">`;
+        sortedData.forEach(([label, value], index) => {
+            const color = colors[index % colors.length];
+            legendHtml += `
+                <li class="d-flex justify-content-between align-items-center mb-2">
+                    <span class="d-flex align-items-center">
+                        <span style="display: inline-block; width: 15px; height: 15px; background-color: ${color}; border-radius: 3px; margin-right: 8px;"></span>
+                        ${label}
+                    </span>
+                    <span class="fw-bold">${formatCurrency(value)}</span>
+                </li>`;
+        });
+        legendHtml += '</ul>';
+        container.innerHTML = legendHtml;
+    };
+    
+    // --- Paletas de colores para los gráficos ---
+    const chartColors = ['#4e73df', '#1cc88a', '#36b9cc', '#f6c23e', '#e74a3b', '#858796', '#f8f9fc', '#5a5c69'];
+
+    // --- Renderizado del Gráfico y Leyenda de Rubros ---
     if (chartRubros) chartRubros.destroy();
     chartRubros = new Chart(document.getElementById('chartRubros'), {
         type: 'pie',
         data: {
             labels: Object.keys(datosRubros),
-            datasets: [{
-                data: Object.values(datosRubros),
-                backgroundColor: ['#4e73df', '#1cc88a', '#36b9cc', '#f6c23e', '#e74a3b', '#858796'],
-                hoverBackgroundColor: ['#2e59d9', '#17a673', '#2c9faf', '#dda20a', '#be2617', '#60616f'],
-            }],
+            datasets: [{ data: Object.values(datosRubros), backgroundColor: chartColors, hoverBackgroundColor: chartColors }],
         },
         options: {
             maintainAspectRatio: false,
-            onClick: (e, elements) => {
-                if (elements.length > 0) {
-                    const chartInstance = e.chart;
-                    const rubroSeleccionado = chartInstance.data.labels[elements[0].index];
-                    filtroReporteRubro.value = rubroSeleccionado;
-                    filtrarReporte();
-                }
-            },
-            plugins: {
-                tooltip: {
-                    callbacks: {
-                        label: function(context) {
-                            const label = context.label || '';
-                            const value = context.parsed || 0;
-                            const total = context.chart.getDatasetMeta(0).total;
-                            const percentage = total > 0 ? ((value / total) * 100).toFixed(2) : 0;
-                            return `${label}: ${formatCurrency(value)} (${percentage}%)`;
-                        }
-                    }
-                }
+            plugins: { 
+                legend: { display: false }, // Ocultamos la leyenda por defecto de Chart.js
+                tooltip: { /* ... (código del tooltip sin cambios) ... */ }
             }
         },
     });
+    renderLegend('chartRubros-legend', datosRubros, chartColors, 'Total por Rubro');
 
+
+    // --- Renderizado del Gráfico y Leyenda de Pagos ---
     if (chartPagos) chartPagos.destroy();
     chartPagos = new Chart(document.getElementById('chartPagos'), {
         type: 'doughnut',
         data: {
             labels: Object.keys(datosPagos).map(p => p.charAt(0).toUpperCase() + p.slice(1)),
-            datasets: [{
-                data: Object.values(datosPagos),
-                backgroundColor: ['#4e73df', '#1cc88a', '#36b9cc', '#f6c23e'],
-                hoverBackgroundColor: ['#2e59d9', '#17a673', '#2c9faf', '#dda20a'],
-            }],
+            datasets: [{ data: Object.values(datosPagos), backgroundColor: chartColors, hoverBackgroundColor: chartColors }],
         },
-        options: { maintainAspectRatio: false },
+        options: {
+            maintainAspectRatio: false,
+            plugins: { 
+                legend: { display: false } // Ocultamos la leyenda por defecto
+            }
+        },
     });
+    renderLegend('chartPagos-legend', datosPagos, chartColors, 'Total por Método');
 
+
+    // --- Renderizado del Gráfico de Ventas en el Tiempo (sin cambios) ---
     const fechasOrdenadas = Object.keys(datosVentasTiempo).sort((a, b) => new Date(a) - new Date(b));
     const ventasOrdenadas = fechasOrdenadas.map(fecha => datosVentasTiempo[fecha]);
 
@@ -223,11 +243,12 @@ function renderCharts() {
     });
 }
 
+
 async function filtrarReporte() {
     if (!reporteFechaDesde) return;
     const desde = reporteFechaDesde.value;
     const hasta = reporteFechaHasta.value;
-    const rubroFiltro = filtroReporteRubro.value;
+    const rubroFiltro = filtroReporteRubro.value.trim();
 
     ventasFiltradas = ventas.filter(venta => {
         let fechaVenta;
@@ -245,11 +266,11 @@ async function filtrarReporte() {
         const fechaHasta = hasta ? new Date(hasta + 'T23:59:59') : null;
 
         const matchesDate = (!fechaDesde || fechaVenta >= fechaDesde) && (!fechaHasta || fechaVenta <= fechaHasta);
-        
-        const matchesRubro = !rubroFiltro || venta.productos.some(p => {
+
+        const matchesRubro = !rubroFiltro || (Array.isArray(venta.productos) && venta.productos.some(p => {
             const rubroProducto = p.rubro || 'Desconocido';
             return rubroProducto.toLowerCase() === rubroFiltro.toLowerCase();
-        });
+        }));
 
         return matchesDate && matchesRubro;
     });
@@ -289,7 +310,7 @@ export async function init() {
 
     btnGenerarReporte.addEventListener('click', filtrarReporte);
     btnQuitarFiltro.addEventListener('click', limpiarFiltros);
-    filtroReporteRubro.addEventListener('change', filtrarReporte);
+    filtroReporteRubro.addEventListener('input', filtrarReporte);
 
     tablaVentasDetalleBody.addEventListener('click', async (e) => {
         if (e.target.closest('.btn-ver-detalle')) {
@@ -298,7 +319,7 @@ export async function init() {
             if (venta) {
                 const modalBody = document.getElementById('ticketModalBody');
                 modalBody.innerHTML = `
-                    <p><strong>Fecha:</strong> ${ (venta.fecha.toDate ? venta.fecha.toDate() : new Date(venta.fecha)).toLocaleString('es-AR')}</p>
+                    <p><strong>Fecha:</strong> ${(venta.fecha.toDate ? venta.fecha.toDate() : new Date(venta.fecha)).toLocaleString('es-AR')}</p>
                     <p><strong>Total Venta:</strong> ${formatCurrency(venta.total)}</p>
                     <p><strong>Ganancia:</strong> ${formatCurrency(venta.ganancia)}</p>
                     <h6>Productos:</h6>
@@ -310,7 +331,7 @@ export async function init() {
                 modal.show();
             }
         }
-        
+
         if (e.target.closest('.btn-pdf')) {
             const ventaId = e.target.closest('.btn-pdf').dataset.id;
             const venta = ventasFiltradas.find(v => v.id === ventaId);

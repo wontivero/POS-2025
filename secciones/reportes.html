@@ -81,29 +81,45 @@
 
     <div class="row mb-4">
         <div class="col-lg-6 mb-4">
-            <div class="card shadow mb-4">
+            <div class="card shadow mb-4 h-100">
                 <div class="card-header py-3 bg-primary text-white">
                     <h6 class="m-0 font-weight-bold">Ventas por Rubro</h6>
                 </div>
                 <div class="card-body">
-                    <div class="chart-pie pt-4 pb-2"><canvas id="chartRubros"></canvas></div>
-                    <!-- <hr>
-                    Haz clic en una sección para filtrar las ventas por ese rubro. -->
+                    <div class="row align-items-center">
+                        <div class="col-md-7">
+                            <div class="chart-pie pt-4 pb-2" style="height: 250px; position: relative;"><canvas
+                                    id="chartRubros"></canvas></div>
+                        </div>
+                        <div class="col-md-5">
+                            <div id="chartRubros-legend" class="mt-4">
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
         <div class="col-lg-6 mb-4">
-            <div class="card shadow mb-4">
+            <div class="card shadow mb-4 h-100">
                 <div class="card-header py-3 bg-success text-white">
                     <h6 class="m-0 font-weight-bold">Métodos de Pago Utilizados</h6>
                 </div>
                 <div class="card-body">
-                    <div class="chart-pie pt-4 pb-2"><canvas id="chartPagos"></canvas></div>
+                    <div class="row align-items-center">
+                        <div class="col-md-7">
+                            <div class="chart-pie pt-4 pb-2" style="height: 250px; position: relative;"><canvas
+                                    id="chartPagos"></canvas></div>
+                        </div>
+                        <div class="col-md-5">
+                            <div id="chartPagos-legend" class="mt-4">
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
-
+    
     <div class="row mb-4">
         <div class="col-lg-8 mb-4">
             <div class="card shadow mb-4 h-100">

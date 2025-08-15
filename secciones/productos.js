@@ -735,7 +735,7 @@ export function init() {
     }
     if (btnAplicarActualizacionMasiva) btnAplicarActualizacionMasiva.addEventListener('click', handleActualizacionMasiva);
 
-    if (productoCosto) productoCosto.addEventListener('input', updatePorcentajeField);
+    if (productoCosto) productoCosto.addEventListener('input', updateVentaField);
     if (productoVenta) productoVenta.addEventListener('input', updatePorcentajeField);
     if (productoPorcentaje) productoPorcentaje.addEventListener('input', updateVentaField);
 
