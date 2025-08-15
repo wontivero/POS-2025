@@ -388,7 +388,8 @@ async function generatePDF(ticketId, venta) {
                 img.onload = () => {
                     const imgWidth = 40;
                     logoHeight = (img.height * imgWidth) / img.width;
-                    doc.addImage(img, 'PNG', margin, topY, imgWidth, logoHeight);
+                    // doc.addImage(img, 'PNG', margin, topY, imgWidth, logoHeight);
+                    doc.addImage(img, 'PNG', margin, topY, imgWidth, logoHeight, null, 'FAST');
                     resolve();
                 };
                 img.onerror = () => { resolve(); };
