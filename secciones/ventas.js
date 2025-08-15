@@ -496,7 +496,7 @@ async function generatePDF(ticketId, venta) {
     const subtotalVenta = venta.productos.reduce((sum, item) => sum + (item.precio * item.cantidad), 0);
     const montoCreditoSinRecargo = venta.pagos.credito / (1 + (venta.pagos.recargoCredito / 100));
     const recargoMonto = venta.pagos.credito - montoCreditoSinRecargo;
-    const totalColumnX = pageWidth - 60;
+    const totalColumnX = pageWidth - 90;
 
     y += lineHeight;
     drawText('Subtotal:', totalColumnX, y, 12, 'normal');
