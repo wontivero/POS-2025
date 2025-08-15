@@ -1,0 +1,295 @@
+// utils.js
+import { db } from './firebase.js';
+import {
+    collection, addDoc, getDocs, runTransaction, doc, query, orderBy, where, updateDoc, deleteDoc, getDoc
+} from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
+import { companyInfo } from './config.js';
+/**
+ * Obtiene todos los documentos de una colección de Firestore.
+ * @param {string} collectionName - El nombre de la colección.
+ * @returns {Promise<Array>} - Una promesa que resuelve con los documentos y sus IDs.
+ */
+export const getCollection = async (collectionName) => {
+    const querySnapshot = await getDocs(collection(db, collectionName));
+    const data = [];
+    querySnapshot.forEach((doc) => {
+        data.push({ id: doc.id, ...doc.data() });
+    });
+    return data;
+};
+
+/**
+ * Guarda o actualiza un documento en Firestore.
+ * @param {string} collectionName - El nombre de la colección.
+ * @param {object} data - Los datos a guardar.
+ * @param {string} docId - El ID del documento (opcional, para actualización).
+ * @returns {Promise<string>} - Una promesa que resuelve con el ID del documento.
+ */
+export const saveDocument = async (collectionName, data, docId = null) => {
+    try {
+        if (docId) {
+            const docRef = doc(db, collectionName, docId);
+            await updateDoc(docRef, data);
+            return docId;
+        } else {
+            const docRef = await addDoc(collection(db, collectionName), data);
+            return docRef.id;
+        }
+    } catch (e) {
+        console.error("Error al guardar o actualizar el documento:", e);
+        throw e;
+    }
+};
+
+/**
+ * **NUEVA FUNCIÓN:** Actualiza un documento existente en una colección.
+ * Usa la función saveDocument para actualizar el documento por ID.
+ * @param {string} collectionName - El nombre de la colección.
+ * @param {string} docId - El ID del documento a actualizar.
+ * @param {object} data - Los datos a actualizar.
+ * @returns {Promise<string>} - Una promesa que resuelve con el ID del documento.
+ */
+export const updateDocument = async (collectionName, docId, data) => {
+    return saveDocument(collectionName, data, docId);
+};
+
+/**
+ * Elimina un documento de Firestore.
+ * @param {string} collectionName - El nombre de la colección.
+ * @param {string} docId - El ID del documento a eliminar.
+ */
+export const deleteDocument = async (collectionName, docId) => {
+    try {
+        await deleteDoc(doc(db, collectionName, docId));
+    } catch (e) {
+        console.error("Error al eliminar el documento:", e);
+        throw e;
+    }
+};
+
+/**
+ * Obtiene un solo documento por ID de una colección.
+ * @param {string} collectionName - El nombre de la colección.
+ * @param {string} docId - El ID del documento.
+ * @returns {Promise<object>} - Una promesa que resuelve con los datos del documento.
+ */
+export const getDocumentById = async (collectionName, docId) => {
+    const docRef = doc(db, collectionName, docId);
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+        return { id: docSnap.id, ...docSnap.data() };
+    } else {
+        console.log("No existe el documento!");
+        return null;
+    }
+};
+
+// Las funciones formatCurrency y getTodayDate se mantienen igual
+
+export function formatCurrency(number) {
+    return new Intl.NumberFormat('es-AR', {
+        style: 'currency',
+        currency: 'ARS',
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
+    }).format(number);
+}
+
+export const getTodayDate = () => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = (today.getMonth() + 1).toString().padStart(2, '0');
+    const day = today.getDate().toString().padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
+
+//  * **NUEVA FUNCIÓN**
+//  * Obtiene la fecha y hora actual en formato argentino (DD/MM/YYYY HH:mm).
+//  * @returns {string} - La fecha y hora formateada.
+//  */
+export const getFormattedDateTime = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = (now.getMonth() + 1).toString().padStart(2, '0');
+    const day = now.getDate().toString().padStart(2, '0');
+    const hours = now.getHours().toString().padStart(2, '0');
+    const minutes = now.getMinutes().toString().padStart(2, '0');
+    return `${day}/${month}/${year} ${hours}:${minutes}`;
+};
+
+
+export async function getNextTicketNumber() {
+    const counterRef = doc(db, 'config', 'ticket_counter');
+    let newTicketNumber;
+
+    try {
+        await runTransaction(db, async (transaction) => {
+            const counterDoc = await transaction.get(counterRef);
+            if (!counterDoc.exists()) {
+                throw new Error("El documento del contador de tickets no existe. Por favor, créalo en tu base de datos.");
+            }
+
+            const currentNumber = counterDoc.data().lastTicketNumber;
+            newTicketNumber = currentNumber + 1;
+            transaction.update(counterRef, { lastTicketNumber: newTicketNumber });
+        });
+        return newTicketNumber;
+    } catch (e) {
+        console.error("Error en la transacción para obtener el número de ticket: ", e);
+        throw e;
+    }
+}
+
+/**
+ * Capitaliza la primera letra de una cadena.
+ * @param {string} str La cadena a capitalizar.
+ * @returns {string} La cadena con la primera letra en mayúscula.
+ */
+export function capitalizeFirstLetter(str) {
+    if (!str) return '';
+    return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+// ** FUNCIÓN MODIFICADA PARA EL NUEVO LAYOUT **
+// REEMPLAZAR en utils.js
+export async function generatePDF(ticketId, venta) {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    const margin = 10;
+    const lineHeight = 5;
+    const font = 'helvetica';
+    const pageWidth = doc.internal.pageSize.width;
+    let y = margin;
+
+    const drawText = (text, x, yPos, size, style = 'normal', align = 'left') => {
+        doc.setFont(font, style);
+        doc.setFontSize(size);
+        const textWidth = doc.getStringUnitWidth(text) * size / doc.internal.scaleFactor;
+        let xPos = x;
+        if (align === 'center') { xPos = x - textWidth / 2; } 
+        else if (align === 'right') { xPos = x - textWidth; }
+        doc.text(text, xPos, yPos);
+    };
+
+    const topY = y;
+    let logoHeight = 0;
+    if (companyInfo.logoUrl) {
+        try {
+            const img = new Image();
+            img.src = companyInfo.logoUrl;
+            await new Promise((resolve) => {
+                img.onload = () => {
+                    const imgWidth = 60;
+                    logoHeight = (img.height * imgWidth) / img.width;
+                    doc.addImage(img, 'PNG', margin, topY, imgWidth, logoHeight);
+                    resolve();
+                };
+                img.onerror = () => { resolve(); };
+            });
+        } catch (e) { console.error("No se pudo cargar el logo:", e); }
+    }
+
+    const boxSize = 10;
+    const boxX = (pageWidth / 2) - (boxSize / 2);
+    const boxY = topY + (logoHeight > 0 ? logoHeight / 2 : 0) - (boxSize / 2);
+    const textCY = boxY + boxSize / 2;
+    doc.roundedRect(boxX, boxY, boxSize, boxSize, 2, 2);
+    doc.setFont(font, 'bold');
+    doc.setFontSize(16);
+    doc.text('C', pageWidth / 2, textCY, { align: 'center', baseline: 'middle' });
+
+    const rightY = topY + (logoHeight > 0 ? logoHeight / 2 : 0) - (lineHeight / 2);
+    drawText(`Fecha: ${venta.timestamp}`, pageWidth - margin, rightY, 10, 'normal', 'right');
+    drawText(`FACTURA N°: ${ticketId}`, pageWidth - margin, rightY + lineHeight * 1.5, 12, 'bold', 'right');
+
+    y = topY + Math.max(logoHeight, lineHeight * 3) + 10;
+
+    const startYCompany = y;
+    drawText(`Dir: ${companyInfo.address}`, margin, startYCompany, 10);
+    y += lineHeight;
+    drawText(`CUIT: ${companyInfo.cuit}`, margin, y, 10);
+    y += lineHeight;
+    drawText(`IVA: ${companyInfo.ivaCondition}`, margin, y, 10);
+    y += lineHeight;
+    drawText(`Tel: ${companyInfo.phone}`, margin, y, 10);
+    y += lineHeight * 2;
+
+    doc.line(margin, y, pageWidth - margin, y);
+    y += lineHeight * 2;
+
+    if (venta.cliente) {
+        drawText('Datos del Cliente:', margin, y, 10, 'bold');
+        y += lineHeight * 1.5;
+        drawText(`Nombre: ${venta.cliente.nombre}`, margin, y, 10);
+        y += lineHeight;
+        if (venta.cliente.cuit) { drawText(`CUIT/DNI: ${venta.cliente.cuit}`, margin, y, 10); y += lineHeight; }
+        if (venta.cliente.domicilio) { drawText(`Domicilio: ${venta.cliente.domicilio}`, margin, y, 10); y += lineHeight; }
+    }
+
+    y += 10;
+    doc.line(margin, y, pageWidth - margin, y);
+    y += lineHeight * 2;
+
+    const startYProducts = y;
+    drawText('Descripción', margin, startYProducts, 12, 'bold');
+    drawText('Cant.', 100, startYProducts, 12, 'bold');
+    drawText('Precio', 130, startYProducts, 12, 'bold');
+    drawText('Total', pageWidth - margin, startYProducts, 12, 'bold', 'right');
+    y += lineHeight;
+    doc.line(margin, y, pageWidth - margin, y);
+    y += lineHeight;
+
+    venta.productos.forEach(producto => {
+        // --- INICIO DEL CAMBIO ---
+        // Construimos la descripción completa del producto
+        let descripcionCompleta = producto.nombre;
+        if (producto.marca && producto.marca !== 'Desconocido') {
+            descripcionCompleta += ` - ${producto.marca}`;
+        }
+        if (producto.color && producto.color !== 'N/A') {
+            descripcionCompleta += ` - ${producto.color}`;
+        }
+        
+        drawText(descripcionCompleta, margin, y, 10); // Usamos la nueva descripción
+        // --- FIN DEL CAMBIO ---
+
+        drawText(producto.cantidad.toString(), 100, y, 10);
+        drawText(formatCurrency(producto.precio), 130, y, 10);
+        drawText(formatCurrency(producto.cantidad * producto.precio), pageWidth - margin, y, 10, 'normal', 'right');
+        y += lineHeight;
+    });
+
+    y += lineHeight;
+    doc.line(margin, y, pageWidth - margin, y);
+    const subtotalVenta = venta.productos.reduce((sum, item) => sum + (item.precio * item.cantidad), 0);
+    const montoCreditoSinRecargo = venta.pagos.credito / (1 + (venta.pagos.recargoCredito / 100));
+    const recargoMonto = venta.pagos.credito - montoCreditoSinRecargo;
+    const totalColumnX = pageWidth - 80;
+    y += lineHeight;
+    drawText('Subtotal:', totalColumnX, y, 12, 'normal');
+    drawText(formatCurrency(subtotalVenta), pageWidth - margin, y, 12, 'bold', 'right');
+    y += lineHeight;
+    if (recargoMonto > 0) {
+        drawText('Recargo Crédito:', totalColumnX, y, 10, 'normal');
+        drawText(formatCurrency(recargoMonto), pageWidth - margin, y, 10, 'normal', 'right');
+        y += lineHeight;
+    }
+    y += lineHeight * 1.5;
+    drawText('TOTAL FINAL:', totalColumnX, y, 14, 'bold');
+    drawText(formatCurrency(venta.total), pageWidth - margin, y, 14, 'bold', 'right');
+    y += lineHeight * 2;
+    drawText('DETALLE DE PAGOS', margin, y, 12, 'bold');
+    y += lineHeight;
+    if (venta.pagos.contado > 0) { drawText(`- Contado:`, margin + 5, y, 10); drawText(formatCurrency(venta.pagos.contado), pageWidth - margin, y, 10, 'normal', 'right'); y += lineHeight; }
+    if (venta.pagos.transferencia > 0) { drawText(`- Transferencia:`, margin + 5, y, 10); drawText(formatCurrency(venta.pagos.transferencia), pageWidth - margin, y, 10, 'normal', 'right'); y += lineHeight; }
+    if (venta.pagos.debito > 0) { drawText(`- Débito:`, margin + 5, y, 10); drawText(formatCurrency(venta.pagos.debito), pageWidth - margin, y, 10, 'normal', 'right'); y += lineHeight; }
+    if (venta.pagos.credito > 0) { drawText(`- Crédito (${venta.pagos.recargoCredito}%):`, margin + 5, y, 10); drawText(formatCurrency(venta.pagos.credito), pageWidth - margin, y, 10, 'normal', 'right'); y += lineHeight; }
+    y += lineHeight * 2;
+    doc.line(margin, y, pageWidth - margin, y);
+    y += lineHeight * 2;
+    drawText('¡Gracias por su compra!', pageWidth / 2, y, 12, 'normal', 'center');
+    y += lineHeight;
+    doc.line(margin, y, pageWidth - margin, y);
+
+    doc.save(`factura-${venta.fecha}-${ticketId}.pdf`);
+}

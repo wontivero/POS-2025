@@ -1,0 +1,175 @@
+<section id="seccion-ventas">
+    <h2 class="mb-4">Asistente de Ventas</h2>
+
+    <div class="row">
+        <div class="col-md-7">
+
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="fas fa-shopping-cart me-2"></i>Productos en el Ticket</h5>
+                </div>
+                <div class="card-body">
+                    <div class="input-group mb-3">
+                        <span class="input-group-text"><i class="fas fa-search"></i></span>
+                        <div class="input-group">
+                            <input type="text" class="form-control" id="productoSearch"
+                                placeholder="Buscar por nombre o código...">
+                            <button class="btn btn-primary" type="button" id="btnCrearProductoVentas"><i
+                                    class="fas fa-plus-circle"></i> Crear Producto</button>
+                        </div>
+                    </div>
+                    <div class="list-group mb-3" id="searchResults">
+                    </div>
+                    <div class="list-group" id="ticketItems">
+                    </div>
+                </div>
+                <div class="card-footer d-flex justify-content-between align-items-center bg-light">
+                    <h4 class="mb-0">Total: <span id="totalVenta" class="text-primary">$0.00</span></h4>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-5">
+            <div class="card mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="fa-solid fa-user-group me-2"></i>Cliente:</h5>
+                </div>
+                <div class="card-body">
+                    <div class="input-group">
+                        <input class="form-control" list="clientesList" id="clienteSearch"
+                            placeholder="Buscar o agregar cliente...">
+                        <datalist id="clientesList"></datalist>
+                        <button class="btn btn-primary" type="button" id="btnAgregarCliente">Agregar</button>
+                        <button class="btn btn-warning" type="button" id="btnEditarCliente"
+                            style="display:none;">Editar</button>
+                    </div>
+                </div>
+            </div>
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0"><i class="fas fa-money-bill-wave me-2"></i>Métodos de Pago</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label for="txtContado" class="form-label">Contado:</label>
+                            <input type="number" class="form-control campo-pago" id="txtContado" value="0" step="1"
+                                placeholder="0">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="txtTransferencia" class="form-label">Transferencia:</label>
+                            <input type="number" class="form-control campo-pago" id="txtTransferencia" value="0"
+                                step="1" placeholder="0">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="txtDebito" class="form-label">Débito:</label>
+                            <input type="number" class="form-control campo-pago" id="txtDebito" value="0" step="1"
+                                placeholder="0">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="txtCredito" class="form-label">Crédito:</label>
+                            <div class="input-group">
+                                <input type="number" class="form-control campo-pago" id="txtCredito" value="0" step="1"
+                                    placeholder="0">
+                                <span class="input-group-text">
+                                    <input type="number" class="form-control form-control-sm text-center"
+                                        id="txtRecargoCredito" value="10" style="width: 60px;">
+                                    <span>%</span>
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="d-grid gap-2">
+                        <button id="btnPagoRapidoContado" class="btn btn-outline-info btn-sm btn-pago-rapido"
+                            data-metodo="contado"><i class="fas fa-hand-holding-usd me-1"></i>P. Rápido (Contado): <span
+                                id="montoContadoRapido">$0.00</span></button>
+                        <button id="btnPagoRapidoTransferencia" class="btn btn-outline-info btn-sm btn-pago-rapido"
+                            data-metodo="transferencia"><i class="fas fa-exchange-alt me-1"></i>P. Rápido (Transf.):
+                            <span id="montoTransferenciaRapido">$0.00</span></button>
+                        <button id="btnPagoRapidoDebito" class="btn btn-outline-info btn-sm btn-pago-rapido"
+                            data-metodo="debito"><i class="fas fa-credit-card me-1"></i>P. Rápido (Débito): <span
+                                id="montoDebitoRapido">$0.00</span></button>
+                        <button id="btnPagoRapidoCredito" class="btn btn-outline-info btn-sm btn-pago-rapido"
+                            data-metodo="credito"><i class="fas fa-credit-card me-1"></i>P. Rápido (Crédito): <span
+                                id="montoCreditoRapido">$0.00</span></button>
+                    </div>
+                </div>
+                <div class="card-footer bg-light">
+                    <button id="btnFinalizarVenta" class="btn btn-success w-100 btn-lg" disabled><i
+                            class="fas fa-check-circle me-2"></i>Finalizar y Guardar Venta</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="productoModal" tabindex="-1" aria-labelledby="productoModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form id="formProducto">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="productoModalLabel">Nuevo Producto</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <input type="hidden" id="producto-id">
+                        <div class="mb-3">
+                            <label for="producto-nombre" class="form-label">Nombre:</label>
+                            <input type="text" class="form-control" id="producto-nombre" required>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="producto-codigo" class="form-label">Código:</label>
+                                <input type="text" class="form-control" id="producto-codigo">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="producto-marca" class="form-label">Marca:</label>
+                                <input type="text" class="form-control" id="producto-marca" list="marcas-list">
+                                <datalist id="marcas-list"></datalist>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="producto-color" class="form-label">Color:</label>
+                                <input type="text" class="form-control" id="producto-color" list="colores-list">
+                                <datalist id="colores-list"></datalist>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="producto-rubro" class="form-label">Rubro:</label>
+                                <input type="text" class="form-control" id="producto-rubro" list="rubros-list">
+                                <datalist id="rubros-list"></datalist>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-4 mb-3">
+                                <label for="producto-costo" class="form-label">Costo:</label>
+                                <input type="number" class="form-control" id="producto-costo" step="0.01" required>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label for="producto-porcentaje" class="form-label">Ganancia %:</label>
+                                <input type="text" class="form-control" id="producto-porcentaje" step="0.01">
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label for="producto-venta" class="form-label">Venta:</label>
+                                <input type="number" class="form-control" id="producto-venta" step="0.01" required>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="producto-stock" class="form-label">Stock:</label>
+                                <input type="number" class="form-control" id="producto-stock" required>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="producto-stock-minimo" class="form-label">Stock Mínimo:</label>
+                                <input type="number" class="form-control" id="producto-stock-minimo" value="0">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                        <button type="submit" class="btn btn-primary">Guardar Producto</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</section>

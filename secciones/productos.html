@@ -1,0 +1,208 @@
+<section id="seccion-productos">
+    <div id="loader-overlay" class="d-none"
+        style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.5); z-index: 9999; display: flex; justify-content: center; align-items: center;">
+        <div class="spinner-border text-light" role="status" style="width: 3rem; height: 3rem;">
+            <span class="visually-hidden">Procesando...</span>
+        </div>
+        <p class="text-light ms-3 mb-0">Importando productos, por favor esperá...</p>
+    </div>
+    <h2 class="mb-4">Gestión de Productos</h2>
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <button class="btn btn-primary" id="btnNuevoProducto"><i class="fas fa-plus-circle me-2"></i>Crear Producto</button>
+            <button class="btn btn-success ms-2" id="btnExportarProductos"><i
+                    class="fas fa-file-excel me-2"></i>Exportar Productos (CSV)</button>
+            <button class="btn btn-info ms-2" id="btnImportarProductos"><i class="fas fa-file-upload me-2"></i>Importar
+                Productos (CSV)</button>
+            <input type="file" id="importarArchivoInput" accept=".csv" style="display: none;">
+        </div>
+        <div class="col-md-6">
+            <div class="input-group">
+                <span class="input-group-text"><i class="fas fa-search"></i></span>
+                <input type="text" class="form-control" id="filtro-productos"
+                    placeholder="Búsqueda rápida por nombre o código...">
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-info text-white d-flex justify-content-between align-items-center"
+            data-bs-toggle="collapse" data-bs-target="#collapseFiltros" aria-expanded="false"
+            aria-controls="collapseFiltros" style="cursor: pointer;">
+            <h5 class="mb-0"><i class="fas fa-filter me-2"></i>Filtros Avanzados y Acciones Masivas</h5>
+            <i id="filtro-chevron-icon" class="fas fa-chevron-down"></i>
+        </div>
+        <div class="collapse" id="collapseFiltros">
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <label for="filtro-marca" class="form-label">Marca:</label>
+                        <input type="text" class="form-control" id="filtro-marca" list="marcas-list-filtro">
+                        <datalist id="marcas-list-filtro"></datalist>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="filtro-color" class="form-label">Color:</label>
+                        <input type="text" class="form-control" id="filtro-color" list="colores-list-filtro">
+                        <datalist id="colores-list-filtro"></datalist>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="filtro-rubro" class="form-label">Rubro:</label>
+                        <input type="text" class="form-control" id="filtro-rubro" list="rubros-list-filtro">
+                        <datalist id="rubros-list-filtro"></datalist>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="filtro-stock-min" class="form-label">Stock:</label>
+                        <div class="input-group">
+                            <input type="number" class="form-control" id="filtro-stock-min" placeholder="Min.">
+                            <input type="number" class="form-control" id="filtro-stock-max" placeholder="Max.">
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="filtro-venta-min" class="form-label">Venta:</label>
+                        <div class="input-group">
+                            <input type="number" class="form-control" id="filtro-venta-min" placeholder="Min.">
+                            <input type="number" class="form-control" id="filtro-venta-max" placeholder="Max.">
+                        </div>
+                    </div>
+                    <div class="col-md-3 d-flex align-items-end">
+                        <button id="btnAplicarFiltros" class="btn btn-primary w-100">Buscar</button>
+                    </div>
+                    <div class="col-md-3 d-flex align-items-end">
+                        <button id="btnLimpiarFiltros" class="btn btn-secondary w-100">Limpiar</button>
+                    </div>
+                </div>
+                <hr>
+                <div class="col-12 mt-4">
+                    <h6 class="mb-2"><i class="fas fa-magic me-2"></i>Actualización Masiva de Precios</h6>
+                    <div class="row g-2">
+                        <div class="col-md-3">
+                            <label for="update-field" class="form-label">Campo:</label>
+                            <select id="update-field" class="form-select">
+                                <option value="venta" selected>Precio de Venta</option>
+                                <option value="costo">Precio de Costo</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label d-block">Tipo:</label>
+                            <div class="btn-group w-100" role="group">
+                                <input type="radio" class="btn-check" name="update-type" id="updateTypePercentage"
+                                    autocomplete="off" checked>
+                                <label class="btn btn-outline-info" for="updateTypePercentage">%</label>
+                                <input type="radio" class="btn-check" name="update-type" id="updateTypeFixed"
+                                    autocomplete="off">
+                                <label class="btn btn-outline-info" for="updateTypeFixed">Fijo</label>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="update-amount" class="form-label">Monto (+/-):</label>
+                            <input type="number" class="form-control" id="update-amount" step="0.01">
+                        </div>
+                        <div class="col-md-3 d-flex align-items-end">
+                            <button id="btnAplicarActualizacionMasiva"
+                                class="btn btn-info w-100 text-white">Actualizar</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="table-responsive">
+        <table class="table table-hover table-striped">
+            <thead id="tablaProductosHead">
+                <tr>
+                    <th class="sortable-header" data-sort-by="nombre" data-sort-direction="asc">Nombre <i
+                            class="fas fa-sort sort-icon"></i></th>
+                    <th class="sortable-header" data-sort-by="codigo">Código <i class="fas fa-sort sort-icon"></i></th>
+                    <th class="sortable-header" data-sort-by="marca">Marca <i class="fas fa-sort sort-icon"></i></th>
+                    <th class="sortable-header" data-sort-by="color">Color <i class="fas fa-sort sort-icon"></i></th>
+                    <th class="sortable-header" data-sort-by="rubro">Rubro <i class="fas fa-sort sort-icon"></i></th>
+                    <th class="sortable-header editable-header" data-sort-by="costo">Costo <i
+                            class="fas fa-sort sort-icon"></i></th>
+                    <th class="sortable-header editable-header" data-sort-by="venta">Venta <i
+                            class="fas fa-sort sort-icon"></i></th>
+                    <th class="sortable-header" data-sort-by="porcentajeGanancia">Ganancia % <i
+                            class="fas fa-sort sort-icon"></i></th>
+                    <th class="sortable-header editable-header" data-sort-by="stock">Stock <i
+                            class="fas fa-sort sort-icon"></i></th>
+                    <th class="sortable-header" data-sort-by="fechaUltimoCambioPrecio">Última Act. <i
+                            class="fas fa-sort sort-icon"></i></th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody id="tabla-productos">
+            </tbody>
+        </table>
+    </div>
+
+    <div class="modal fade" id="productoModal" tabindex="-1" aria-labelledby="productoModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form id="formProducto">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="productoModalLabel">Nuevo Producto</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <input type="hidden" id="producto-id">
+                        <div class="mb-3">
+                            <label for="producto-nombre" class="form-label">Nombre:</label>
+                            <input type="text" class="form-control" id="producto-nombre" required>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="producto-codigo" class="form-label">Código:</label>
+                                <input type="text" class="form-control" id="producto-codigo">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="producto-marca" class="form-label">Marca:</label>
+                                <input type="text" class="form-control" id="producto-marca" list="marcas-list">
+                                <datalist id="marcas-list"></datalist>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="producto-color" class="form-label">Color:</label>
+                                <input type="text" class="form-control" id="producto-color" list="colores-list">
+                                <datalist id="colores-list"></datalist>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="producto-rubro" class="form-label">Rubro:</label>
+                                <input type="text" class="form-control" id="producto-rubro" list="rubros-list">
+                                <datalist id="rubros-list"></datalist>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-4 mb-3">
+                                <label for="producto-costo" class="form-label">Costo:</label>
+                                <input type="number" class="form-control" id="producto-costo" step="0.01" required>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label for="producto-porcentaje" class="form-label">Ganancia %:</label>
+                                <input type="text" class="form-control" id="producto-porcentaje" step="0.01">
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label for="producto-venta" class="form-label">Venta:</label>
+                                <input type="number" class="form-control" id="producto-venta" step="0.01" required>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="producto-stock" class="form-label">Stock:</label>
+                                <input type="number" class="form-control" id="producto-stock" required>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="producto-stock-minimo" class="form-label">Stock Mínimo:</label>
+                                <input type="number" class="form-control" id="producto-stock-minimo" value="0">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                        <button type="submit" class="btn btn-primary">Guardar Producto</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</section>
