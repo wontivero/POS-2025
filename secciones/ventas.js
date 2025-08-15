@@ -12,7 +12,7 @@ let clientes = [];
 let ticket = [];
 let totalVentaBase = 0;
 let productoSearch, searchResults, ticketItems, totalVentaSpan, btnFinalizarVenta, camposPago, btnsPagoRapido;
-let btnCrearProductoVentas, productoModalEl, productoModal; // <-- AGREGADO
+let btnCrearProductoVentas, productoModalEl, productoModal;
 let txtContado, txtCredito, txtRecargoCredito;
 let montoContadoRapidoSpan, montoTransferenciaRapidoSpan, montoDebitoRapidoSpan, montoCreditoRapidoSpan;
 
@@ -45,7 +45,20 @@ async function loadData() {
 
 async function loadClientes() {
     clientes = await getCollection('clientes');
+
+    // Comprobamos si "Consumidor Final" existe
+    const consumidorFinalExiste = clientes.some(c => c.nombre === 'Consumidor Final');
+
+    if (!consumidorFinalExiste) {
+        // Si no existe, lo creamos
+        const nuevoCliente = { nombre: 'Consumidor Final', cuit: '99-99999999-9' };
+        await saveDocument('clientes', nuevoCliente);
+        // Volvemos a cargar la lista para incluir el recién creado
+        clientes = await getCollection('clientes');
+    }
+    
     renderClientesList();
+    setDefaultCliente();
 }
 
 function renderClientesList() {
@@ -55,6 +68,22 @@ function renderClientesList() {
         option.value = cliente.nombre;
         clientesList.appendChild(option);
     });
+}
+
+function setDefaultCliente() {
+    const defaultClient = clientes.find(c => c.nombre === 'Consumidor Final');
+    if (defaultClient) {
+        clienteSeleccionado = defaultClient;
+        clienteSearch.value = defaultClient.nombre;
+        btnAgregarCliente.style.display = 'none';
+        btnEditarCliente.style.display = 'block';
+    } else {
+        // Si no existe (caso improbable ahora), dejamos los campos listos para un cliente nuevo
+        clienteSearch.value = '';
+        clienteSeleccionado = null;
+        btnAgregarCliente.style.display = 'block';
+        btnEditarCliente.style.display = 'none';
+    }
 }
 
 function renderTicket() {
@@ -143,7 +172,6 @@ function checkFinalizarVenta() {
 function handleSearch(e) {
     const query = e.target.value.toLowerCase();
     searchResults.innerHTML = '';
-    //PARA Q BUSQUE DESPUES DEPNER 3 CARACTERES
     if (query.length < 3) return;
 
     const filteredProducts = productos.filter(p => p.nombre.toLowerCase().includes(query) || p.codigo?.toLowerCase().includes(query));
@@ -162,7 +190,6 @@ function handleSearch(e) {
     }
 }
 
-// *** Lógica para agregar el producto al ticket, ahora más robusta ***
 function addProductToTicket(producto) {
     const itemIndex = ticket.findIndex(item => item.id === producto.id);
     if (itemIndex !== -1) {
@@ -200,7 +227,6 @@ function handleSearchResultClick(e) {
     }
 }
 
-// ** CORRECCIÓN: La función `handleSearchKeyUp` ahora funciona como esperas **
 function handleSearchKeyUp(e) {
     if (e.key === 'Enter') {
         const results = searchResults.querySelectorAll('.list-group-item-action');
@@ -353,8 +379,6 @@ function hideLoading() {
     loadingOverlay.style.display = 'none';
 }
 
-// ** FUNCIÓN MODIFICADA PARA APLICAR LA NUEVA ESTRUCTURA **
-// ** FUNCIÓN MODIFICADA PARA MOVER EL LOGO ARRIBA **
 async function generatePDF(ticketId, venta) {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
@@ -377,7 +401,6 @@ async function generatePDF(ticketId, venta) {
         doc.text(text, xPos, yPos);
     };
 
-    // --- Sección Superior: Logo, Recuadro "C", Fecha y Factura N° ---
     const topY = y;
     let logoHeight = 0;
     if (companyInfo.logoUrl) {
@@ -388,7 +411,6 @@ async function generatePDF(ticketId, venta) {
                 img.onload = () => {
                     const imgWidth = 40;
                     logoHeight = (img.height * imgWidth) / img.width;
-                    // doc.addImage(img, 'PNG', margin, topY, imgWidth, logoHeight);
                     doc.addImage(img, 'PNG', margin, topY, imgWidth, logoHeight, null, 'FAST');
                     resolve();
                 };
@@ -399,7 +421,6 @@ async function generatePDF(ticketId, venta) {
         }
     }
 
-    // Recuadro "C"
     const boxSize = 10;
     const boxX = (pageWidth / 2) - (boxSize / 2);
     const boxY = topY + (logoHeight > 0 ? logoHeight / 2 : 0) - (boxSize / 2);
@@ -411,7 +432,6 @@ async function generatePDF(ticketId, venta) {
     doc.setFontSize(fontSizeC);
     doc.text('C', pageWidth / 2, textCY, { align: 'center' });
 
-    // Fecha y Factura N°
     const rightY = topY + (logoHeight > 0 ? logoHeight / 2 : 0) - (lineHeight / 2);
     drawText(`Fecha: ${venta.timestamp}`, pageWidth - margin, rightY, 10, 'normal', 'right');
     drawText(`FACTURA N°: ${ticketId}`, pageWidth - margin, rightY + lineHeight * 1.5, 12, 'bold', 'right');
@@ -420,7 +440,6 @@ async function generatePDF(ticketId, venta) {
     doc.line(margin, y, pageWidth - margin, y);
     y += lineHeight * 2;
 
-    // --- Sección de Datos de Empresa y Cliente ---
     const startYCompany = y;
     drawText(`Dir: ${companyInfo.address}`, margin, startYCompany, 10);
     y += lineHeight;
@@ -431,11 +450,9 @@ async function generatePDF(ticketId, venta) {
     drawText(`Tel: ${companyInfo.phone}`, margin, y, 10);
     y += lineHeight * 2;
 
-    // Línea divisora entre empresa y cliente
     doc.line(margin, y, pageWidth - margin, y);
     y += lineHeight * 2;
 
-    // --- Sección de Datos del Cliente ---
     if (venta.cliente) {
         drawText('Datos del Cliente:', margin, y, 10, 'bold');
         y += lineHeight * 1.5;
@@ -455,7 +472,6 @@ async function generatePDF(ticketId, venta) {
     doc.line(margin, y, pageWidth - margin, y);
     y += lineHeight * 2;
 
-    // --- Detalles de la venta ---
     const startYProducts = y;
     drawText('Descripción', margin, startYProducts, 12, 'bold');
     drawText('Cant.', 100, startYProducts, 12, 'bold');
@@ -536,18 +552,7 @@ function resetVentas() {
     camposPago.forEach(input => input.value = '0');
     txtRecargoCredito.value = '10';
 
-    const defaultClient = clientes.find(c => c.nombre === 'Consumidor Final');
-    if (defaultClient) {
-        clienteSeleccionado = defaultClient;
-        clienteSearch.value = defaultClient.nombre;
-        btnAgregarCliente.style.display = 'none';
-        btnEditarCliente.style.display = 'block';
-    } else {
-        clienteSearch.value = '';
-        clienteSeleccionado = null;
-        btnAgregarCliente.style.display = 'block';
-        btnEditarCliente.style.display = 'none';
-    }
+    setDefaultCliente();
 
     renderTicket();
 }
@@ -669,9 +674,7 @@ export async function init() {
     productoSearch.addEventListener('input', handleSearch);
     productoSearch.addEventListener('keyup', handleSearchKeyUp);
 
-
-
-    if (btnCrearProductoVentas && productoModal) { // Verificamos que el modal exista
+    if (btnCrearProductoVentas && productoModal) {
         btnCrearProductoVentas.addEventListener('click', () => {
             productoModal.show();
         });
