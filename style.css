@@ -32,3 +32,44 @@
     color: white;
     border-color: #0d6efd;
 }
+
+
+/* Estilos para el Grid de Acceso Rápido en Ventas */
+.product-card-mini {
+    cursor: pointer;
+    transition: all 0.2s ease-in-out;
+    border-left-width: 4px;
+    height: 100%;
+}
+
+.product-card-mini:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+}
+
+.product-card-mini .card-body {
+    padding: 0.8rem;
+}
+
+.product-card-mini .card-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.product-card-mini .card-price {
+    font-size: 1.1rem;
+}
+
+/* Colores de Stock */
+.product-card-mini.stock-ok {
+    border-left-color: #1cc88a; /* Verde */
+}
+.product-card-mini.stock-warning {
+    border-left-color: #f6c23e; /* Amarillo */
+}
+.product-card-mini.stock-danger {
+    border-left-color: #e74a3b; /* Rojo */
+}

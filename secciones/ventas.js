@@ -20,11 +20,12 @@ let montoContadoRapidoSpan, montoTransferenciaRapidoSpan, montoDebitoRapidoSpan,
 let clienteSearch, clientesList, btnAgregarCliente, btnEditarCliente;
 let clienteModal, clienteModalLabel, clienteId, clienteNombre, clienteCuit, clienteDomicilio, clienteEmail, clienteTelefono, btnGuardarCliente;
 let clienteSeleccionado = null;
-let selectedIndex = -1; 
+let selectedIndex = -1;
 
 // Elementos del modal y spinner
 let confirmacionVentaModal, btnGenerarTicketModal, loadingOverlay;
 let ventaData;
+let ventasListenersAttached = false; // Para evitar múltiples listeners
 
 // --- Funciones de la Sección de Ventas ---
 
@@ -37,6 +38,7 @@ async function loadData() {
             productos.push({ id: doc.id, ...doc.data() });
         });
         console.log('Lista de productos actualizada en Ventas:', productos.length);
+        renderQuickAccessProducts();
     });
 
     // Las otras cargas se pueden mantener como estaban
@@ -244,7 +246,7 @@ function checkFinalizarVenta() {
 
 
 function handleSearch(e) {
-    selectedIndex = -1; 
+    selectedIndex = -1;
     const query = e.target.value.toLowerCase();
     searchResults.innerHTML = '';
     if (query.length < 3) return;
@@ -331,23 +333,23 @@ function handleSearchKeyUp(e) {
             selectedIndex = (selectedIndex + 1) % items.length;
             select();
             break;
-            
+
         case 'ArrowUp':
             e.preventDefault(); // Evita que el cursor se mueva en el input
             selectedIndex = (selectedIndex - 1 + items.length) % items.length;
             select();
             break;
-            
+
         case 'Enter':
             e.preventDefault();
             let productToAdd = null;
-            
+
             // Si hay un elemento seleccionado con las flechas, lo tomamos
             if (selectedIndex >= 0) {
                 const selectedItem = items[selectedIndex];
                 const productId = selectedItem.dataset.id;
                 productToAdd = productos.find(p => p.id === productId);
-            } 
+            }
             // Si no, mantenemos la lógica original: si hay un solo resultado, lo tomamos
             else if (items.length === 1) {
                 const productId = items[0].dataset.id;
@@ -588,8 +590,52 @@ async function handleGuardarCliente() {
     handleClienteSearchInput({ target: { value: clienteData.nombre } });
 }
 
+
+
+// AÑADE ESTA FUNCIÓN NUEVA EN ventas.js
+
+function renderQuickAccessProducts() {
+    const container = document.getElementById('quick-access-products');
+    if (!container) return;
+
+    // Filtramos solo los productos marcados como destacados
+    const featuredProducts = productos.filter(p => p.isFeatured === true);
+
+    container.innerHTML = ''; // Limpiamos antes de renderizar
+
+    featuredProducts.forEach(p => {
+        let stockClass = 'stock-ok';
+        if (p.stock <= 0) {
+            stockClass = 'stock-danger';
+        } else if (p.stock <= p.stockMinimo) {
+            stockClass = 'stock-warning';
+        }
+
+        const cardHtml = `
+            <div class="col-xl-3 col-lg-4 col-md-6 col-sm-6">
+                <div class="card product-card-mini ${stockClass}" data-id="${p.id}">
+                    <div class="card-body">
+                        <h6 class="card-title mb-1">${p.nombre}</h6>
+                        <p class="card-text small text-muted mb-1">
+                            ${p.marca || ''} ${p.color || ''}
+                        </p>
+                        <p class="card-text small mb-2"><code>${p.codigo || 'N/A'}</code></p>
+                        <p class="card-price fw-bold text-primary">${formatCurrency(p.venta)}</p>
+                    </div>
+                </div>
+            </div>
+        `;
+        container.innerHTML += cardHtml;
+    });
+}
+
+
+
 // --- Función de inicialización para esta sección ---
+// REEMPLAZA TU FUNCIÓN init ENTERA EN ventas.js CON ESTA VERSIÓN CORREGIDA Y LIMPIA
+
 export async function init() {
+    // 1. OBTENER ELEMENTOS DEL DOM (Sin cambios)
     productoSearch = document.getElementById('productoSearch');
     searchResults = document.getElementById('searchResults');
     ticketItems = document.getElementById('ticketItems');
@@ -600,16 +646,13 @@ export async function init() {
     txtCredito = document.getElementById('txtCredito');
     txtRecargoCredito = document.getElementById('txtRecargoCredito');
     btnsPagoRapido = document.querySelectorAll('.btn-pago-rapido');
-
     montoContadoRapidoSpan = document.getElementById('montoContadoRapido');
     montoTransferenciaRapidoSpan = document.getElementById('montoTransferenciaRapido');
     montoDebitoRapidoSpan = document.getElementById('montoDebitoRapido');
     montoCreditoRapidoSpan = document.getElementById('montoCreditoRapido');
-
     confirmacionVentaModal = document.getElementById('confirmacionVentaModal');
     btnGenerarTicketModal = document.getElementById('btnGenerarTicketModal');
     loadingOverlay = document.getElementById('loadingOverlay');
-
     clienteSearch = document.getElementById('clienteSearch');
     clientesList = document.getElementById('clientesList');
     btnAgregarCliente = document.getElementById('btnAgregarCliente');
@@ -623,22 +666,14 @@ export async function init() {
     clienteEmail = document.getElementById('clienteEmail');
     clienteTelefono = document.getElementById('clienteTelefono');
     btnGuardarCliente = document.getElementById('btnGuardarCliente');
-
     btnCrearProductoVentas = document.getElementById('btnCrearProductoVentas');
 
+    // 2. INICIALIZAR MODAL (Sin cambios)
     productoModal = initProductosModal();
 
-
-
-
-    // Event listeners
+    // 3. LISTENERS PARA ELEMENTOS ESPECÍFICOS DE LA SECCIÓN (Estos no necesitan protección)
     productoSearch.addEventListener('input', handleSearch);
     productoSearch.addEventListener('keyup', handleSearchKeyUp);
-
-    // REEMPLAZA el listener 'keyup' que tienes por este bloque mejorado
-
-
-
 
     if (btnCrearProductoVentas && productoModal) {
         btnCrearProductoVentas.addEventListener('click', () => {
@@ -652,55 +687,8 @@ export async function init() {
     });
 
     txtRecargoCredito.addEventListener('input', handlePaymentChange);
-
     btnFinalizarVenta.addEventListener('click', finalizarVenta);
     btnsPagoRapido.forEach(btn => btn.addEventListener('click', handleQuickPayment));
-
-    document.addEventListener('click', (e) => {
-        const seccionVentas = document.getElementById('seccion-ventas');
-        if (!seccionVentas || !seccionVentas.contains(e.target)) return;
-
-        if (e.target.closest('.list-group-item-action')) {
-            handleSearchResultClick(e);
-        } else if (e.target.closest('.remove-item')) {
-            handleTicketItemRemove(e);
-        } else if (e.target.closest('.change-quantity')) {
-            changeQuantity(e);
-        }
-    });
-
-    // AÑADE ESTE BLOQUE DENTRO DE LA FUNCIÓN init() DE ventas.js
-
-    // 1. Escucha CADA TECLA para la actualización en vivo SIN perder el foco
-    ticketItems.addEventListener('input', (e) => {
-        if (e.target.classList.contains('quantity-input')) {
-            handleQuantityLiveUpdate(e);
-        }
-    });
-
-    // 2. Escucha CUANDO SE SALE DEL CAMPO (blur) para la validación final y posible redibujado
-    ticketItems.addEventListener('change', (e) => {
-        if (e.target.classList.contains('quantity-input')) {
-            handleQuantityManualChange(e);
-        }
-    });
-
-    // 3. Escucha la tecla 'Enter' para finalizar y mover el foco
-    // Usamos 'keydown' para que se ejecute antes de que otros eventos puedan interferir
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && e.target.classList.contains('quantity-input')) {
-            e.preventDefault(); // Prevenimos la acción por defecto de 'Enter'
-
-            // Forzamos que el campo pierda el foco. Esto dispara el evento 'change' de arriba,
-            // que ejecuta handleQuantityManualChange() para validar y redibujar.
-            e.target.blur();
-
-            // Ahora sí, movemos el foco al campo de búsqueda
-            productoSearch.focus();
-            productoSearch.select();
-        }
-    });
-
 
     btnGenerarTicketModal.addEventListener('click', () => {
         if (ventaData) {
@@ -711,22 +699,76 @@ export async function init() {
         resetVentas();
     });
 
+    // confirmacionVentaModal.addEventListener('hidden.bs.modal', (e) => {
+    //     resetVentas();
+    // });
+
     confirmacionVentaModal.addEventListener('shown.bs.modal', () => {
-        const okButton = confirmacionVentaModal.querySelector('[data-bs-dismiss="modal"][autofocus]');
-        if (okButton) {
-            okButton.focus();
-        }
-    });
+    const okButton = document.getElementById('btnConfirmacionVentaOK');
+    if (okButton) {
+        okButton.focus();
+    }
+    resetVentas();
+});
 
-    confirmacionVentaModal.addEventListener('hidden.bs.modal', (e) => {
-        resetVentas();
-    });
-
-    // Nuevos eventos para el manejo de clientes
     clienteSearch.addEventListener('input', handleClienteSearchInput);
     btnAgregarCliente.addEventListener('click', handleAgregarCliente);
     btnEditarCliente.addEventListener('click', handleEditarCliente);
     btnGuardarCliente.addEventListener('click', handleGuardarCliente);
 
+    // 4. GESTIÓN DE LISTENERS GLOBALES Y PERSISTENTES (AQUÍ ESTÁ LA CORRECCIÓN)
+    // Nos aseguramos de que este bloque se ejecute UNA SOLA VEZ.
+    if (!window.ventasListenersAttached) {
+        // Listener unificado para CLICS
+        document.addEventListener('click', (e) => {
+            const seccionVentas = document.getElementById('seccion-ventas');
+            if (!seccionVentas || !seccionVentas.contains(e.target)) return;
+
+            if (e.target.closest('.product-card-mini')) {
+                const productId = e.target.closest('.product-card-mini').dataset.id;
+                const producto = productos.find(p => p.id === productId);
+                if (producto) addProductToTicket(producto);
+                return;
+            }
+            if (e.target.closest('.list-group-item-action')) {
+                handleSearchResultClick(e);
+                return;
+            }
+            if (e.target.closest('.remove-item')) {
+                handleTicketItemRemove(e);
+                return;
+            }
+            if (e.target.closest('.change-quantity')) {
+                changeQuantity(e);
+                return;
+            }
+        });
+
+        // Listeners para el TICKET (input, change)
+        ticketItems.addEventListener('input', (e) => {
+            if (e.target.classList.contains('quantity-input')) {
+                handleQuantityLiveUpdate(e);
+            }
+        });
+        ticketItems.addEventListener('change', (e) => {
+            if (e.target.classList.contains('quantity-input')) {
+                handleQuantityManualChange(e);
+            }
+        });
+
+        // Listener para la tecla ENTER
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && e.target.classList.contains('quantity-input')) {
+                e.preventDefault();
+                e.target.blur();
+                productoSearch.focus();
+                productoSearch.select();
+            }
+        });
+
+        window.ventasListenersAttached = true; // Activamos la bandera
+    }
+
+    // 5. CARGAR DATOS (Sin cambios)
     await loadData();
 }

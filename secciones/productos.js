@@ -20,7 +20,7 @@ let filtroProductos, filtroMarca, filtroColor, filtroRubro, filtroStockMin, filt
 let updateField, updateTypePercentage, updateTypeFixed, updateAmount, btnAplicarActualizacionMasiva;
 let datalistMarcasFiltro, datalistColoresFiltro, datalistRubrosFiltro;
 let datalistMarcasModal, datalistColoresModal, datalistRubrosModal;
-let productoId, productoNombre, productoCodigo, productoMarca, productoColor, productoRubro, productoCosto, productoVenta, productoPorcentaje, productoStock, productoStockMinimo;
+let productoId, productoNombre, productoCodigo, productoMarca, productoColor, productoRubro, productoCosto, productoVenta, productoPorcentaje, productoStock, productoStockMinimo, productoDestacado;
 let btnImportarProductos, importarArchivoInput; // Nuevos elementos para la importación
 
 // --- Funciones de la Sección de Productos ---
@@ -237,6 +237,7 @@ async function handleFormSubmit(e) {
         venta: parseFloat(productoVenta.value) || 0,
         stock: parseInt(productoStock.value) || 0,
         stockMinimo: parseInt(productoStockMinimo.value) || 0,
+        isFeatured: productoDestacado.checked,
         fechaUltimoCambioPrecio: Timestamp.now()
     };
 
@@ -306,6 +307,7 @@ function handleEdit(e) {
             if (productoVenta) productoVenta.value = producto.venta ?? 0;
             if (productoStock) productoStock.value = producto.stock ?? 0;
             if (productoStockMinimo) productoStockMinimo.value = producto.stockMinimo ?? 0;
+            if (productoDestacado) productoDestacado.checked = producto.isFeatured ?? false; 
         }
 
         updatePorcentajeField();
@@ -632,7 +634,7 @@ async function handleFileUpload(event) {
             event.target.value = '';
         }
     };
-    reader.readAsText(file);
+    reader.readAsText(file, 'UTF-8');
 }
 
 
@@ -687,6 +689,7 @@ export function init() {
     productoPorcentaje = document.getElementById('producto-porcentaje');
     productoStock = document.getElementById('producto-stock');
     productoStockMinimo = document.getElementById('producto-stock-minimo');
+    productoDestacado = document.getElementById('producto-destacado');
 
     // --- INICIALIZACIÓN DE IMPORTACIÓN ---
     btnImportarProductos = document.getElementById('btnImportarProductos');
