@@ -1,0 +1,34 @@
+/* Agrega esto al final de tu archivo style.css */
+
+.btn-pago-rapido {
+    min-height: 110px;
+    padding: 0.5rem;
+    font-weight: 500;
+    transition: transform 0.1s ease-in-out;
+}
+
+.btn-pago-rapido:active {
+    transform: scale(0.97);
+}
+
+.btn-pago-texto {
+    font-size: 1rem;
+}
+
+.btn-pago-monto {
+    font-size: 0.9em;
+    font-weight: bold;
+    opacity: 0.85;
+}
+
+/* Agrega esto a style.css para controlar la altura del ticket */
+.ticket-body-scroll {
+    max-height: 350px; /* Puedes ajustar esta altura */
+    overflow-y: auto;
+}
+
+#searchResults .list-group-item-action.active {
+    background-color: #0d6efd; /* Color primario de Bootstrap */
+    color: white;
+    border-color: #0d6efd;
+}

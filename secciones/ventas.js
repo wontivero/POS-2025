@@ -20,6 +20,7 @@ let montoContadoRapidoSpan, montoTransferenciaRapidoSpan, montoDebitoRapidoSpan,
 let clienteSearch, clientesList, btnAgregarCliente, btnEditarCliente;
 let clienteModal, clienteModalLabel, clienteId, clienteNombre, clienteCuit, clienteDomicilio, clienteEmail, clienteTelefono, btnGuardarCliente;
 let clienteSeleccionado = null;
+let selectedIndex = -1; 
 
 // Elementos del modal y spinner
 let confirmacionVentaModal, btnGenerarTicketModal, loadingOverlay;
@@ -56,7 +57,7 @@ async function loadClientes() {
         // Volvemos a cargar la lista para incluir el recién creado
         clientes = await getCollection('clientes');
     }
-    
+
     renderClientesList();
     setDefaultCliente();
 }
@@ -86,9 +87,13 @@ function setDefaultCliente() {
     }
 }
 
+// REEMPLAZA ESTA FUNCIÓN EN ventas.js
+
+// REEMPLAZA ESTA FUNCIÓN EN ventas.js
+
 function renderTicket() {
     ticketItems.innerHTML = '';
-    totalVentaBase = Math.round(ticket.reduce((sum, item) => sum + item.total, 0));
+    totalVentaBase = ticket.reduce((sum, item) => sum + item.total, 0);
     updateTotalDisplay();
     updateQuickPayButtons();
 
@@ -102,23 +107,92 @@ function renderTicket() {
     ticket.forEach((item, index) => {
         const itemDiv = document.createElement('div');
         itemDiv.className = 'list-group-item d-flex justify-content-between align-items-center p-2';
+
+        // --- INICIO DE CAMBIOS ---
         itemDiv.innerHTML = `
             <div>
                 <h6 class="mb-1">${item.nombre}</h6>
-                <small>${formatCurrency(item.precio)}</small>
+                <small class="text-muted" id="desc-${index}">${item.cantidad} x ${formatCurrency(item.precio)}</small>
             </div>
             <div class="d-flex align-items-center">
                 <div class="input-group input-group-sm me-2" style="width: 120px;">
-                    <button class="btn btn-outline-danger btn-sm change-quantity" data-index="${index}" data-action="decrement"><i class="fas fa-minus"></i></button>
-                    <input type="text" class="form-control text-center" value="${item.cantidad}" disabled>
-                    <button class="btn btn-outline-success btn-sm change-quantity" data-index="${index}" data-action="increment"><i class="fas fa-plus"></i></button>
+                    <button class="btn btn-outline-secondary btn-sm change-quantity" data-index="${index}" data-action="decrement"><i class="fas fa-minus"></i></button>
+                    <input type="number" class="form-control text-center quantity-input" value="${item.cantidad}" data-index="${index}" min="1">
+                    <button class="btn btn-outline-secondary btn-sm change-quantity" data-index="${index}" data-action="increment"><i class="fas fa-plus"></i></button>
                 </div>
-                <button class="btn btn-sm btn-danger remove-item" data-index="${index}"><i class="fas fa-trash-alt"></i></button>
+                <div class="fw-bold text-end" style="width: 100px;" id="subtotal-${index}">
+                    ${formatCurrency(item.total)}
+                </div>
+                <button class="btn btn-sm btn-link text-danger remove-item ms-2" data-index="${index}"><i class="fas fa-trash-alt"></i></button>
             </div>
         `;
+        // --- FIN DE CAMBIOS ---
+
         ticketItems.appendChild(itemDiv);
     });
     checkFinalizarVenta();
+}
+
+// AÑADE ESTA NUEVA FUNCIÓN EN ventas.js
+
+function handleQuantityLiveUpdate(e) {
+    const index = parseInt(e.target.dataset.index);
+    const item = ticket[index];
+    if (!item) return;
+
+    // Usamos el valor del input, si está vacío o es inválido, usamos 0
+    const newQuantity = parseInt(e.target.value) || 0;
+
+    // Actualizamos el objeto en memoria
+    item.cantidad = newQuantity;
+    item.total = item.precio * newQuantity;
+
+    // Actualizamos los textos en el DOM directamente
+    const descElement = document.getElementById(`desc-${index}`);
+    const subtotalElement = document.getElementById(`subtotal-${index}`);
+
+    if (descElement) {
+        descElement.textContent = `${newQuantity} x ${formatCurrency(item.precio)}`;
+    }
+    if (subtotalElement) {
+        subtotalElement.textContent = formatCurrency(item.total);
+    }
+
+    // Recalculamos el total general
+    totalVentaBase = ticket.reduce((sum, currentItem) => sum + currentItem.total, 0);
+    updateTotalDisplay();
+    updateQuickPayButtons();
+    checkFinalizarVenta();
+}
+// AÑADE ESTA NUEVA FUNCIÓN COMPLETA EN ventas.js
+
+function handleQuantityManualChange(e) {
+    const index = parseInt(e.target.dataset.index);
+    const newQuantity = parseInt(e.target.value);
+    const item = ticket[index];
+
+    if (!item) return;
+
+    // Buscamos el producto original para verificar el stock
+    const productoOriginal = productos.find(p => p.id === item.id);
+
+    // Si la cantidad no es un número válido o es menor a 1, eliminamos el producto
+    if (isNaN(newQuantity) || newQuantity < 1) {
+        ticket.splice(index, 1);
+    }
+    // Si la nueva cantidad excede el stock, la ajustamos al máximo disponible
+    else if (productoOriginal && newQuantity > productoOriginal.stock) {
+        alert(`Stock insuficiente. Stock disponible: ${productoOriginal.stock}`);
+        item.cantidad = productoOriginal.stock;
+        item.total = item.cantidad * item.precio;
+    }
+    // Si todo es correcto, actualizamos la cantidad y el total
+    else {
+        item.cantidad = newQuantity;
+        item.total = item.cantidad * item.precio;
+    }
+
+    renderTicket(); // Volvemos a renderizar el ticket para reflejar todos los cambios
 }
 
 function updateTotalDisplay() {
@@ -170,6 +244,7 @@ function checkFinalizarVenta() {
 
 
 function handleSearch(e) {
+    selectedIndex = -1; 
     const query = e.target.value.toLowerCase();
     searchResults.innerHTML = '';
     if (query.length < 3) return;
@@ -227,18 +302,66 @@ function handleSearchResultClick(e) {
     }
 }
 
+// REEMPLAZA LA FUNCIÓN handleSearchKeyUp ENTERA en ventas.js con esta:
+
 function handleSearchKeyUp(e) {
-    if (e.key === 'Enter') {
-        const results = searchResults.querySelectorAll('.list-group-item-action');
-        if (results.length === 1) {
-            const productId = results[0].dataset.id;
-            const producto = productos.find(p => p.id === productId);
-            if (producto) {
-                addProductToTicket(producto);
-                productoSearch.value = '';
-                searchResults.innerHTML = '';
-            }
+    const resultsContainer = searchResults;
+    const items = resultsContainer.querySelectorAll('.list-group-item-action');
+    if (items.length === 0) return;
+
+    // Quitar el resaltado anterior
+    const unselect = () => {
+        const selected = resultsContainer.querySelector('.active');
+        if (selected) selected.classList.remove('active');
+    };
+
+    // Resaltar el item actual
+    const select = () => {
+        unselect();
+        if (selectedIndex >= 0 && selectedIndex < items.length) {
+            items[selectedIndex].classList.add('active');
+            // Mover el scroll para que el elemento sea visible si la lista es larga
+            items[selectedIndex].scrollIntoView({ block: 'nearest' });
         }
+    };
+
+    switch (e.key) {
+        case 'ArrowDown':
+            e.preventDefault(); // Evita que el cursor se mueva en el input
+            selectedIndex = (selectedIndex + 1) % items.length;
+            select();
+            break;
+            
+        case 'ArrowUp':
+            e.preventDefault(); // Evita que el cursor se mueva en el input
+            selectedIndex = (selectedIndex - 1 + items.length) % items.length;
+            select();
+            break;
+            
+        case 'Enter':
+            e.preventDefault();
+            let productToAdd = null;
+            
+            // Si hay un elemento seleccionado con las flechas, lo tomamos
+            if (selectedIndex >= 0) {
+                const selectedItem = items[selectedIndex];
+                const productId = selectedItem.dataset.id;
+                productToAdd = productos.find(p => p.id === productId);
+            } 
+            // Si no, mantenemos la lógica original: si hay un solo resultado, lo tomamos
+            else if (items.length === 1) {
+                const productId = items[0].dataset.id;
+                productToAdd = productos.find(p => p.id === productId);
+            }
+
+            if (productToAdd) {
+                addProductToTicket(productToAdd);
+                // Limpiamos todo para la siguiente búsqueda
+                productoSearch.value = '';
+                resultsContainer.innerHTML = '';
+                selectedIndex = -1;
+            }
+            break;
     }
 }
 
@@ -502,12 +625,20 @@ export async function init() {
     btnGuardarCliente = document.getElementById('btnGuardarCliente');
 
     btnCrearProductoVentas = document.getElementById('btnCrearProductoVentas');
-  
-    productoModal = initProductosModal(); 
- 
+
+    productoModal = initProductosModal();
+
+
+
+
     // Event listeners
     productoSearch.addEventListener('input', handleSearch);
     productoSearch.addEventListener('keyup', handleSearchKeyUp);
+
+    // REEMPLAZA el listener 'keyup' que tienes por este bloque mejorado
+
+
+
 
     if (btnCrearProductoVentas && productoModal) {
         btnCrearProductoVentas.addEventListener('click', () => {
@@ -537,6 +668,39 @@ export async function init() {
             changeQuantity(e);
         }
     });
+
+    // AÑADE ESTE BLOQUE DENTRO DE LA FUNCIÓN init() DE ventas.js
+
+    // 1. Escucha CADA TECLA para la actualización en vivo SIN perder el foco
+    ticketItems.addEventListener('input', (e) => {
+        if (e.target.classList.contains('quantity-input')) {
+            handleQuantityLiveUpdate(e);
+        }
+    });
+
+    // 2. Escucha CUANDO SE SALE DEL CAMPO (blur) para la validación final y posible redibujado
+    ticketItems.addEventListener('change', (e) => {
+        if (e.target.classList.contains('quantity-input')) {
+            handleQuantityManualChange(e);
+        }
+    });
+
+    // 3. Escucha la tecla 'Enter' para finalizar y mover el foco
+    // Usamos 'keydown' para que se ejecute antes de que otros eventos puedan interferir
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && e.target.classList.contains('quantity-input')) {
+            e.preventDefault(); // Prevenimos la acción por defecto de 'Enter'
+
+            // Forzamos que el campo pierda el foco. Esto dispara el evento 'change' de arriba,
+            // que ejecuta handleQuantityManualChange() para validar y redibujar.
+            e.target.blur();
+
+            // Ahora sí, movemos el foco al campo de búsqueda
+            productoSearch.focus();
+            productoSearch.select();
+        }
+    });
+
 
     btnGenerarTicketModal.addEventListener('click', () => {
         if (ventaData) {
