@@ -115,6 +115,8 @@ function renderTopProductos() {
 
 // REEMPLAZA LA FUNCIÓN ENTERA EN reportes.js
 
+// REEMPLAZA ESTA FUNCIÓN ENTERA EN reportes.js
+
 function renderCharts() {
     // --- Lógica de cálculo de datos (sin cambios) ---
     const datosRubros = {};
@@ -129,33 +131,39 @@ function renderCharts() {
                 datosRubros[rubro] = (datosRubros[rubro] || 0) + totalProducto;
             });
         }
-
         datosPagos.contado += venta.pagos.contado || 0;
         datosPagos.transferencia += venta.pagos.transferencia || 0;
         datosPagos.debito += venta.pagos.debito || 0;
         datosPagos.credito += venta.pagos.credito || 0;
-        
-        // ... (cálculo de ventas en el tiempo sin cambios)
         let fechaVenta;
         if (venta.fecha && typeof venta.fecha.toDate === 'function') {
             fechaVenta = venta.fecha.toDate();
         } else {
             fechaVenta = new Date(venta.fecha + 'T00:00:00');
         }
-
         if (!isNaN(fechaVenta)) {
             const fechaKey = fechaVenta.toISOString().split('T')[0];
             datosVentasTiempo[fechaKey] = (datosVentasTiempo[fechaKey] || 0) + venta.total;
         }
     });
 
-    // --- Función auxiliar para crear las leyendas ---
-    const renderLegend = (containerId, data, colors, title) => {
+    // --- INICIO DE LA CORRECCIÓN ---
+
+    // 1. Ordenamos los datos de Rubros y Pagos de mayor a menor ANTES de hacer nada.
+    const sortedRubros = Object.entries(datosRubros).sort(([, a], [, b]) => b - a);
+    const sortedPagos = Object.entries(datosPagos).sort(([, a], [, b]) => b - a);
+
+    // 2. Extraemos las etiquetas (labels) y los datos (data) de las listas ya ordenadas.
+    const rubrosLabels = sortedRubros.map(entry => entry[0]);
+    const rubrosData = sortedRubros.map(entry => entry[1]);
+    
+    const pagosLabels = sortedPagos.map(item => item[0].charAt(0).toUpperCase() + item[0].slice(1));
+    const pagosData = sortedPagos.map(item => item[1]);
+
+    // Función auxiliar para crear las leyendas (ahora recibe la lista ya ordenada)
+    const renderLegend = (containerId, sortedData, colors, title) => {
         const container = document.getElementById(containerId);
         if (!container) return;
-
-        // Ordenar los datos de mayor a menor
-        const sortedData = Object.entries(data).sort(([, a], [, b]) => b - a);
         
         let legendHtml = `<h6 class="mb-3">${title}</h6><ul class="list-unstyled">`;
         sortedData.forEach(([label, value], index) => {
@@ -164,7 +172,7 @@ function renderCharts() {
                 <li class="d-flex justify-content-between align-items-center mb-2">
                     <span class="d-flex align-items-center">
                         <span style="display: inline-block; width: 15px; height: 15px; background-color: ${color}; border-radius: 3px; margin-right: 8px;"></span>
-                        ${label}
+                        ${label.charAt(0).toUpperCase() + label.slice(1)}
                     </span>
                     <span class="fw-bold">${formatCurrency(value)}</span>
                 </li>`;
@@ -173,50 +181,38 @@ function renderCharts() {
         container.innerHTML = legendHtml;
     };
     
-    // --- Paletas de colores para los gráficos ---
     const chartColors = ['#4e73df', '#1cc88a', '#36b9cc', '#f6c23e', '#e74a3b', '#858796', '#f8f9fc', '#5a5c69'];
 
-    // --- Renderizado del Gráfico y Leyenda de Rubros ---
+    // 3. Usamos las listas ordenadas para crear el gráfico de Rubros.
     if (chartRubros) chartRubros.destroy();
     chartRubros = new Chart(document.getElementById('chartRubros'), {
         type: 'pie',
         data: {
-            labels: Object.keys(datosRubros),
-            datasets: [{ data: Object.values(datosRubros), backgroundColor: chartColors, hoverBackgroundColor: chartColors }],
+            labels: rubrosLabels, // <--- Usamos la lista ordenada
+            datasets: [{ data: rubrosData, backgroundColor: chartColors, hoverBackgroundColor: chartColors }], // <--- Usamos la lista ordenada
         },
-        options: {
-            maintainAspectRatio: false,
-            plugins: { 
-                legend: { display: false }, // Ocultamos la leyenda por defecto de Chart.js
-                tooltip: { /* ... (código del tooltip sin cambios) ... */ }
-            }
-        },
+        options: { maintainAspectRatio: false, plugins: { legend: { display: false } } },
     });
-    renderLegend('chartRubros-legend', datosRubros, chartColors, 'Total por Rubro');
+    // 4. Pasamos la lista ordenada a la función de la leyenda.
+    renderLegend('chartRubros-legend', sortedRubros, chartColors, 'Total por Rubro');
 
-
-    // --- Renderizado del Gráfico y Leyenda de Pagos ---
+    // 5. Hacemos lo mismo para el gráfico de Pagos.
     if (chartPagos) chartPagos.destroy();
     chartPagos = new Chart(document.getElementById('chartPagos'), {
         type: 'doughnut',
         data: {
-            labels: Object.keys(datosPagos).map(p => p.charAt(0).toUpperCase() + p.slice(1)),
-            datasets: [{ data: Object.values(datosPagos), backgroundColor: chartColors, hoverBackgroundColor: chartColors }],
+            labels: pagosLabels, // <--- Usamos la lista ordenada
+            datasets: [{ data: pagosData, backgroundColor: chartColors, hoverBackgroundColor: chartColors }], // <--- Usamos la lista ordenada
         },
-        options: {
-            maintainAspectRatio: false,
-            plugins: { 
-                legend: { display: false } // Ocultamos la leyenda por defecto
-            }
-        },
+        options: { maintainAspectRatio: false, plugins: { legend: { display: false } } },
     });
-    renderLegend('chartPagos-legend', datosPagos, chartColors, 'Total por Método');
+    renderLegend('chartPagos-legend', sortedPagos, chartColors, 'Total por Método');
 
+    // --- FIN DE LA CORRECCIÓN ---
 
     // --- Renderizado del Gráfico de Ventas en el Tiempo (sin cambios) ---
     const fechasOrdenadas = Object.keys(datosVentasTiempo).sort((a, b) => new Date(a) - new Date(b));
     const ventasOrdenadas = fechasOrdenadas.map(fecha => datosVentasTiempo[fecha]);
-
     if (chartVentasTiempo) chartVentasTiempo.destroy();
     chartVentasTiempo = new Chart(document.getElementById('chartVentasTiempo'), {
         type: 'line',
