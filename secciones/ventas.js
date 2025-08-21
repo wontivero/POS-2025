@@ -98,43 +98,36 @@ function renderTicket() {
     totalVentaBase = ticket.reduce((sum, item) => sum + item.total, 0);
     updateTotalDisplay();
     updateQuickPayButtons();
-
     if (ticket.length === 0) {
         camposPago.forEach(input => input.value = '0');
         txtRecargoCredito.value = '10';
     } else {
         updateContadoValue();
     }
-
     ticket.forEach((item, index) => {
         const itemDiv = document.createElement('div');
         itemDiv.className = 'list-group-item d-flex justify-content-between align-items-center p-2';
+        const genericIndicator = item.isGeneric ? '<i class="fas fa-pencil-alt fa-xs text-info ms-2" title="Precio manual"></i>' : '';
 
-        // --- INICIO DE CAMBIOS ---
         itemDiv.innerHTML = `
             <div>
-                <h6 class="mb-1">${item.nombre}</h6>
+                <h6 class="mb-1">${item.nombre}${genericIndicator}</h6>
                 <small class="text-muted" id="desc-${index}">${item.cantidad} x ${formatCurrency(item.precio)}</small>
             </div>
             <div class="d-flex align-items-center">
                 <div class="input-group input-group-sm me-2" style="width: 120px;">
-                    <button class="btn btn-outline-secondary btn-sm change-quantity" data-index="${index}" data-action="decrement"><i class="fas fa-minus"></i></button>
-                    <input type="number" class="form-control text-center quantity-input" value="${item.cantidad}" data-index="${index}" min="1">
-                    <button class="btn btn-outline-secondary btn-sm change-quantity" data-index="${index}" data-action="increment"><i class="fas fa-plus"></i></button>
+                    <button class="btn btn-outline-secondary btn-sm change-quantity" data-index="${index}" data-action="decrement" ${item.isGeneric ? 'disabled' : ''}><i class="fas fa-minus"></i></button>
+                    <input type="number" class="form-control text-center quantity-input" value="${item.cantidad}" data-index="${index}" min="1" ${item.isGeneric ? 'disabled' : ''}>
+                    <button class="btn btn-outline-secondary btn-sm change-quantity" data-index="${index}" data-action="increment" ${item.isGeneric ? 'disabled' : ''}><i class="fas fa-plus"></i></button>
                 </div>
-                <div class="fw-bold text-end" style="width: 100px;" id="subtotal-${index}">
-                    ${formatCurrency(item.total)}
-                </div>
+                <div class="fw-bold text-end" style="width: 100px;" id="subtotal-${index}">${formatCurrency(item.total)}</div>
                 <button class="btn btn-sm btn-link text-danger remove-item ms-2" data-index="${index}"><i class="fas fa-trash-alt"></i></button>
             </div>
         `;
-        // --- FIN DE CAMBIOS ---
-
         ticketItems.appendChild(itemDiv);
     });
     checkFinalizarVenta();
 }
-
 // AÑADE ESTA NUEVA FUNCIÓN EN ventas.js
 
 function handleQuantityLiveUpdate(e) {
@@ -142,14 +135,11 @@ function handleQuantityLiveUpdate(e) {
     const item = ticket[index];
     if (!item) return;
 
-    // Usamos el valor del input, si está vacío o es inválido, usamos 0
     const newQuantity = parseInt(e.target.value) || 0;
 
-    // Actualizamos el objeto en memoria
     item.cantidad = newQuantity;
     item.total = item.precio * newQuantity;
 
-    // Actualizamos los textos en el DOM directamente
     const descElement = document.getElementById(`desc-${index}`);
     const subtotalElement = document.getElementById(`subtotal-${index}`);
 
@@ -160,7 +150,6 @@ function handleQuantityLiveUpdate(e) {
         subtotalElement.textContent = formatCurrency(item.total);
     }
 
-    // Recalculamos el total general
     totalVentaBase = ticket.reduce((sum, currentItem) => sum + currentItem.total, 0);
     updateTotalDisplay();
     updateQuickPayButtons();
@@ -267,26 +256,47 @@ function handleSearch(e) {
     }
 }
 
-function addProductToTicket(producto) {
-    const itemIndex = ticket.findIndex(item => item.id === producto.id);
-    if (itemIndex !== -1) {
-        if (ticket[itemIndex].cantidad < producto.stock) {
-            ticket[itemIndex].cantidad++;
-            ticket[itemIndex].total = ticket[itemIndex].precio * ticket[itemIndex].cantidad;
-        } else {
-            alert('No hay más stock disponible para este producto.');
+function addProductToTicket(productId) {
+    const producto = productos.find(p => p.id === productId);
+    if (!producto) {
+        console.error("Error: No se encontró el producto con ID:", productId);
+        return;
+    }
+
+    if (producto.isGeneric) {
+        const finalPriceStr = prompt(`Ingrese el precio final para "${producto.nombre}":`, producto.venta || 0);
+        if (finalPriceStr === null) return;
+        const finalPrice = parseFloat(finalPriceStr);
+        if (isNaN(finalPrice) || finalPrice < 0) {
+            alert('Por favor, ingrese un precio válido.');
             return;
         }
-    } else {
         ticket.push({
-            id: producto.id,
-            nombre: producto.nombre,
-            precio: producto.venta,
-            costo: producto.costo,
-            cantidad: 1,
-            total: producto.venta
+            id: producto.id, nombre: producto.nombre, precio: finalPrice, costo: 0, cantidad: 1,
+            total: finalPrice, isGeneric: true, genericProfitMargin: producto.genericProfitMargin || 70
         });
+    } else {
+        let productoEncontradoEnTicket = false;
+        for (const item of ticket) {
+            if (item.id === productId && !item.isGeneric) {
+                if (item.cantidad < producto.stock) {
+                    item.cantidad++;
+                    item.total = item.precio * item.cantidad;
+                } else {
+                    alert('No hay más stock disponible para este producto.');
+                }
+                productoEncontradoEnTicket = true;
+                break;
+            }
+        }
+        if (!productoEncontradoEnTicket) {
+            ticket.push({
+                id: producto.id, nombre: producto.nombre, precio: producto.venta, costo: producto.costo,
+                cantidad: 1, total: producto.venta, isGeneric: false
+            });
+        }
     }
+
     productoSearch.value = '';
     searchResults.innerHTML = '';
     renderTicket();
@@ -297,71 +307,48 @@ function handleSearchResultClick(e) {
     e.preventDefault();
     const productId = e.target.closest('.list-group-item-action').dataset.id;
     if (productId) {
-        const producto = productos.find(p => p.id === productId);
-        if (producto) {
-            addProductToTicket(producto);
-        }
+        addProductToTicket(productId);
     }
 }
 
 // REEMPLAZA LA FUNCIÓN handleSearchKeyUp ENTERA en ventas.js con esta:
 
 function handleSearchKeyUp(e) {
-    const resultsContainer = searchResults;
-    const items = resultsContainer.querySelectorAll('.list-group-item-action');
+    if (searchResults.innerHTML.trim() === '') return;
+    const items = searchResults.querySelectorAll('.list-group-item-action');
     if (items.length === 0) return;
-
-    // Quitar el resaltado anterior
     const unselect = () => {
-        const selected = resultsContainer.querySelector('.active');
+        const selected = searchResults.querySelector('.active');
         if (selected) selected.classList.remove('active');
     };
-
-    // Resaltar el item actual
     const select = () => {
         unselect();
         if (selectedIndex >= 0 && selectedIndex < items.length) {
             items[selectedIndex].classList.add('active');
-            // Mover el scroll para que el elemento sea visible si la lista es larga
             items[selectedIndex].scrollIntoView({ block: 'nearest' });
         }
     };
-
     switch (e.key) {
         case 'ArrowDown':
-            e.preventDefault(); // Evita que el cursor se mueva en el input
+            e.preventDefault();
             selectedIndex = (selectedIndex + 1) % items.length;
             select();
             break;
-
         case 'ArrowUp':
-            e.preventDefault(); // Evita que el cursor se mueva en el input
+            e.preventDefault();
             selectedIndex = (selectedIndex - 1 + items.length) % items.length;
             select();
             break;
-
         case 'Enter':
             e.preventDefault();
-            let productToAdd = null;
-
-            // Si hay un elemento seleccionado con las flechas, lo tomamos
+            let productIdToAdd = null;
             if (selectedIndex >= 0) {
-                const selectedItem = items[selectedIndex];
-                const productId = selectedItem.dataset.id;
-                productToAdd = productos.find(p => p.id === productId);
+                productIdToAdd = items[selectedIndex].dataset.id;
+            } else if (items.length === 1) {
+                productIdToAdd = items[0].dataset.id;
             }
-            // Si no, mantenemos la lógica original: si hay un solo resultado, lo tomamos
-            else if (items.length === 1) {
-                const productId = items[0].dataset.id;
-                productToAdd = productos.find(p => p.id === productId);
-            }
-
-            if (productToAdd) {
-                addProductToTicket(productToAdd);
-                // Limpiamos todo para la siguiente búsqueda
-                productoSearch.value = '';
-                resultsContainer.innerHTML = '';
-                selectedIndex = -1;
+            if (productIdToAdd) {
+                addProductToTicket(productIdToAdd);
             }
             break;
     }
@@ -424,46 +411,33 @@ async function finalizarVenta() {
         alert('No hay productos en el ticket.');
         return;
     }
-
     showLoading();
-
     try {
+        const ticketNumber = await getNextTicketNumber();
+        const productosParaGuardar = ticket.map(item => {
+            if (item.isGeneric) {
+                const margen = (item.genericProfitMargin || 70) / 100;
+                const costoCalculado = item.precio / (1 + margen);
+                return { ...item, costo: costoCalculado };
+            }
+            return item;
+        });
+        const gananciaTotal = productosParaGuardar.reduce((sum, item) => {
+            const gananciaItem = (item.precio - item.costo) * item.cantidad;
+            return sum + gananciaItem;
+        }, 0);
         const montoCredito = parseFloat(txtCredito.value) || 0;
         const recargo = (parseFloat(txtRecargoCredito.value) || 0) / 100;
         const montoCreditoConRecargo = Math.round(montoCredito * (1 + recargo));
-
-        const totalPagado = (parseFloat(txtContado.value) || 0) +
-            (parseFloat(document.getElementById('txtTransferencia').value) || 0) +
-            (parseFloat(document.getElementById('txtDebito').value) || 0) +
-            montoCreditoConRecargo;
-
         const totalConRecargo = totalVentaBase + Math.round(montoCredito * recargo);
-
-        if (totalPagado < totalConRecargo) {
-            alert('El monto pagado es menor al total de la venta.');
-            return;
-        }
-
-        const ticketNumber = await getNextTicketNumber();
 
         const nuevaVenta = {
             fecha: getTodayDate(),
             timestamp: getFormattedDateTime(),
             ticketId: ticketNumber,
-            cliente: clienteSeleccionado ? {
-                id: clienteSeleccionado.id,
-                nombre: clienteSeleccionado.nombre,
-                cuit: clienteSeleccionado.cuit || '',
-                domicilio: clienteSeleccionado.domicilio || '',
-                email: clienteSeleccionado.email || '',
-                telefono: clienteSeleccionado.telefono || ''
-            } : null,
-            productos: ticket.map(item => ({
-                id: item.id,
-                nombre: item.nombre,
-                precio: item.precio,
-                costo: item.costo,
-                cantidad: item.cantidad,
+            cliente: clienteSeleccionado,
+            productos: productosParaGuardar.map(item => ({
+                id: item.id, nombre: item.nombre, precio: item.precio, costo: item.costo, cantidad: item.cantidad,
                 rubro: productos.find(p => p.id === item.id)?.rubro || 'Desconocido',
                 marca: productos.find(p => p.id === item.id)?.marca || 'Desconocido'
             })),
@@ -475,22 +449,16 @@ async function finalizarVenta() {
                 recargoCredito: parseFloat(txtRecargoCredito.value) || 0,
             },
             total: totalConRecargo,
-            ganancia: ticket.reduce((sum, item) => sum + (item.precio - item.costo) * item.cantidad, 0)
+            ganancia: gananciaTotal
         };
 
         await saveDocument('ventas', nuevaVenta);
-
-        ventaData = {
-            id: ticketNumber,
-            data: nuevaVenta
-        };
-
+        ventaData = { id: ticketNumber, data: nuevaVenta };
         const modal = new bootstrap.Modal(confirmacionVentaModal);
         modal.show();
-
     } catch (e) {
         console.error('Error al finalizar la venta:', e);
-        alert('Ocurrió un error al guardar la venta. Por favor, intente de nuevo.');
+        alert('Ocurrió un error al guardar la venta.');
     } finally {
         hideLoading();
     }
@@ -704,12 +672,12 @@ export async function init() {
     // });
 
     confirmacionVentaModal.addEventListener('shown.bs.modal', () => {
-    const okButton = document.getElementById('btnConfirmacionVentaOK');
-    if (okButton) {
-        okButton.focus();
-    }
-    resetVentas();
-});
+        const okButton = document.getElementById('btnConfirmacionVentaOK');
+        if (okButton) {
+            okButton.focus();
+        }
+        resetVentas();
+    });
 
     clienteSearch.addEventListener('input', handleClienteSearchInput);
     btnAgregarCliente.addEventListener('click', handleAgregarCliente);
@@ -717,17 +685,17 @@ export async function init() {
     btnGuardarCliente.addEventListener('click', handleGuardarCliente);
 
     // 4. GESTIÓN DE LISTENERS GLOBALES Y PERSISTENTES (AQUÍ ESTÁ LA CORRECCIÓN)
-    // Nos aseguramos de que este bloque se ejecute UNA SOLA VEZ.
+    // Dentro de la función init(), reemplaza este bloque completo
+
     if (!window.ventasListenersAttached) {
         // Listener unificado para CLICS
         document.addEventListener('click', (e) => {
             const seccionVentas = document.getElementById('seccion-ventas');
             if (!seccionVentas || !seccionVentas.contains(e.target)) return;
 
-            if (e.target.closest('.product-card-mini')) {
-                const productId = e.target.closest('.product-card-mini').dataset.id;
-                const producto = productos.find(p => p.id === productId);
-                if (producto) addProductToTicket(producto);
+            const quickAccessCard = e.target.closest('.product-card-mini');
+            if (quickAccessCard) {
+                addProductToTicket(quickAccessCard.dataset.id);
                 return;
             }
             if (e.target.closest('.list-group-item-action')) {
@@ -744,7 +712,7 @@ export async function init() {
             }
         });
 
-        // Listeners para el TICKET (input, change)
+        // Listeners para el TICKET (input y change)
         ticketItems.addEventListener('input', (e) => {
             if (e.target.classList.contains('quantity-input')) {
                 handleQuantityLiveUpdate(e);

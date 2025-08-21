@@ -225,6 +225,9 @@ async function handleFormSubmit(e) {
 
     const id = productoId.value;
     const isNew = !id;
+    const productoGenericoSwitch = document.getElementById('producto-generico');
+    const productoMargenGenerico = document.getElementById('producto-margen-generico');
+    const productoDestacado = document.getElementById('producto-destacado');
 
     const productoData = {
         nombre: productoNombre.value.trim(),
@@ -237,7 +240,9 @@ async function handleFormSubmit(e) {
         venta: parseFloat(productoVenta.value) || 0,
         stock: parseInt(productoStock.value) || 0,
         stockMinimo: parseInt(productoStockMinimo.value) || 0,
-        isFeatured: productoDestacado.checked,
+        isGeneric: productoGenericoSwitch.checked,
+        genericProfitMargin: parseFloat(productoMargenGenerico.value) || 0,
+        isFeatured: productoDestacado.checked,        
         fechaUltimoCambioPrecio: Timestamp.now()
     };
 
@@ -307,7 +312,20 @@ function handleEdit(e) {
             if (productoVenta) productoVenta.value = producto.venta ?? 0;
             if (productoStock) productoStock.value = producto.stock ?? 0;
             if (productoStockMinimo) productoStockMinimo.value = producto.stockMinimo ?? 0;
-            if (productoDestacado) productoDestacado.checked = producto.isFeatured ?? false; 
+
+              // --- INICIO DE LÍNEAS NUEVAS ---
+            const productoGenericoSwitch = document.getElementById('producto-generico');
+            const genericProfitFields = document.getElementById('generic-profit-fields');
+            const productoMargenGenerico = document.getElementById('producto-margen-generico');
+            const productoDestacado = document.getElementById('producto-destacado');
+
+            if(productoGenericoSwitch) productoGenericoSwitch.checked = producto.isGeneric ?? false;
+            if(productoMargenGenerico) productoMargenGenerico.value = producto.genericProfitMargin ?? 70;
+            if(productoDestacado) productoDestacado.checked = producto.isFeatured ?? false;
+            
+            // Actualizamos la visibilidad del campo de margen
+            if(genericProfitFields) genericProfitFields.style.display = producto.isGeneric ? 'block' : 'none';
+            // --- FIN DE LÍNEAS NUEVAS ---
         }
 
         updatePorcentajeField();
@@ -319,6 +337,13 @@ function handleNewProduct() {
     if (formProducto) {
         formProducto.reset();
         if (productoId) productoId.value = '';
+        // --- INICIO DE LÍNEAS NUEVAS ---
+        // Asegurarnos de que los campos nuevos estén en su estado inicial
+        const productoGenericoSwitch = document.getElementById('producto-generico');
+        const genericProfitFields = document.getElementById('generic-profit-fields');
+        if(productoGenericoSwitch) productoGenericoSwitch.checked = false;
+        if(genericProfitFields) genericProfitFields.style.display = 'none';
+        // --- FIN DE LÍNEAS NUEVAS ---
     }
     if (modalProductoLabel) modalProductoLabel.textContent = 'Nuevo Producto';
     updatePorcentajeField();
@@ -464,8 +489,8 @@ function exportarProductosAExcel() {
             porcentajeGanancia = '100';
         }
 
-        const ultimaActualizacion = p.fechaUltimoCambioPrecio && p.fechaUltimoCambioPrecio.toDate 
-            ? p.fechaUltimoCambioPrecio.toDate().toLocaleDateString('es-AR') 
+        const ultimaActualizacion = p.fechaUltimoCambioPrecio && p.fechaUltimoCambioPrecio.toDate
+            ? p.fechaUltimoCambioPrecio.toDate().toLocaleDateString('es-AR')
             : 'N/A';
 
         return [
@@ -521,10 +546,10 @@ async function handleFileUpload(event) {
     const reader = new FileReader();
     reader.onload = async (e) => {
         const csvContent = e.target.result;
-        
+
         const rows = csvContent.trim().split('\n');
         const headers = rows.shift().split(';').map(h => h.trim().replace(/"/g, ''));
-        
+
         if (rows.length === 0) {
             alert("El archivo CSV está vacío o no tiene un formato válido.");
             return;
@@ -534,7 +559,7 @@ async function handleFileUpload(event) {
             event.target.value = '';
             return;
         }
-        
+
         if (loader) loader.classList.remove('d-none');
         if (importButton) importButton.disabled = true;
 
@@ -553,7 +578,7 @@ async function handleFileUpload(event) {
 
             for (const row of rows) {
                 if (row.trim() === '') continue;
-                
+
                 const values = row.split(';');
                 const productoCSV = headers.reduce((obj, header, index) => {
                     const keyMap = {
@@ -571,13 +596,13 @@ async function handleFileUpload(event) {
                     console.warn("Omitiendo fila por falta de código o nombre:", row);
                     continue;
                 }
-                
+
                 // --- INICIO DE LA CORRECCIÓN DEFINITIVA ---
                 // Limpiamos explícitamente los símbolos de % y $ de los strings
                 const costoStr = (productoCSV.costo || '0').replace('$', '').trim();
                 const ventaStr = (productoCSV.venta || '').replace('$', '').trim();
                 const porcentajeStr = (productoCSV.porcentajeGanancia || '').replace('%', '').trim();
-                
+
                 const costo = parseFloat(costoStr) || 0;
                 const ventaCSV = parseFloat(ventaStr);
                 const porcentajeCSV = parseFloat(porcentajeStr);
@@ -616,7 +641,7 @@ async function handleFileUpload(event) {
                     const newDocRef = doc(collection(db, 'productos'));
                     batch.set(newDocRef, productoData);
                 }
-                
+
                 await addUniqueItem('marcas', productoData.marca);
                 await addUniqueItem('colores', productoData.color);
                 await addUniqueItem('rubros', productoData.rubro);
@@ -690,6 +715,8 @@ export function init() {
     productoStock = document.getElementById('producto-stock');
     productoStockMinimo = document.getElementById('producto-stock-minimo');
     productoDestacado = document.getElementById('producto-destacado');
+    const productoGenericoSwitch = document.getElementById('producto-generico');
+    const genericProfitFields = document.getElementById('generic-profit-fields');
 
     // --- INICIALIZACIÓN DE IMPORTACIÓN ---
     btnImportarProductos = document.getElementById('btnImportarProductos');
@@ -742,6 +769,13 @@ export function init() {
     if (productoVenta) productoVenta.addEventListener('input', updatePorcentajeField);
     if (productoPorcentaje) productoPorcentaje.addEventListener('input', updateVentaField);
 
+    if (productoGenericoSwitch && genericProfitFields) {
+        productoGenericoSwitch.addEventListener('change', () => {
+            genericProfitFields.style.display = productoGenericoSwitch.checked ? 'block' : 'none';
+        });
+    }
+
+
     setupFirebaseListeners();
     const collapseFiltrosEl = document.getElementById('collapseFiltros');
     const filtroChevronIcon = document.getElementById('filtro-chevron-icon');
@@ -757,7 +791,7 @@ export function init() {
             filtroChevronIcon.classList.add('fa-chevron-down');
         });
     }
-    return productoModal; 
+    return productoModal;
 }
 
 export async function loadData() { }

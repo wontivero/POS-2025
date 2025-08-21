@@ -67,7 +67,8 @@
                     <p>Venta finalizada y guardada en Firebase.</p>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" id="btnConfirmacionVentaOK" data-bs-dismiss="modal" autofocus>OK</button>
+                    <button type="button" class="btn btn-secondary" id="btnConfirmacionVentaOK" data-bs-dismiss="modal"
+                        autofocus>OK</button>
                     <button type="button" class="btn btn-primary" id="btnGenerarTicketModal">Generar Ticket</button>
                 </div>
             </div>
@@ -125,6 +126,7 @@
                         <h5 class="modal-title" id="productoModalLabel">Nuevo Producto</h5>
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
+
                     <div class="modal-body">
                         <input type="hidden" id="producto-id">
                         <div class="mb-3">
@@ -178,14 +180,30 @@
                                 <input type="number" class="form-control" id="producto-stock-minimo" value="0">
                             </div>
                         </div>
-                        <div class="form-check form-switch mt-3">
+
+                        <hr>
+                        <div class="form-check form-switch mb-3">
+                            <input class="form-check-input" type="checkbox" role="switch" id="producto-generico">
+                            <label class="form-check-label" for="producto-generico">
+                                Producto Genérico (Precio editable en la venta)
+                            </label>
+                        </div>
+                        <div id="generic-profit-fields" class="mb-3" style="display: none;">
+                            <label for="producto-margen-generico" class="form-label">Margen de Ganancia para Cálculo
+                                (%):</label>
+                            <input type="number" class="form-control" id="producto-margen-generico" value="70">
+                            <div class="form-text">Este margen se usará para calcular el costo en base al precio final
+                                de venta.</div>
+                        </div>
+                        <div class="form-check form-switch">
                             <input class="form-check-input" type="checkbox" role="switch" id="producto-destacado">
                             <label class="form-check-label" for="producto-destacado">
                                 Producto Destacado (Mostrar en acceso rápido de ventas)
                             </label>
                         </div>
-
                     </div>
+
+
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
                         <button type="submit" class="btn btn-primary">Guardar Producto</button>
