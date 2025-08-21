@@ -580,7 +580,7 @@ function renderQuickAccessProducts() {
         }
 
         const cardHtml = `
-            <div class="col-xl-3 col-lg-4 col-md-6 col-sm-6">
+            <div class="col-6 col-lg-4 col-xl-3">
                 <div class="card product-card-mini ${stockClass}" data-id="${p.id}">
                     <div class="card-body">
                         <h6 class="card-title mb-1">${p.nombre}</h6>
