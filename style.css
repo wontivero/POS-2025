@@ -73,3 +73,42 @@
 .product-card-mini.stock-danger {
     border-left-color: #e74a3b; /* Rojo */
 }
+
+
+/* Estilos para el indicador de estado de caja en la navegación */
+.nav-link.caja-abierta {
+    color: #1cc88a !important; /* Verde */
+    font-weight: bold;
+}
+
+.nav-link.caja-cerrada {
+    color: #e74a3b !important; /* Rojo */
+}
+/* Estilos para el nuevo Navbar Oscuro */
+.navbar {
+    box-shadow: 0 2px 4px rgba(0, 0, 0, .4); /* Sombra un poco más notoria para el fondo oscuro */
+}
+
+/* Estilos para la nueva navegación con "píldoras" (Tema Oscuro) */
+.navbar-nav.nav-pills .nav-link {
+    padding: 0.5rem 1rem;
+    margin: 0 0.25rem;
+    border-radius: 0.5rem;
+    /* Color de texto claro y semitransparente para los inactivos */
+    color: rgba(255, 255, 255, 0.75); 
+    transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out;
+}
+
+/* Estilo para la píldora activa (se mantiene igual, el azul resalta bien) */
+.navbar-nav.nav-pills .nav-link.active {
+    background-color: #0d6efd;
+    color: white !important;
+    box-shadow: 0 4px 8px rgba(13, 110, 253, 0.3);
+}
+
+/* Estilo al pasar el mouse sobre una píldora inactiva */
+.navbar-nav.nav-pills .nav-link:not(.active):hover {
+    /* Un fondo sutilmente más claro que el de la barra */
+    background-color: rgba(255, 255, 255, 0.1); 
+    color: white;
+}

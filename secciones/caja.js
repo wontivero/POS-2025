@@ -43,6 +43,9 @@ export async function verificarEstadoCaja() {
     historialSnapshot.forEach(doc => historialSesiones.push({ id: doc.id, ...doc.data() }));
 
     // IMPORTANTE: Hemos eliminado las llamadas a actualizarVistaCaja() y renderHistorialCaja() de aquí.
+    // Una vez que sabemos el estado, actualizamos el enlace de navegación.
+    actualizarEstadoCajaNav();
+
 }
 
 /**
@@ -416,7 +419,7 @@ function handleAccionCajaClick() {
         handleCerrarCaja();
     } else {
         // Si la caja está cerrada, la acción es ABRIR
-        
+
         // --- INICIO DE LA NUEVA LÓGICA ---
         // Verificamos si tenemos un historial de sesiones para tomar el último valor
         if (historialSesiones && historialSesiones.length > 0) {
@@ -439,10 +442,23 @@ function handleNuevoMovimiento(tipo) {
     movimientoTipoInput.value = tipo;
     movimientoMontoInput.value = '';
     movimientoConceptoInput.value = '';
-    movimientoCajaModal.show();r
+    movimientoCajaModal.show(); r
 }
 
+function actualizarEstadoCajaNav() {
+    const navLinkCaja = document.getElementById('nav-link-caja');
+    if (!navLinkCaja) return; // Si no encuentra el enlace, no hace nada
 
+    if (sesionActiva) {
+        // Caja abierta: aplicamos el estilo verde
+        navLinkCaja.classList.add('caja-abierta');
+        navLinkCaja.classList.remove('caja-cerrada');
+    } else {
+        // Caja cerrada: aplicamos el estilo rojo
+        navLinkCaja.classList.add('caja-cerrada');
+        navLinkCaja.classList.remove('caja-abierta');
+    }
+}
 
 export async function init() {
     // Verificación de seguridad: si la sección no se ha cargado en el DOM, no hacemos nada.
