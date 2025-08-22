@@ -1,5 +1,6 @@
 // secciones/productos.js
-import { getCollection, saveDocument, deleteDocument, formatCurrency, getTodayDate, updateDocument, capitalizeFirstLetter } from '../utils.js';
+import { getCollection, saveDocument, deleteDocument, formatCurrency, getTodayDate, updateDocument, capitalizeFirstLetter, showAlertModal, showConfirmationModal } from '../utils.js';
+
 import { getFirestore, collection, onSnapshot, query, orderBy, getDocs, writeBatch, Timestamp, doc, where, addDoc } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
 
 // Inicializar Firestore fuera de las funciones si se usa en todo el módulo
@@ -219,7 +220,7 @@ async function handleFormSubmit(e) {
     e.preventDefault();
 
     if (!formProducto || !productoNombre || !productoCosto || !productoVenta || !productoStock) {
-        alert("Error: El formulario o sus campos no están disponibles.");
+        await showAlertModal("Error: El formulario o sus campos no están disponibles.");
         return;
     }
 
@@ -242,18 +243,18 @@ async function handleFormSubmit(e) {
         stockMinimo: parseInt(productoStockMinimo.value) || 0,
         isGeneric: productoGenericoSwitch.checked,
         genericProfitMargin: parseFloat(productoMargenGenerico.value) || 0,
-        isFeatured: productoDestacado.checked,        
+        isFeatured: productoDestacado.checked,
         fechaUltimoCambioPrecio: Timestamp.now()
     };
 
     if (!productoData.nombre || isNaN(productoData.costo) || isNaN(productoData.venta) || isNaN(productoData.stock)) {
-        alert("Por favor, completa todos los campos obligatorios.");
+        await showAlertModal("Por favor, completa todos los campos obligatorios.");
         return;
     }
 
     try {
         await saveDocument('productos', productoData, isNew ? null : id);
-        alert(`Producto ${isNew ? 'creado' : 'actualizado'} correctamente.`);
+        await showAlertModal(`Producto ${isNew ? 'creado' : 'actualizado'} correctamente.`);
 
         if (isNew) {
             await addUniqueItem('marcas', productoData.marca);
@@ -267,7 +268,7 @@ async function handleFormSubmit(e) {
         formProducto.reset();
     } catch (e) {
         console.error('Error al guardar el producto:', e);
-        alert('Ocurrió un error al guardar el producto. Revisa la consola para más detalles.');
+        await showAlertModal('Ocurrió un error al guardar el producto. Revisa la consola para más detalles.');
     }
 }
 
@@ -283,13 +284,14 @@ async function addUniqueItem(collectionName, itemName) {
 
 async function handleDelete(e) {
     const id = e.target.closest('.btn-eliminar-producto').dataset.id;
-    if (confirm('¿Estás seguro de que deseas eliminar este producto?')) {
+    const confirmado = await showConfirmationModal('¿Estás seguro de que deseas eliminar este producto?');
+    if (confirmado) {
         try {
             await deleteDocument('productos', id);
-            alert('Producto eliminado de Firebase.');
+            await showAlertModal('Producto eliminado de Firebase.');
         } catch (e) {
             console.error('Error al eliminar el producto:', e);
-            alert('Ocurrió un error al eliminar el producto.');
+            await showAlertModal('Ocurrió un error al eliminar el producto.');
         }
     }
 }
@@ -313,18 +315,18 @@ function handleEdit(e) {
             if (productoStock) productoStock.value = producto.stock ?? 0;
             if (productoStockMinimo) productoStockMinimo.value = producto.stockMinimo ?? 0;
 
-              // --- INICIO DE LÍNEAS NUEVAS ---
+            // --- INICIO DE LÍNEAS NUEVAS ---
             const productoGenericoSwitch = document.getElementById('producto-generico');
             const genericProfitFields = document.getElementById('generic-profit-fields');
             const productoMargenGenerico = document.getElementById('producto-margen-generico');
             const productoDestacado = document.getElementById('producto-destacado');
 
-            if(productoGenericoSwitch) productoGenericoSwitch.checked = producto.isGeneric ?? false;
-            if(productoMargenGenerico) productoMargenGenerico.value = producto.genericProfitMargin ?? 70;
-            if(productoDestacado) productoDestacado.checked = producto.isFeatured ?? false;
-            
+            if (productoGenericoSwitch) productoGenericoSwitch.checked = producto.isGeneric ?? false;
+            if (productoMargenGenerico) productoMargenGenerico.value = producto.genericProfitMargin ?? 70;
+            if (productoDestacado) productoDestacado.checked = producto.isFeatured ?? false;
+
             // Actualizamos la visibilidad del campo de margen
-            if(genericProfitFields) genericProfitFields.style.display = producto.isGeneric ? 'block' : 'none';
+            if (genericProfitFields) genericProfitFields.style.display = producto.isGeneric ? 'block' : 'none';
             // --- FIN DE LÍNEAS NUEVAS ---
         }
 
@@ -341,8 +343,8 @@ function handleNewProduct() {
         // Asegurarnos de que los campos nuevos estén en su estado inicial
         const productoGenericoSwitch = document.getElementById('producto-generico');
         const genericProfitFields = document.getElementById('generic-profit-fields');
-        if(productoGenericoSwitch) productoGenericoSwitch.checked = false;
-        if(genericProfitFields) genericProfitFields.style.display = 'none';
+        if (productoGenericoSwitch) productoGenericoSwitch.checked = false;
+        if (genericProfitFields) genericProfitFields.style.display = 'none';
         // --- FIN DE LÍNEAS NUEVAS ---
     }
     if (modalProductoLabel) modalProductoLabel.textContent = 'Nuevo Producto';
@@ -401,12 +403,12 @@ async function handleActualizacionMasiva() {
     const fieldNameText = field === 'venta' ? 'Precio de Venta' : 'Precio de Costo';
 
     if (isNaN(amount) || amount === 0) {
-        alert('Por favor, ingresá un monto válido para la actualización.');
+        await showAlertModal('Por favor, ingresá un monto válido para la actualización.');
         return;
     }
 
     if (productosFiltradosActuales.length === 0) {
-        alert('No hay productos filtrados para actualizar.');
+        await showAlertModal('No hay productos filtrados para actualizar.');
         return;
     }
 
@@ -460,18 +462,18 @@ async function handleActualizacionMasiva() {
 
         try {
             await batch.commit();
-            alert('¡Actualización masiva completada con éxito!');
+            await showAlertModal('¡Actualización masiva completada con éxito!');
         } catch (e) {
             console.error('Error al realizar la actualización masiva:', e);
-            alert('Ocurrió un error al realizar la actualización masiva.');
+            await showAlertModal('Ocurrió un error al realizar la actualización masiva.');
         }
     }
 }
 
 // REEMPLAZAR en productos.js
-function exportarProductosAExcel() {
+async function exportarProductosAExcel() {
     if (listaCompletaProductos.length === 0) {
-        alert('No hay productos para exportar.');
+        await showAlertModal('No hay productos para exportar.');
         return;
     }
 
@@ -551,7 +553,7 @@ async function handleFileUpload(event) {
         const headers = rows.shift().split(';').map(h => h.trim().replace(/"/g, ''));
 
         if (rows.length === 0) {
-            alert("El archivo CSV está vacío o no tiene un formato válido.");
+            await showAlertModal("El archivo CSV está vacío o no tiene un formato válido.");
             return;
         }
 
@@ -648,11 +650,11 @@ async function handleFileUpload(event) {
             }
 
             await batch.commit();
-            alert(`¡Importación completada con éxito! Se procesaron ${rows.length} registros.`);
+            await showAlertModal(`¡Importación completada con éxito! Se procesaron ${rows.length} registros.`);
 
         } catch (error) {
             console.error("Error durante la importación masiva:", error);
-            alert("Ocurrió un error durante la importación. Revisa la consola para más detalles.");
+            await showAlertModal("Ocurrió un error durante la importación. Revisa la consola para más detalles.");
         } finally {
             if (loader) loader.classList.add('d-none');
             if (importButton) importButton.disabled = false;

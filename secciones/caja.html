@@ -1,41 +1,100 @@
 <section id="seccion-caja">
     <h2 class="mb-4">Manejo de Caja</h2>
 
-    <div class="row mb-4">
-        <div class="col-md-6">
-            <div class="card shadow-sm h-100">
-                <div class="card-header text-white" id="caja-status-header">
-                    <h5 class="mb-0"><i class="fas fa-info-circle me-2"></i>Estado Actual</h5>
-                </div>
-                <div class="card-body d-flex flex-column justify-content-center text-center">
-                    <h3 id="caja-status-text" class="mb-3">Cargando...</h3>
-                    <p class="text-muted" id="caja-status-details">--</p>
-                    <div class="d-grid gap-2 mt-auto">
-                        <button class="btn btn-lg btn-primary" id="btn-accion-caja" disabled>
-                            <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-                            Cargando...
-                        </button>
+    <div id="vista-estado-caja">
+        <div class="row mb-4">
+            <div class="col-lg-7 col-md-6">
+                <div class="card shadow-sm h-100">
+                    <div class="card-header text-white" id="caja-status-header">
+                        <h5 class="mb-0"><i class="fas fa-info-circle me-2"></i>Estado Actual</h5>
+                    </div>
+                    <div class="card-body d-flex flex-column justify-content-center text-center">
+                        <h3 id="caja-status-text" class="mb-3 display-6">Cargando...</h3>
+                        <p class="text-muted" id="caja-status-details">--</p>
+                        <div class="d-grid gap-2 mt-auto">
+                            <button class="btn btn-lg btn-primary" id="btn-accion-caja" disabled>
+                                <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                                Cargando...
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
-        <div class="col-md-6">
-            <div class="card shadow-sm h-100">
-                <div class="card-header">
-                    <h5 class="mb-0"><i class="fas fa-exchange-alt me-2"></i>Movimientos Manuales</h5>
-                </div>
-                <div class="card-body d-flex flex-column justify-content-center">
-                    <p class="text-muted small">Registra entradas o salidas de dinero que no sean por ventas (ej: pago a proveedores, retiro de ganancias).</p>
-                    <div class="d-grid gap-2">
-                        <button class="btn btn-outline-success" id="btn-registrar-ingreso" disabled><i class="fas fa-arrow-down me-2"></i>Registrar Ingreso</button>
-                        <button class="btn btn-outline-danger" id="btn-registrar-egreso" disabled><i class="fas fa-arrow-up me-2"></i>Registrar Egreso</button>
+            <div class="col-lg-5 col-md-6">
+                <div class="card shadow-sm h-100">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="fas fa-exchange-alt me-2"></i>Movimientos Manuales</h5>
+                    </div>
+                    <div class="card-body d-flex flex-column justify-content-center">
+                        <p class="text-muted small">Registra entradas o salidas de dinero en efectivo que no sean por ventas (ej: pago a proveedores, retiro de ganancias).</p>
+                        <div class="d-grid gap-2">
+                            <button class="btn btn-outline-success" id="btn-registrar-ingreso" disabled><i class="fas fa-arrow-down me-2"></i>Registrar Ingreso</button>
+                            <button class="btn btn-outline-danger" id="btn-registrar-egreso" disabled><i class="fas fa-arrow-up me-2"></i>Registrar Egreso</button>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <div class="card shadow-sm">
+    <div id="vista-cierre-caja" class="d-none">
+        <div class="card shadow-sm">
+            <div class="card-header bg-danger text-white">
+                <h5 class="mb-0">Realizando Cierre de Caja</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6 mb-4 mb-md-0">
+                        <h6 class="text-muted">RESUMEN DEL SISTEMA</h6>
+                        <ul class="list-group">
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                <span>(+) Fondo Inicial</span>
+                                <strong id="cierre-fondo-inicial">$0.00</strong>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                <span>(+) Ventas en Efectivo</span>
+                                <strong id="cierre-ventas-efectivo">$0.00</strong>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                <span>(+) Otros Ingresos</span>
+                                <strong id="cierre-ingresos">$0.00</strong>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                <span>(-) Egresos / Retiros</span>
+                                <strong id="cierre-egresos" class="text-danger">-$0.00</strong>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between align-items-center bg-light">
+                                <h5 class="mb-0">(=) Total Esperado</h5>
+                                <h5 class="mb-0" id="cierre-total-esperado">$0.00</h5>
+                            </li>
+                        </ul>
+                    </div>
+                    <div class="col-md-6">
+                        <h6 class="text-muted">CONTEO MANUAL</h6>
+                        <div class="mb-3">
+                            <label for="cierre-conteo-final" class="form-label">Ingresa el dinero real contado en caja:</label>
+                            <div class="input-group input-group-lg">
+                                <span class="input-group-text">$</span>
+                                <input type="number" id="cierre-conteo-final" class="form-control" placeholder="0.00">
+                            </div>
+                        </div>
+                        <div class="card text-center">
+                            <div class="card-header">Diferencia</div>
+                            <div class="card-body">
+                                <h3 id="cierre-diferencia" class="mb-0">$0.00</h3>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="card-footer text-end">
+                <button class="btn btn-secondary" id="btn-cancelar-cierre">Cancelar</button>
+                <button class="btn btn-danger" id="btn-confirmar-cierre">Confirmar y Cerrar Caja</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow-sm mt-4">
         <div class="card-header">
             <h5 class="mb-0"><i class="fas fa-history me-2"></i>Historial de Cierres de Caja</h5>
         </div>
@@ -61,18 +120,18 @@
         </div>
     </div>
 
-    <div class="modal fade" id="aperturaCajaModal" tabindex="-1" aria-hidden="true">
+    <div class="modal fade" id="aperturaCajaModal" tabindex="-1" aria-labelledby="aperturaModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title">Abrir Nueva Sesión de Caja</h5>
+                    <h5 class="modal-title" id="aperturaModalLabel">Abrir Nueva Sesión de Caja</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
                     <label for="fondo-inicial" class="form-label">Fondo Inicial en Efectivo (Dinero para cambio)</label>
                     <div class="input-group input-group-lg">
                         <span class="input-group-text">$</span>
-                        <input type="number" class="form-control" id="fondo-inicial" value="0">
+                        <input type="number" class="form-control" id="fondo-inicial" value="0" step="0.01">
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -83,7 +142,7 @@
         </div>
     </div>
 
-    <div class="modal fade" id="movimientoCajaModal" tabindex="-1" aria-hidden="true">
+    <div class="modal fade" id="movimientoCajaModal" tabindex="-1" aria-labelledby="movimientoModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
                 <div class="modal-header">
@@ -96,12 +155,12 @@
                         <label for="movimiento-monto" class="form-label">Monto</label>
                         <div class="input-group">
                             <span class="input-group-text">$</span>
-                            <input type="number" class="form-control" id="movimiento-monto" placeholder="0.00">
+                            <input type="number" class="form-control" id="movimiento-monto" placeholder="0.00" step="0.01">
                         </div>
                     </div>
                     <div class="mb-3">
                         <label for="movimiento-concepto" class="form-label">Concepto / Descripción</label>
-                        <input type="text" class="form-control" id="movimiento-concepto" placeholder="Ej: Pago a proveedor de limpieza">
+                        <input type="text" class="form-control" id="movimiento-concepto" placeholder="Ej: Pago a proveedor de limpieza" required>
                     </div>
                 </div>
                 <div class="modal-footer">

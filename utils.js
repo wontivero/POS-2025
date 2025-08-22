@@ -294,3 +294,93 @@ export async function generatePDF(ticketId, venta) {
 
     doc.save(`factura-${venta.fecha}-${ticketId}.pdf`);
 }
+
+
+let genericModalEl, genericModal;
+
+/**
+ * Muestra un modal de aviso (reemplaza a alert).
+ * @param {string} message El mensaje a mostrar.
+ * @param {string} title El título del modal (opcional).
+ */
+export function showAlertModal(message, title = 'Aviso') {
+    // La función ahora devuelve una Promesa para poder usar 'await'
+    return new Promise(resolve => {
+        if (!genericModalEl) {
+            genericModalEl = document.getElementById('genericModal');
+            genericModal = new bootstrap.Modal(genericModalEl);
+        }
+        
+        document.getElementById('genericModalLabel').textContent = title;
+        document.getElementById('genericModalBody').innerHTML = message;
+        document.getElementById('btn-generic-cancel').style.display = 'none';
+        
+        const confirmButton = document.getElementById('btn-generic-confirm');
+        confirmButton.textContent = 'OK';
+
+        // --- INICIO DE LA CORRECCIÓN ---
+        // Esta función se ejecutará cuando el modal se cierre por cualquier motivo
+        const onModalClose = () => {
+            genericModal.hide();
+            // Limpiamos el listener para que no se acumule
+            confirmButton.removeEventListener('click', onModalClose);
+            genericModalEl.removeEventListener('hidden.bs.modal', onModalClose);
+            resolve(); // Le decimos a la promesa que hemos terminado
+        };
+
+        // Asignamos el listener al botón OK
+        confirmButton.addEventListener('click', onModalClose, { once: true });
+        // También escuchamos si se cierra de otra forma (con la X, tecla Esc, etc.)
+        genericModalEl.addEventListener('hidden.bs.modal', onModalClose, { once: true });
+        // --- FIN DE LA CORRECCIÓN ---
+
+        genericModal.show();
+    });
+}
+
+/**
+ * Muestra un modal de confirmación y espera la respuesta del usuario (reemplaza a confirm).
+ * @param {string} message El mensaje de confirmación.
+ * @param {string} title El título del modal (opcional).
+ * @returns {Promise<boolean>} Resuelve a 'true' si el usuario confirma, 'false' si cancela.
+ */
+export function showConfirmationModal(message, title = 'Confirmación') {
+    return new Promise(resolve => {
+        if (!genericModalEl) {
+            genericModalEl = document.getElementById('genericModal');
+            genericModal = new bootstrap.Modal(genericModalEl);
+        }
+
+        document.getElementById('genericModalLabel').textContent = title;
+        document.getElementById('genericModalBody').innerHTML = message;
+        document.getElementById('btn-generic-cancel').style.display = 'inline-block'; // Mostramos el botón de cancelar
+        document.getElementById('btn-generic-confirm').textContent = 'Aceptar';
+
+        const confirmButton = document.getElementById('btn-generic-confirm');
+        const cancelButton = document.getElementById('btn-generic-cancel');
+
+        const onConfirm = () => {
+            genericModal.hide();
+            resolve(true);
+            cleanup();
+        };
+
+        const onCancel = () => {
+            genericModal.hide();
+            resolve(false);
+            cleanup();
+        };
+
+        const cleanup = () => {
+            confirmButton.removeEventListener('click', onConfirm);
+            cancelButton.removeEventListener('click', onCancel);
+            genericModalEl.removeEventListener('hidden.bs.modal', onCancel);
+        };
+        
+        confirmButton.addEventListener('click', onConfirm, { once: true });
+        cancelButton.addEventListener('click', onCancel, { once: true });
+        genericModalEl.addEventListener('hidden.bs.modal', onCancel, { once: true });
+
+        genericModal.show();
+    });
+}

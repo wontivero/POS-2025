@@ -1,7 +1,10 @@
 // secciones/ventas.js
 import { init as initProductosModal } from './productos.js';
+import { haySesionActiva, getSesionActivaId } from './caja.js';
 import { getFirestore, collection, onSnapshot, query, orderBy } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
-import { getCollection, saveDocument, formatCurrency, getTodayDate, getNextTicketNumber, updateDocument, deleteDocument, getFormattedDateTime, generatePDF } from '../utils.js';
+
+import { getCollection, saveDocument, formatCurrency, getTodayDate, getNextTicketNumber, updateDocument, deleteDocument, getFormattedDateTime, generatePDF, showAlertModal, showConfirmationModal } from '../utils.js';
+
 import { companyInfo } from '../config.js';
 
 const db = getFirestore();
@@ -160,7 +163,7 @@ function handleQuantityLiveUpdate(e) {
 }
 // AÑADE ESTA NUEVA FUNCIÓN COMPLETA EN ventas.js
 
-function handleQuantityManualChange(e) {
+async function handleQuantityManualChange(e) {
     const index = parseInt(e.target.dataset.index);
     const newQuantity = parseInt(e.target.value);
     const item = ticket[index];
@@ -176,7 +179,7 @@ function handleQuantityManualChange(e) {
     }
     // Si la nueva cantidad excede el stock, la ajustamos al máximo disponible
     else if (productoOriginal && newQuantity > productoOriginal.stock) {
-        alert(`Stock insuficiente. Stock disponible: ${productoOriginal.stock}`);
+        await showAlertModal(`Stock insuficiente. Stock disponible: ${productoOriginal.stock}`);
         item.cantidad = productoOriginal.stock;
         item.total = item.cantidad * item.precio;
     }
@@ -260,7 +263,7 @@ function handleSearch(e) {
 }
 
 // REEMPLAZA ESTA FUNCIÓN ENTERA EN ventas.js
-function addProductToTicket(productId) {
+async function addProductToTicket(productId) {
     const producto = productos.find(p => p.id === productId);
     if (!producto) {
         console.error("Error: Producto no encontrado con el ID:", productId);
@@ -284,7 +287,7 @@ function addProductToTicket(productId) {
                     item.cantidad++;
                     item.total = item.precio * item.cantidad;
                 } else {
-                    alert('No hay más stock disponible para este producto.');
+                    await showAlertModal('No hay más stock disponible para este producto.');
                 }
                 productoEncontradoEnTicket = true;
                 break;
@@ -312,13 +315,13 @@ function handleSearchResultClick(e) {
 }
 
 // AÑADE ESTA FUNCIÓN NUEVA EN ventas.js
-function handleConfirmGenericPrice() {
+async function handleConfirmGenericPrice() {
     if (!genericProductToAdd) return;
 
     const finalPrice = parseFloat(genericPriceInput.value);
 
     if (isNaN(finalPrice) || finalPrice < 0) {
-        alert('Por favor, ingrese un precio válido.');
+        await showAlertModal('Por favor, ingrese un precio válido.');
         return;
     }
 
@@ -419,7 +422,7 @@ function handlePaymentChange() {
 
 async function handleQuickPayment(e) {
     if (totalVentaBase <= 0) {
-        alert('No hay productos en el ticket para pagar.');
+        await showAlertModal('No hay productos en el ticket para pagar.');
         return;
     }
     const metodo = e.target.closest('.btn-pago-rapido').dataset.metodo;
@@ -436,12 +439,23 @@ async function handleQuickPayment(e) {
     await finalizarVenta();
 }
 
+// REEMPLAZA ESTA FUNCIÓN ENTERA EN ventas.js
+
 async function finalizarVenta() {
-    if (totalVentaBase <= 0) {
-        alert('No hay productos en el ticket.');
+    // --- 1. CHEQUEO DE CAJA ABIERTA (NUEVO) ---
+    if (!haySesionActiva()) {
+        await showAlertModal('Operación denegada: No hay una sesión de caja abierta. Por favor, abre una caja antes de realizar ventas.');
         return;
     }
+    // --- FIN DEL CHEQUEO ---
+
+    if (totalVentaBase <= 0) {
+        await showAlertModal('No hay productos en el ticket.');
+        return;
+    }
+
     showLoading();
+
     try {
         const ticketNumber = await getNextTicketNumber();
         const productosParaGuardar = ticket.map(item => {
@@ -456,12 +470,16 @@ async function finalizarVenta() {
             const gananciaItem = (item.precio - item.costo) * item.cantidad;
             return sum + gananciaItem;
         }, 0);
+        
         const montoCredito = parseFloat(txtCredito.value) || 0;
         const recargo = (parseFloat(txtRecargoCredito.value) || 0) / 100;
         const montoCreditoConRecargo = Math.round(montoCredito * (1 + recargo));
         const totalConRecargo = totalVentaBase + Math.round(montoCredito * recargo);
 
         const nuevaVenta = {
+            // --- 2. ASOCIAR VENTA A LA SESIÓN (NUEVO) ---
+            sesionCajaId: getSesionActivaId(),
+            // --- FIN ---
             fecha: getTodayDate(),
             timestamp: getFormattedDateTime(),
             ticketId: ticketNumber,
@@ -488,11 +506,13 @@ async function finalizarVenta() {
         modal.show();
     } catch (e) {
         console.error('Error al finalizar la venta:', e);
-        alert('Ocurrió un error al guardar la venta.');
+        await showAlertModal('Ocurrió un error al guardar la venta.');
     } finally {
         hideLoading();
     }
 }
+
+
 
 function showLoading() {
     loadingOverlay.style.display = 'flex';
@@ -575,7 +595,7 @@ async function handleGuardarCliente() {
         }
     } catch (e) {
         console.error('Error al guardar el cliente:', e);
-        alert('Ocurrió un error al guardar el cliente.');
+        await showAlertModal('Ocurrió un error al guardar el cliente.');
     } finally {
         hideLoading();
     }
