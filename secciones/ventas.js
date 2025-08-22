@@ -1,8 +1,7 @@
 // secciones/ventas.js
 import { init as initProductosModal } from './productos.js';
-import { haySesionActiva, getSesionActivaId } from './caja.js';
-import { getFirestore, collection, onSnapshot, query, orderBy } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
-
+import { haySesionActiva, getSesionActivaId, verificarEstadoCaja } from './caja.js';
+import { getFirestore, collection, onSnapshot, query, orderBy, runTransaction, doc } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
 import { getCollection, saveDocument, formatCurrency, getTodayDate, getNextTicketNumber, updateDocument, deleteDocument, getFormattedDateTime, generatePDF, showAlertModal, showConfirmationModal } from '../utils.js';
 
 import { companyInfo } from '../config.js';
@@ -441,16 +440,15 @@ async function handleQuickPayment(e) {
 
 // REEMPLAZA ESTA FUNCIÓN ENTERA EN ventas.js
 
+// REEMPLAZA ESTA FUNCIÓN ENTERA EN ventas.js
+
 async function finalizarVenta() {
-    // --- 1. CHEQUEO DE CAJA ABIERTA (NUEVO) ---
     if (!haySesionActiva()) {
-        await showAlertModal('Operación denegada: No hay una sesión de caja abierta. Por favor, abre una caja antes de realizar ventas.');
+        await showAlertModal('Operación denegada: No hay una sesión de caja abierta.', 'Caja Cerrada');
         return;
     }
-    // --- FIN DEL CHEQUEO ---
-
-    if (totalVentaBase <= 0) {
-        await showAlertModal('No hay productos en el ticket.');
+    if (ticket.length === 0) {
+        await showAlertModal('No hay productos en el ticket.', 'Ticket Vacío');
         return;
     }
 
@@ -458,60 +456,103 @@ async function finalizarVenta() {
 
     try {
         const ticketNumber = await getNextTicketNumber();
-        const productosParaGuardar = ticket.map(item => {
-            if (item.isGeneric) {
-                const margen = (item.genericProfitMargin || 70) / 100;
-                const costoCalculado = item.precio / (1 + margen);
-                return { ...item, costo: costoCalculado };
+
+        await runTransaction(db, async (transaction) => {
+            const productsToUpdate = [];
+            
+            // FASE DE LECTURA Y VALIDACIÓN
+            for (const item of ticket) {
+                if (item.isGeneric) continue;
+
+                const productRef = doc(db, 'productos', item.id);
+                const productDoc = await transaction.get(productRef);
+
+                if (!productDoc.exists()) {
+                    throw new Error(`El producto "${item.nombre}" ya no existe.`);
+                }
+                
+                const currentStock = productDoc.data().stock;
+                if (currentStock < item.cantidad) {
+                    throw new Error(`Stock insuficiente para "${item.nombre}". Disponible: ${currentStock}, Solicitado: ${item.cantidad}.`);
+                }
+
+                productsToUpdate.push({
+                    ref: productRef,
+                    newStock: currentStock - item.cantidad
+                });
             }
-            return item;
+
+            // FASE DE ESCRITURA
+
+            // 1. Actualizamos el stock
+            productsToUpdate.forEach(p => {
+                transaction.update(p.ref, { stock: p.newStock });
+            });
+
+            // 2. Creamos el objeto de la nueva venta (LÓGICA COMPLETA AQUÍ)
+            const productosParaGuardar = ticket.map(item => {
+                if (item.isGeneric) {
+                    const margen = (item.genericProfitMargin || 70) / 100;
+                    const costoCalculado = item.precio / (1 + margen);
+                    return { ...item, costo: costoCalculado };
+                }
+                return item;
+            });
+            
+            const gananciaTotal = productosParaGuardar.reduce((sum, item) => {
+                const gananciaItem = (item.precio - item.costo) * item.cantidad;
+                return sum + gananciaItem;
+            }, 0);
+
+            const montoCredito = parseFloat(txtCredito.value) || 0;
+            const recargo = (parseFloat(txtRecargoCredito.value) || 0) / 100;
+            const montoCreditoConRecargo = Math.round(montoCredito * (1 + recargo));
+            const totalConRecargo = totalVentaBase + Math.round(montoCredito * recargo);
+
+            const nuevaVenta = {
+                estado: 'finalizada', 
+                sesionCajaId: getSesionActivaId(),
+                fecha: getTodayDate(),
+                timestamp: getFormattedDateTime(),
+                ticketId: ticketNumber,
+                cliente: clienteSeleccionado,
+                productos: productosParaGuardar.map(item => ({
+                    id: item.id,
+                    nombre: item.nombre,
+                    precio: item.precio,
+                    costo: item.costo,
+                    cantidad: item.cantidad,
+                    rubro: productos.find(p => p.id === item.id)?.rubro || 'Desconocido',
+                    marca: productos.find(p => p.id === item.id)?.marca || 'Desconocido'
+                })),
+                pagos: {
+                    contado: parseFloat(txtContado.value) || 0,
+                    transferencia: parseFloat(document.getElementById('txtTransferencia').value) || 0,
+                    debito: parseFloat(document.getElementById('txtDebito').value) || 0,
+                    credito: montoCreditoConRecargo,
+                    recargoCredito: parseFloat(txtRecargoCredito.value) || 0,
+                },
+                total: totalConRecargo,
+                ganancia: gananciaTotal // Ahora tendrá un valor numérico
+            };
+
+            // 3. Guardamos el documento de la venta
+            const newVentaRef = doc(collection(db, 'ventas'));
+            transaction.set(newVentaRef, nuevaVenta);
+            
+            ventaData = { id: ticketNumber, data: nuevaVenta };
         });
-        const gananciaTotal = productosParaGuardar.reduce((sum, item) => {
-            const gananciaItem = (item.precio - item.costo) * item.cantidad;
-            return sum + gananciaItem;
-        }, 0);
-        
-        const montoCredito = parseFloat(txtCredito.value) || 0;
-        const recargo = (parseFloat(txtRecargoCredito.value) || 0) / 100;
-        const montoCreditoConRecargo = Math.round(montoCredito * (1 + recargo));
-        const totalConRecargo = totalVentaBase + Math.round(montoCredito * recargo);
 
-        const nuevaVenta = {
-            // --- 2. ASOCIAR VENTA A LA SESIÓN (NUEVO) ---
-            sesionCajaId: getSesionActivaId(),
-            // --- FIN ---
-            fecha: getTodayDate(),
-            timestamp: getFormattedDateTime(),
-            ticketId: ticketNumber,
-            cliente: clienteSeleccionado,
-            productos: productosParaGuardar.map(item => ({
-                id: item.id, nombre: item.nombre, precio: item.precio, costo: item.costo, cantidad: item.cantidad,
-                rubro: productos.find(p => p.id === item.id)?.rubro || 'Desconocido',
-                marca: productos.find(p => p.id === item.id)?.marca || 'Desconocido'
-            })),
-            pagos: {
-                contado: parseFloat(txtContado.value) || 0,
-                transferencia: parseFloat(document.getElementById('txtTransferencia').value) || 0,
-                debito: parseFloat(document.getElementById('txtDebito').value) || 0,
-                credito: montoCreditoConRecargo,
-                recargoCredito: parseFloat(txtRecargoCredito.value) || 0,
-            },
-            total: totalConRecargo,
-            ganancia: gananciaTotal
-        };
-
-        await saveDocument('ventas', nuevaVenta);
-        ventaData = { id: ticketNumber, data: nuevaVenta };
         const modal = new bootstrap.Modal(confirmacionVentaModal);
         modal.show();
+
     } catch (e) {
         console.error('Error al finalizar la venta:', e);
-        await showAlertModal('Ocurrió un error al guardar la venta.');
+        await showAlertModal(`No se pudo completar la venta: ${e.message}`, 'Error de Venta');
     } finally {
         hideLoading();
     }
 }
-
 
 
 function showLoading() {
@@ -663,6 +704,41 @@ function renderQuickAccessProducts() {
 // REEMPLAZA TU FUNCIÓN init ENTERA EN ventas.js CON ESTA VERSIÓN CORREGIDA Y LIMPIA
 
 export async function init() {
+
+
+    // --- INICIO DEL NUEVO BLOQUE DE "RE-FACTURACIÓN" ---
+    const ventaGuardadaStr = sessionStorage.getItem('ventaParaCorregir');
+    if (ventaGuardadaStr) {
+        try {
+            const productosParaCargar = JSON.parse(ventaGuardadaStr);
+            // Limpiamos el ticket actual y cargamos los productos de la venta anulada
+            ticket = []; 
+            productosParaCargar.forEach(producto => {
+                // Creamos un objeto para el ticket con las propiedades necesarias
+                ticket.push({
+                    id: producto.id,
+                    nombre: producto.nombre,
+                    precio: producto.precio,
+                    costo: producto.costo,
+                    cantidad: producto.cantidad,
+                    total: producto.precio * producto.cantidad,
+                    isGeneric: producto.isGeneric || false,
+                    genericProfitMargin: producto.genericProfitMargin
+                });
+            });
+        } catch (error) {
+            console.error("Error al cargar la venta para corregir:", error);
+            ticket = []; // Reseteamos el ticket en caso de error
+        } finally {
+            // Limpiamos el sessionStorage para no volver a cargarla
+            sessionStorage.removeItem('ventaParaCorregir');
+        }
+    }
+    // --- FIN DEL NUEVO BLOQUE ---
+
+
+    await verificarEstadoCaja();
+    
     // 1. OBTENER ELEMENTOS DEL DOM (Sin cambios)
     productoSearch = document.getElementById('productoSearch');
     searchResults = document.getElementById('searchResults');

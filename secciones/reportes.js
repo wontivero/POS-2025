@@ -1,6 +1,9 @@
 // secciones/reportes.js
-
-import { getCollection, getDocumentById, formatCurrency, getTodayDate, generatePDF } from '../utils.js';
+// AL PRINCIPIO de reportes.js
+import { getFirestore, collection, onSnapshot, query, orderBy, runTransaction, doc } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
+import { getCollection, getDocumentById, formatCurrency, getTodayDate, generatePDF, showConfirmationModal, showAlertModal} from '../utils.js';
+import { getAuth } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-auth.js";
+import { haySesionActiva, getSesionActivaId, verificarEstadoCaja } from './caja.js';
 
 // --- Estado de la Sección de Reportes ---
 let ventas = [];
@@ -19,11 +22,15 @@ async function loadData() {
     renderDatalistRubros();
 }
 
-function renderReportes() {
+// REEMPLAZA ESTA FUNCIÓN ENTERA EN reportes.js
+
+function renderReportes(ventasParaCalcular) {
     if (!reporteTotalVentas) return;
-    const totalVentas = ventasFiltradas.reduce((sum, venta) => sum + venta.total, 0);
-    const totalGanancia = ventasFiltradas.reduce((sum, venta) => sum + venta.ganancia, 0);
-    const numVentas = ventasFiltradas.length;
+
+    // Usamos la lista "limpia" que nos pasaron para todos los cálculos
+    const totalVentas = ventasParaCalcular.reduce((sum, venta) => sum + venta.total, 0);
+    const totalGanancia = ventasParaCalcular.reduce((sum, venta) => sum + venta.ganancia, 0);
+    const numVentas = ventasParaCalcular.length;
     const ticketPromedio = numVentas > 0 ? totalVentas / numVentas : 0;
 
     reporteTotalVentas.textContent = formatCurrency(totalVentas);
@@ -31,48 +38,118 @@ function renderReportes() {
     reporteNumVentas.textContent = numVentas;
     reporteTicketPromedio.textContent = formatCurrency(ticketPromedio);
 
-    renderTablaDetalle();
-    renderTopProductos();
-    renderCharts();
+    // --- LÍNEA ELIMINADA ---
+    // renderTablaDetalle(); // <- Esta era la llamada incorrecta que causaba el error.
+
+    // Ahora solo llamamos a las funciones que dependen de la lista "limpia"
+    renderTopProductos(ventasParaCalcular);
+    renderCharts(ventasParaCalcular);
 }
 
 
-// REEMPLAZA ESTA FUNCIÓN ENTERA EN reportes.js
+// AÑADE ESTA FUNCIÓN NUEVA EN reportes.js
 
 // REEMPLAZA ESTA FUNCIÓN ENTERA EN reportes.js
 
-function renderTablaDetalle() {
+async function anularVenta(ventaId) {
+    const confirmado = await showConfirmationModal(
+        "¿Estás seguro? El stock será devuelto y se registrará un egreso de caja si hubo un pago en efectivo.",
+        "Anular Venta"
+    );
+
+    if (!confirmado) return;
+
+    const loadingOverlay = document.getElementById('loadingOverlay');
+    loadingOverlay.style.display = 'flex';
+
+    try {
+        const db = getFirestore();
+        const ventaAnulada = ventasFiltradas.find(v => v.id === ventaId);
+        
+        // --- INICIO DE NUEVA LÓGICA DE EGRESO ---
+        const montoEfectivoDevuelto = ventaAnulada.pagos.contado || 0;
+        if (montoEfectivoDevuelto > 0 && !haySesionActiva()) {
+            throw new Error("No puedes anular una venta con pago en efectivo si no hay una sesión de caja abierta para registrar la devolución.");
+        }
+        // --- FIN DE NUEVA LÓGICA DE EGRESO ---
+
+        await runTransaction(db, async (transaction) => {
+            const ventaRef = doc(db, 'ventas', ventaId);
+            const ventaDoc = await transaction.get(ventaRef);
+            if (!ventaDoc.exists()) throw new Error("La venta no existe.");
+            const ventaData = ventaDoc.data();
+            if (ventaData.estado === 'anulada') throw new Error("Esta venta ya ha sido anulada.");
+
+            for (const productoVendido of ventaData.productos) {
+                if (productoVendido.isGeneric) continue;
+                const productoRef = doc(db, 'productos', productoVendido.id);
+                const productoDoc = await transaction.get(productoRef);
+                if (productoDoc.exists()) {
+                    const stockActual = productoDoc.data().stock;
+                    transaction.update(productoRef, { stock: stockActual + productoVendido.cantidad });
+                }
+            }
+            transaction.update(ventaRef, { estado: 'anulada' });
+        });
+
+        // Si hubo devolución de efectivo, registramos el egreso en la caja actual
+        if (montoEfectivoDevuelto > 0) {
+            const auth = getAuth();
+            const egresoData = {
+                sesionCajaId: getSesionActivaId(),
+                tipo: 'egreso',
+                monto: montoEfectivoDevuelto,
+                concepto: `Devolución por anulación de Venta #${ventaAnulada.ticketId}`,
+                usuario: auth.currentUser.email,
+                fecha: Timestamp.now()
+            };
+            await saveDocument('caja_movimientos', egresoData);
+        }
+
+        await showAlertModal("¡Venta anulada con éxito! El stock ha sido restaurado y el egreso de caja fue registrado.", "Proceso completado");
+
+        // Refrescamos los datos de reportes para que se actualice la vista
+        await loadData();
+        
+        // Guardamos los productos para recargarlos en la sección de ventas
+        sessionStorage.setItem('ventaParaCorregir', JSON.stringify(ventaAnulada.productos));
+        document.querySelector('a[data-section="ventas"]').click();
+
+    } catch (error) {
+        console.error("Error al anular la venta:", error);
+        await showAlertModal(`Error: ${error.message}`, "Error en la anulación");
+    } finally {
+        loadingOverlay.style.display = 'none';
+    }
+}
+// REEMPLAZA ESTA FUNCIÓN ENTERA EN reportes.js
+
+function renderTablaDetalle(ventasParaMostrar) {
     if (!tablaVentasDetalleBody) return;
     tablaVentasDetalleBody.innerHTML = '';
 
-    // --- INICIO DE LA SIMPLIFICACIÓN ---
 
-    // 1. Función auxiliar para convertir "DD/MM/YYYY HH:mm" a un objeto Date para poder ordenar
-    const parseTimestamp = (timestampStr) => {
-        if (!timestampStr) return new Date(0); // Devuelve una fecha muy antigua si no hay timestamp
-        const [datePart, timePart] = timestampStr.split(' ');
-        const [day, month, year] = datePart.split('/');
-        const [hours, minutes] = timePart.split(':');
-        // El mes en el constructor de Date es 0-indexado (Enero=0, Febrero=1, etc.)
-        return new Date(year, month - 1, day, hours, minutes);
-    };
-
-    // 2. Ordenamos usando la nueva función auxiliar
-    const ventasOrdenadas = [...ventasFiltradas].sort((a, b) => {
-        return parseTimestamp(a.timestamp) - parseTimestamp(b.timestamp);
+    const ventasOrdenadas = [...ventasParaMostrar].sort((a, b) => {
+        const fechaA = a.fecha && a.fecha.toDate ? a.fecha.toDate() : new Date(a.fecha);
+        const fechaB = b.fecha && b.fecha.toDate ? b.fecha.toDate() : new Date(b.fecha);
+        return fechaA - fechaB;
     });
-
-    // --- FIN DE LA SIMPLIFICACIÓN ---
 
     ventasOrdenadas.forEach(venta => {
         const row = document.createElement('tr');
-        const listaProductos = venta.productos.map(p => `${p.nombre} x${p.cantidad}`).join('<br>');
+        // --- INICIO DE CAMBIOS ---
+        const isAnulada = venta.estado === 'anulada';
 
-        // Ahora simplemente usamos el campo timestamp directamente
+        // Si la venta está anulada, la mostramos con un estilo diferente
+        if (isAnulada) {
+            row.classList.add('table-secondary', 'text-muted');
+        }
+
+        const listaProductos = venta.productos.map(p => `${p.nombre} x${p.cantidad}`).join('<br>');
         const fechaFormateada = venta.timestamp || 'Sin Fecha';
 
         row.innerHTML = `
-            <td>${fechaFormateada}</td>
+            <td>${fechaFormateada} ${isAnulada ? '<span class="badge bg-danger ms-2">ANULADA</span>' : ''}</td>
             <td>${listaProductos}</td>
             <td>${formatCurrency(venta.pagos.contado)}</td>
             <td>${formatCurrency(venta.pagos.transferencia)}</td>
@@ -82,21 +159,25 @@ function renderTablaDetalle() {
             <td>${formatCurrency(venta.ganancia)}</td>
             <td>
                 <button class="btn btn-sm btn-info btn-ver-detalle" data-id="${venta.id}" title="Ver Detalle"><i class="fas fa-eye"></i></button>
-                <button class="btn btn-sm btn-danger btn-pdf" data-id="${venta.id}" title="Generar PDF"><i class="fas fa-file-pdf"></i></button>
+                <button class="btn btn-sm btn-secondary btn-pdf" data-id="${venta.id}" title="Generar PDF"><i class="fas fa-file-pdf"></i></button>
+                <button class="btn btn-sm btn-warning btn-anular-venta" data-id="${venta.id}" title="Anular y Corregir Venta" ${isAnulada ? 'disabled' : ''}>
+                    <i class="fas fa-undo"></i>
+                </button>
             </td>
         `;
+        // --- FIN DE CAMBIOS ---
         tablaVentasDetalleBody.appendChild(row);
     });
 }
 
 
 
-function renderTopProductos() {
+function renderTopProductos(ventasParaCalcular) {
     if (!tablaTopProductosBody) return;
     tablaTopProductosBody.innerHTML = '';
     const productosVendidos = {};
 
-    ventasFiltradas.forEach(venta => {
+    ventasParaCalcular.forEach(venta => {
         venta.productos.forEach(p => {
             productosVendidos[p.nombre] = (productosVendidos[p.nombre] || 0) + p.cantidad;
         });
@@ -117,13 +198,13 @@ function renderTopProductos() {
 
 // REEMPLAZA ESTA FUNCIÓN ENTERA EN reportes.js
 
-function renderCharts() {
+function renderCharts(ventasParaCalcular) {
     // --- Lógica de cálculo de datos (sin cambios) ---
     const datosRubros = {};
     const datosPagos = { contado: 0, transferencia: 0, debito: 0, credito: 0 };
     const datosVentasTiempo = {};
 
-    ventasFiltradas.forEach(venta => {
+    ventasParaCalcular.forEach(venta => {
         if (Array.isArray(venta.productos)) {
             venta.productos.forEach(p => {
                 const rubro = p.rubro || 'Desconocido';
@@ -156,7 +237,7 @@ function renderCharts() {
     // 2. Extraemos las etiquetas (labels) y los datos (data) de las listas ya ordenadas.
     const rubrosLabels = sortedRubros.map(entry => entry[0]);
     const rubrosData = sortedRubros.map(entry => entry[1]);
-    
+
     const pagosLabels = sortedPagos.map(item => item[0].charAt(0).toUpperCase() + item[0].slice(1));
     const pagosData = sortedPagos.map(item => item[1]);
 
@@ -164,7 +245,7 @@ function renderCharts() {
     const renderLegend = (containerId, sortedData, colors, title) => {
         const container = document.getElementById(containerId);
         if (!container) return;
-        
+
         let legendHtml = `<h6 class="mb-3">${title}</h6><ul class="list-unstyled">`;
         sortedData.forEach(([label, value], index) => {
             const color = colors[index % colors.length];
@@ -180,7 +261,7 @@ function renderCharts() {
         legendHtml += '</ul>';
         container.innerHTML = legendHtml;
     };
-    
+
     const chartColors = ['#4e73df', '#1cc88a', '#36b9cc', '#f6c23e', '#e74a3b', '#858796', '#f8f9fc', '#5a5c69'];
 
     // 3. Usamos las listas ordenadas para crear el gráfico de Rubros.
@@ -240,13 +321,20 @@ function renderCharts() {
 }
 
 
+// REEMPLAZA ESTA FUNCIÓN ENTERA EN reportes.js
+
+// REEMPLAZA ESTA FUNCIÓN ENTERA EN reportes.js
+
 async function filtrarReporte() {
     if (!reporteFechaDesde) return;
     const desde = reporteFechaDesde.value;
     const hasta = reporteFechaHasta.value;
     const rubroFiltro = filtroReporteRubro.value.trim();
 
-    ventasFiltradas = ventas.filter(venta => {
+    // --- INICIO DE LA NUEVA LÓGICA ---
+
+    // 1. PRIMER FILTRADO: Obtenemos TODAS las ventas del período (activas y anuladas)
+    const todasLasVentasDelPeriodo = ventas.filter(venta => {
         let fechaVenta;
         if (venta.fecha && typeof venta.fecha.toDate === 'function') {
             fechaVenta = venta.fecha.toDate();
@@ -262,7 +350,7 @@ async function filtrarReporte() {
         const fechaHasta = hasta ? new Date(hasta + 'T23:59:59') : null;
 
         const matchesDate = (!fechaDesde || fechaVenta >= fechaDesde) && (!fechaHasta || fechaVenta <= fechaHasta);
-
+        
         const matchesRubro = !rubroFiltro || (Array.isArray(venta.productos) && venta.productos.some(p => {
             const rubroProducto = p.rubro || 'Desconocido';
             return rubroProducto.toLowerCase() === rubroFiltro.toLowerCase();
@@ -271,7 +359,15 @@ async function filtrarReporte() {
         return matchesDate && matchesRubro;
     });
 
-    renderReportes();
+    // 2. SEGUNDO FILTRADO: Creamos una lista "limpia" solo con las ventas activas para los cálculos.
+    ventasFiltradas = todasLasVentasDelPeriodo.filter(venta => venta.estado !== 'anulada');
+
+    // 3. RENDERIZADO:
+    // Pasamos la lista COMPLETA a la tabla de detalle.
+    renderTablaDetalle(todasLasVentasDelPeriodo); 
+    // Pasamos la lista "LIMPIA" al resto de los reportes.
+    renderReportes(ventasFiltradas); 
+
     btnQuitarFiltro.classList.toggle('d-none', !desde && !hasta && !rubroFiltro);
 }
 
@@ -288,6 +384,14 @@ async function renderDatalistRubros() {
     const rubros = [...new Set(productos.map(p => p.rubro).filter(r => r))];
     datalistRubrosReporte.innerHTML = rubros.map(rubro => `<option value="${rubro}">`).join('');
 }
+
+
+
+
+// AÑADE ESTA FUNCIÓN COMPLETA EN reportes.js
+
+
+// REEMPLAZA TU FUNCIÓN init ENTERA CON ESTA VERSIÓN
 
 export async function init() {
     reporteFechaDesde = document.getElementById('reporte-fecha-desde');
@@ -309,38 +413,87 @@ export async function init() {
     filtroReporteRubro.addEventListener('input', filtrarReporte);
 
     tablaVentasDetalleBody.addEventListener('click', async (e) => {
-        if (e.target.closest('.btn-ver-detalle')) {
-            const ventaId = e.target.closest('.btn-ver-detalle').dataset.id;
-            const venta = ventasFiltradas.find(v => v.id === ventaId);
+        const detalleBtn = e.target.closest('.btn-ver-detalle');
+        const pdfBtn = e.target.closest('.btn-pdf');
+        const anularBtn = e.target.closest('.btn-anular-venta');
+
+        // --- INICIO DE LA MODIFICACIÓN: Nuevo diseño para el modal de detalle ---
+        if (detalleBtn) {
+            const ventaId = detalleBtn.dataset.id;
+            const venta = ventas.find(v => v.id === ventaId);
             if (venta) {
                 const modalBody = document.getElementById('ticketModalBody');
+                const modalTitle = document.getElementById('ticketModalTitulo');
+                
+                modalTitle.textContent = `Detalle de Venta #${venta.ticketId}`;
+
+                const isAnulada = venta.estado === 'anulada';
+                const estadoBadgeClass = isAnulada ? 'bg-danger' : 'bg-success';
+                const estadoTexto = isAnulada ? 'ANULADA' : 'FINALIZADA';
+
+                const productosHtml = (venta.productos || []).map(p => `
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>${p.nombre}</strong>
+                            <br>
+                            <small class="text-muted">${p.cantidad} x ${formatCurrency(p.precio)}</small>
+                        </div>
+                        <span class="fw-bold">${formatCurrency(p.precio * p.cantidad)}</span>
+                    </li>
+                `).join('');
+
                 modalBody.innerHTML = `
-                    <p><strong>Fecha:</strong> ${(venta.fecha.toDate ? venta.fecha.toDate() : new Date(venta.fecha)).toLocaleString('es-AR')}</p>
-                    <p><strong>Total Venta:</strong> ${formatCurrency(venta.total)}</p>
-                    <p><strong>Ganancia:</strong> ${formatCurrency(venta.ganancia)}</p>
-                    <h6>Productos:</h6>
-                    <ul>
-                        ${venta.productos.map(p => `<li>${p.nombre} x${p.cantidad} (${formatCurrency(p.precio)})</li>`).join('')}
+                    <div class="row">
+                        <div class="col-md-7">
+                            <h6><i class="fas fa-user me-2 text-muted"></i>CLIENTE</h6>
+                            <p class="mb-3 ms-4">${venta.cliente ? venta.cliente.nombre : 'Consumidor Final'}</p>
+                            <h6><i class="fas fa-calendar-alt me-2 text-muted"></i>FECHA Y HORA</h6>
+                            <p class="mb-0 ms-4">${venta.timestamp || 'N/A'}</p>
+                        </div>
+                        <div class="col-md-5 text-md-end">
+                            <h6 class="text-muted">TOTAL VENTA</h6>
+                            <h3 class="display-6 text-primary fw-bold">${formatCurrency(venta.total)}</h3>
+                            <span class="badge ${estadoBadgeClass}">${estadoTexto}</span>
+                        </div>
+                    </div>
+                    <hr class="my-3">
+                    <h6><i class="fas fa-boxes me-2 text-muted"></i>PRODUCTOS</h6>
+                    <ul class="list-group list-group-flush mb-3">
+                        ${productosHtml}
                     </ul>
+                    <h6><i class="fas fa-money-bill-wave me-2 text-muted"></i>DESGLOSE DE PAGOS</h6>
+                    <div class="row bg-light pt-2 pb-2 rounded">
+                        <div class="col-6">Contado:</div>
+                        <div class="col-6 text-end fw-bold">${formatCurrency(venta.pagos.contado)}</div>
+                        <div class="col-6">Transferencia:</div>
+                        <div class="col-6 text-end fw-bold">${formatCurrency(venta.pagos.transferencia)}</div>
+                        <div class="col-6">Débito:</div>
+                        <div class="col-6 text-end fw-bold">${formatCurrency(venta.pagos.debito)}</div>
+                        <div class="col-6">Crédito:</div>
+                        <div class="col-6 text-end fw-bold">${formatCurrency(venta.pagos.credito)}</div>
+                    </div>
                 `;
-                const modal = new bootstrap.Modal(document.getElementById('ticketModal'));
-                modal.show();
+                
+                new bootstrap.Modal(document.getElementById('ticketModal')).show();
             }
         }
-
-        if (e.target.closest('.btn-pdf')) {
-            const ventaId = e.target.closest('.btn-pdf').dataset.id;
-            const venta = ventasFiltradas.find(v => v.id === ventaId);
+        // --- FIN DE LA MODIFICACIÓN ---
+        
+        else if (pdfBtn) {
+            const ventaId = pdfBtn.dataset.id;
+            const venta = ventas.find(v => v.id === ventaId);
             if (venta) {
-                const ventaParaPDF = {
-                    ...venta,
-                    timestamp: (venta.fecha.toDate ? venta.fecha.toDate() : new Date(venta.fecha)).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' })
-                };
-                generatePDF(venta.ticketId, ventaParaPDF);
+                generatePDF(venta.ticketId, venta);
             }
+        } 
+        
+        else if (anularBtn) {
+            const ventaId = anularBtn.dataset.id;
+            anularVenta(ventaId);
         }
     });
 
     limpiarFiltros();
     await loadData();
+    // await actualizarEstadoCajaReporte();
 }

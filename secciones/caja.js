@@ -1,4 +1,5 @@
 // Archivo: secciones/caja.js
+
 import { getCollection, saveDocument, updateDocument, formatCurrency, showAlertModal, showConfirmationModal } from '../utils.js';
 import { getFirestore, collection, getDocs, query, where, orderBy, limit, Timestamp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
 import { getAuth } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-auth.js";
@@ -29,7 +30,7 @@ let btnConfirmarCierre, btnCancelarCierre;
 /**
  * Consulta Firestore para ver si hay una sesión de caja con estado "abierta" y carga el historial.
  */
-async function verificarEstadoCaja() {
+export async function verificarEstadoCaja() {
     // Busca la sesión activa
     const qSesion = query(collection(db, 'caja_sesiones'), where('estado', '==', 'abierta'), limit(1));
     const sesionSnapshot = await getDocs(qSesion);
@@ -41,9 +42,7 @@ async function verificarEstadoCaja() {
     historialSesiones = [];
     historialSnapshot.forEach(doc => historialSesiones.push({ id: doc.id, ...doc.data() }));
 
-    // Una vez que tenemos los datos, actualizamos toda la interfaz.
-    actualizarVistaCaja();
-    renderHistorialCaja();
+    // IMPORTANTE: Hemos eliminado las llamadas a actualizarVistaCaja() y renderHistorialCaja() de aquí.
 }
 
 /**
@@ -73,6 +72,7 @@ async function confirmarAperturaCaja() {
         await saveDocument('caja_sesiones', nuevaSesion);
         aperturaCajaModal.hide();
         await verificarEstadoCaja();
+        actualizarVistaCaja();
     } catch (e) {
         console.error("Error al abrir la caja:", e);
         await showAlertModal("No se pudo abrir la caja.");
@@ -147,6 +147,9 @@ async function confirmarCierreDefinitivo() {
         await showAlertModal("Caja cerrada exitosamente.");
         cancelarCierre();
         await verificarEstadoCaja(); // Refrescar todo
+        actualizarVistaCaja();
+        renderHistorialCaja();
+        // Generar PDF del cierre
     } catch (e) {
         console.error("Error al cerrar la caja:", e);
         await showAlertModal("No se pudo cerrar la caja.");
@@ -405,11 +408,28 @@ function cancelarCierre() {
     vistaEstadoCaja.classList.remove('d-none');
 }
 
+// REEMPLAZA ESTA FUNCIÓN ENTERA EN caja.js
+
 function handleAccionCajaClick() {
     if (sesionActiva) {
+        // Si la caja está abierta, la acción es CERRAR (esto no cambia)
         handleCerrarCaja();
     } else {
-        fondoInicialInput.value = '';
+        // Si la caja está cerrada, la acción es ABRIR
+        
+        // --- INICIO DE LA NUEVA LÓGICA ---
+        // Verificamos si tenemos un historial de sesiones para tomar el último valor
+        if (historialSesiones && historialSesiones.length > 0) {
+            // La primera sesión en el historial es la más reciente
+            const ultimaSesionCerrada = historialSesiones[0];
+            // Sugerimos el monto con el que se cerró la caja anterior
+            fondoInicialInput.value = ultimaSesionCerrada.conteoFinal || 0;
+        } else {
+            // Si no hay historial, sugerimos empezar con 0
+            fondoInicialInput.value = '0';
+        }
+        // --- FIN DE LA NUEVA LÓGICA ---
+
         aperturaCajaModal.show();
     }
 }
@@ -425,7 +445,14 @@ function handleNuevoMovimiento(tipo) {
 
 
 export async function init() {
-    // Obtenemos todos los elementos del DOM
+    // Verificación de seguridad: si la sección no se ha cargado en el DOM, no hacemos nada.
+    const seccionCaja = document.getElementById('seccion-caja');
+    if (!seccionCaja) {
+        console.error("La sección de caja no se encontró en el DOM.");
+        return;
+    }
+
+    // 1. Obtenemos todos los elementos del DOM (ahora de forma segura)
     vistaEstadoCaja = document.getElementById('vista-estado-caja');
     vistaCierreCaja = document.getElementById('vista-cierre-caja');
     cajaStatusHeader = document.getElementById('caja-status-header');
@@ -459,7 +486,7 @@ export async function init() {
     btnConfirmarCierre = document.getElementById('btn-confirmar-cierre');
     btnCancelarCierre = document.getElementById('btn-cancelar-cierre');
 
-    // Asignamos todos los event listeners
+    // 2. Asignamos todos los event listeners directamente
     btnAccionCaja.addEventListener('click', handleAccionCajaClick);
     btnConfirmarApertura.addEventListener('click', confirmarAperturaCaja);
     btnRegistrarIngreso.addEventListener('click', () => handleNuevoMovimiento('ingreso'));
@@ -469,22 +496,21 @@ export async function init() {
     btnConfirmarCierre.addEventListener('click', confirmarCierreDefinitivo);
     btnCancelarCierre.addEventListener('click', cancelarCierre);
     movimientoCajaModalEl.addEventListener('shown.bs.modal', () => movimientoMontoInput.focus());
-
-    // Adjuntamos los listeners globales una sola vez
-    if (!window.cajaListenersAttached) {
-        tablaHistorialCaja.addEventListener('click', (e) => {
-            const reporteBtn = e.target.closest('.btn-ver-reporte-caja');
-            if (reporteBtn) {
-                const sesionId = reporteBtn.dataset.id;
-                const sesionSeleccionada = historialSesiones.find(s => s.id === sesionId);
-                if (sesionSeleccionada) {
-                    generateCierrePDF(sesionSeleccionada);
-                }
+    tablaHistorialCaja.addEventListener('click', (e) => {
+        const reporteBtn = e.target.closest('.btn-ver-reporte-caja');
+        if (reporteBtn) {
+            const sesionId = reporteBtn.dataset.id;
+            const sesionSeleccionada = historialSesiones.find(s => s.id === sesionId);
+            if (sesionSeleccionada) {
+                generateCierrePDF(sesionSeleccionada);
             }
-        });
-        window.cajaListenersAttached = true;
-    }
+        }
+    });
 
-    // Iniciamos la carga de datos
+    // 3. Iniciamos la carga de datos
     await verificarEstadoCaja();
+
+    // Y LUEGO, actualizamos la vista de ESTA sección
+    actualizarVistaCaja();
+    renderHistorialCaja();
 }
