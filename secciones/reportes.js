@@ -36,41 +36,40 @@ function renderReportes() {
     renderCharts();
 }
 
+
+// REEMPLAZA ESTA FUNCIÓN ENTERA EN reportes.js
+
+// REEMPLAZA ESTA FUNCIÓN ENTERA EN reportes.js
+
 function renderTablaDetalle() {
     if (!tablaVentasDetalleBody) return;
     tablaVentasDetalleBody.innerHTML = '';
 
+    // --- INICIO DE LA SIMPLIFICACIÓN ---
+
+    // 1. Función auxiliar para convertir "DD/MM/YYYY HH:mm" a un objeto Date para poder ordenar
+    const parseTimestamp = (timestampStr) => {
+        if (!timestampStr) return new Date(0); // Devuelve una fecha muy antigua si no hay timestamp
+        const [datePart, timePart] = timestampStr.split(' ');
+        const [day, month, year] = datePart.split('/');
+        const [hours, minutes] = timePart.split(':');
+        // El mes en el constructor de Date es 0-indexado (Enero=0, Febrero=1, etc.)
+        return new Date(year, month - 1, day, hours, minutes);
+    };
+
+    // 2. Ordenamos usando la nueva función auxiliar
     const ventasOrdenadas = [...ventasFiltradas].sort((a, b) => {
-        const fechaA = a.fecha && a.fecha.toDate ? a.fecha.toDate() : new Date(a.fecha);
-        const fechaB = b.fecha && b.fecha.toDate ? b.fecha.toDate() : new Date(b.fecha);
-        return fechaB - fechaA;
+        return parseTimestamp(a.timestamp) - parseTimestamp(b.timestamp);
     });
+
+    // --- FIN DE LA SIMPLIFICACIÓN ---
 
     ventasOrdenadas.forEach(venta => {
         const row = document.createElement('tr');
         const listaProductos = venta.productos.map(p => `${p.nombre} x${p.cantidad}`).join('<br>');
 
-        let fechaFormateada = 'Sin Fecha';
-        if (venta.fecha) {
-            let fechaVenta;
-            if (typeof venta.fecha.toDate === 'function') {
-                fechaVenta = venta.fecha.toDate();
-            } else {
-                fechaVenta = new Date(venta.fecha + 'T00:00:00');
-            }
-
-            if (!isNaN(fechaVenta)) {
-                const fecha = fechaVenta.toLocaleDateString('es-AR');
-                const hora = (typeof venta.fecha.toDate === 'function')
-                    ? fechaVenta.toLocaleTimeString('es-AR', {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                        hour12: false
-                    }) + ' hs'
-                    : '';
-                fechaFormateada = `${fecha} ${hora}`.trim();
-            }
-        }
+        // Ahora simplemente usamos el campo timestamp directamente
+        const fechaFormateada = venta.timestamp || 'Sin Fecha';
 
         row.innerHTML = `
             <td>${fechaFormateada}</td>
@@ -89,6 +88,7 @@ function renderTablaDetalle() {
         tablaVentasDetalleBody.appendChild(row);
     });
 }
+
 
 
 function renderTopProductos() {

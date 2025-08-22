@@ -25,7 +25,10 @@ let selectedIndex = -1;
 // Elementos del modal y spinner
 let confirmacionVentaModal, btnGenerarTicketModal, loadingOverlay;
 let ventaData;
-let ventasListenersAttached = false; // Para evitar múltiples listeners
+let genericPriceModalEl, genericPriceModal, genericProductName, genericPriceInput, btnConfirmGenericPrice;
+let genericProductToAdd = null; // Nuevo estado para el producto genérico
+
+
 
 // --- Funciones de la Sección de Ventas ---
 
@@ -256,26 +259,24 @@ function handleSearch(e) {
     }
 }
 
+// REEMPLAZA ESTA FUNCIÓN ENTERA EN ventas.js
 function addProductToTicket(productId) {
     const producto = productos.find(p => p.id === productId);
     if (!producto) {
-        console.error("Error: No se encontró el producto con ID:", productId);
+        console.error("Error: Producto no encontrado con el ID:", productId);
         return;
     }
 
     if (producto.isGeneric) {
-        const finalPriceStr = prompt(`Ingrese el precio final para "${producto.nombre}":`, producto.venta || 0);
-        if (finalPriceStr === null) return;
-        const finalPrice = parseFloat(finalPriceStr);
-        if (isNaN(finalPrice) || finalPrice < 0) {
-            alert('Por favor, ingrese un precio válido.');
-            return;
-        }
-        ticket.push({
-            id: producto.id, nombre: producto.nombre, precio: finalPrice, costo: 0, cantidad: 1,
-            total: finalPrice, isGeneric: true, genericProfitMargin: producto.genericProfitMargin || 70
-        });
+        // Guardamos el producto que queremos agregar
+        genericProductToAdd = producto;
+        
+        // Preparamos y mostramos el modal
+        genericProductName.textContent = producto.nombre;
+        genericPriceInput.value = ''; // Limpiamos el valor anterior
+        genericPriceModal.show(); // Mostramos el modal
     } else {
+        // La lógica para productos normales sigue igual
         let productoEncontradoEnTicket = false;
         for (const item of ticket) {
             if (item.id === productId && !item.isGeneric) {
@@ -295,11 +296,10 @@ function addProductToTicket(productId) {
                 cantidad: 1, total: producto.venta, isGeneric: false
             });
         }
+        productoSearch.value = '';
+        searchResults.innerHTML = '';
+        renderTicket();
     }
-
-    productoSearch.value = '';
-    searchResults.innerHTML = '';
-    renderTicket();
 }
 
 
@@ -309,6 +309,36 @@ function handleSearchResultClick(e) {
     if (productId) {
         addProductToTicket(productId);
     }
+}
+
+// AÑADE ESTA FUNCIÓN NUEVA EN ventas.js
+function handleConfirmGenericPrice() {
+    if (!genericProductToAdd) return;
+
+    const finalPrice = parseFloat(genericPriceInput.value);
+
+    if (isNaN(finalPrice) || finalPrice < 0) {
+        alert('Por favor, ingrese un precio válido.');
+        return;
+    }
+
+    ticket.push({
+        id: genericProductToAdd.id,
+        nombre: genericProductToAdd.nombre,
+        precio: finalPrice,
+        costo: 0,
+        cantidad: 1,
+        total: finalPrice,
+        isGeneric: true,
+        genericProfitMargin: genericProductToAdd.genericProfitMargin || 70
+    });
+
+    genericPriceModal.hide(); // Ocultamos el modal
+    genericProductToAdd = null; // Limpiamos la variable temporal
+    
+    productoSearch.value = '';
+    searchResults.innerHTML = '';
+    renderTicket();
 }
 
 // REEMPLAZA LA FUNCIÓN handleSearchKeyUp ENTERA en ventas.js con esta:
@@ -569,6 +599,16 @@ function renderQuickAccessProducts() {
     // Filtramos solo los productos marcados como destacados
     const featuredProducts = productos.filter(p => p.isFeatured === true);
 
+    // --- INICIO DEL CAMBIO ---
+    // 2. Ordenamos la lista de productos destacados por su código
+    featuredProducts.sort((a, b) => {
+        // Usamos localeCompare con la opción 'numeric' para ordenar correctamente
+        // números dentro de textos (ej: "A-10" viene después de "A-2").
+        // También manejamos el caso de que un producto no tenga código.
+        return (a.codigo || '').localeCompare(b.codigo || '', undefined, { numeric: true });
+    });
+    // --- FIN DEL CAMBIO ---
+
     container.innerHTML = ''; // Limpiamos antes de renderizar
 
     featuredProducts.forEach(p => {
@@ -635,6 +675,11 @@ export async function init() {
     clienteTelefono = document.getElementById('clienteTelefono');
     btnGuardarCliente = document.getElementById('btnGuardarCliente');
     btnCrearProductoVentas = document.getElementById('btnCrearProductoVentas');
+    genericPriceModalEl = document.getElementById('genericPriceModal');
+    genericPriceModal = new bootstrap.Modal(genericPriceModalEl);
+    genericProductName = document.getElementById('genericProductName');
+    genericPriceInput = document.getElementById('genericPriceInput');
+    btnConfirmGenericPrice = document.getElementById('btnConfirmGenericPrice');
 
     // 2. INICIALIZAR MODAL (Sin cambios)
     productoModal = initProductosModal();
@@ -667,6 +712,7 @@ export async function init() {
         resetVentas();
     });
 
+
     // confirmacionVentaModal.addEventListener('hidden.bs.modal', (e) => {
     //     resetVentas();
     // });
@@ -683,6 +729,20 @@ export async function init() {
     btnAgregarCliente.addEventListener('click', handleAgregarCliente);
     btnEditarCliente.addEventListener('click', handleEditarCliente);
     btnGuardarCliente.addEventListener('click', handleGuardarCliente);
+
+
+    if(btnConfirmGenericPrice) btnConfirmGenericPrice.addEventListener('click', handleConfirmGenericPrice);
+
+    if(genericPriceInput) genericPriceInput.addEventListener('keyup', (e) => {
+        if (e.key === 'Enter') {
+            handleConfirmGenericPrice();
+        }
+    });
+
+    if(genericPriceModalEl) genericPriceModalEl.addEventListener('shown.bs.modal', () => {
+        genericPriceInput.focus();
+        genericPriceInput.select();
+    });
 
     // 4. GESTIÓN DE LISTENERS GLOBALES Y PERSISTENTES (AQUÍ ESTÁ LA CORRECCIÓN)
     // Dentro de la función init(), reemplaza este bloque completo

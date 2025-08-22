@@ -33,6 +33,9 @@
                         <a class="nav-link" href="#" data-section="reportes"><i
                                 class="fas fa-chart-line me-2"></i>Reportes</a>
                     </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" data-section="caja"><i class="fas fa-inbox me-2"></i>Caja</a>
+                    </li>
                 </ul>
                 <div class="d-flex align-items-center ms-auto">
                     <span class="navbar-text me-3 text-white" id="user-email"></span>
@@ -216,7 +219,31 @@
 
 
 
-
+    <div class="modal fade" id="genericPriceModal" tabindex="-1" aria-labelledby="genericPriceModalLabel"
+        aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered" style="max-width: 400px;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="genericPriceModalLabel">Ingresar Precio</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body text-center">
+                    <p>Estás agregando:
+                    <h3><strong id="genericProductName">Nombre del Producto</strong></h3>
+                    </p>
+                    <div class="input-group input-group-lg my-3">
+                        <span class="input-group-text">$</span>
+                        <input type="number" class="form-control text-center" id="genericPriceInput" placeholder="0.00"
+                            step="0.01">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-primary" id="btnConfirmGenericPrice">Agregar al Ticket</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
 
 
