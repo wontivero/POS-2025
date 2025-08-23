@@ -1,7 +1,7 @@
 // secciones/reportes.js
 // AL PRINCIPIO de reportes.js
 import { getFirestore, collection, onSnapshot, query, orderBy, runTransaction, doc } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
-import { getCollection, getDocumentById, formatCurrency, getTodayDate, generatePDF, showConfirmationModal, showAlertModal} from '../utils.js';
+import { getCollection, getDocumentById, formatCurrency, getTodayDate, generatePDF, showConfirmationModal, showAlertModal } from '../utils.js';
 import { getAuth } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-auth.js";
 import { haySesionActiva, getSesionActivaId, verificarEstadoCaja } from './caja.js';
 
@@ -65,7 +65,7 @@ async function anularVenta(ventaId) {
     try {
         const db = getFirestore();
         const ventaAnulada = ventasFiltradas.find(v => v.id === ventaId);
-        
+
         // --- INICIO DE NUEVA LÓGICA DE EGRESO ---
         const montoEfectivoDevuelto = ventaAnulada.pagos.contado || 0;
         if (montoEfectivoDevuelto > 0 && !haySesionActiva()) {
@@ -110,7 +110,7 @@ async function anularVenta(ventaId) {
 
         // Refrescamos los datos de reportes para que se actualice la vista
         await loadData();
-        
+
         // Guardamos los productos para recargarlos en la sección de ventas
         sessionStorage.setItem('ventaParaCorregir', JSON.stringify(ventaAnulada.productos));
         document.querySelector('a[data-section="ventas"]').click();
@@ -129,12 +129,24 @@ function renderTablaDetalle(ventasParaMostrar) {
     tablaVentasDetalleBody.innerHTML = '';
 
 
-    const ventasOrdenadas = [...ventasParaMostrar].sort((a, b) => {
-        const fechaA = a.fecha && a.fecha.toDate ? a.fecha.toDate() : new Date(a.fecha);
-        const fechaB = b.fecha && b.fecha.toDate ? b.fecha.toDate() : new Date(b.fecha);
-        return fechaA - fechaB;
-    });
+    // 1. Función auxiliar para convertir el texto "DD/MM/YYYY HH:mm" a un objeto Date
+    const parseTimestamp = (timestampStr) => {
+        if (!timestampStr || typeof timestampStr !== 'string') return new Date(0);
 
+        const [datePart, timePart] = timestampStr.split(' ');
+        const [day, month, year] = datePart.split('/');
+
+        // Si no hay parte de hora, usamos medianoche
+        const [hours, minutes] = timePart ? timePart.split(':') : ['00', '00'];
+
+        // El mes en el constructor de Date es 0-indexado (Enero=0)
+        return new Date(year, month - 1, day, hours, minutes);
+    };
+
+    // 2. Ordenamos usando la nueva función que sí considera la hora
+    const ventasOrdenadas = [...ventasParaMostrar].sort((a, b) => {
+        return parseTimestamp(a.timestamp) - parseTimestamp(b.timestamp);
+    });
     ventasOrdenadas.forEach(venta => {
         const row = document.createElement('tr');
         // --- INICIO DE CAMBIOS ---
@@ -350,7 +362,7 @@ async function filtrarReporte() {
         const fechaHasta = hasta ? new Date(hasta + 'T23:59:59') : null;
 
         const matchesDate = (!fechaDesde || fechaVenta >= fechaDesde) && (!fechaHasta || fechaVenta <= fechaHasta);
-        
+
         const matchesRubro = !rubroFiltro || (Array.isArray(venta.productos) && venta.productos.some(p => {
             const rubroProducto = p.rubro || 'Desconocido';
             return rubroProducto.toLowerCase() === rubroFiltro.toLowerCase();
@@ -364,18 +376,22 @@ async function filtrarReporte() {
 
     // 3. RENDERIZADO:
     // Pasamos la lista COMPLETA a la tabla de detalle.
-    renderTablaDetalle(todasLasVentasDelPeriodo); 
+    renderTablaDetalle(todasLasVentasDelPeriodo);
     // Pasamos la lista "LIMPIA" al resto de los reportes.
-    renderReportes(ventasFiltradas); 
+    renderReportes(ventasFiltradas);
 
     btnQuitarFiltro.classList.toggle('d-none', !desde && !hasta && !rubroFiltro);
 }
 
-function limpiarFiltros() {
+function limpiarFiltros(filtrar = true) {
     reporteFechaDesde.value = getTodayDate();
     reporteFechaHasta.value = getTodayDate();
     filtroReporteRubro.value = '';
-    filtrarReporte();
+    
+    // Solo llamamos a filtrarReporte si el parámetro 'filtrar' es verdadero
+    if (filtrar) {
+        filtrarReporte();
+    }
 }
 
 async function renderDatalistRubros() {
@@ -424,7 +440,7 @@ export async function init() {
             if (venta) {
                 const modalBody = document.getElementById('ticketModalBody');
                 const modalTitle = document.getElementById('ticketModalTitulo');
-                
+
                 modalTitle.textContent = `Detalle de Venta #${venta.ticketId}`;
 
                 const isAnulada = venta.estado === 'anulada';
@@ -473,20 +489,20 @@ export async function init() {
                         <div class="col-6 text-end fw-bold">${formatCurrency(venta.pagos.credito)}</div>
                     </div>
                 `;
-                
+
                 new bootstrap.Modal(document.getElementById('ticketModal')).show();
             }
         }
         // --- FIN DE LA MODIFICACIÓN ---
-        
+
         else if (pdfBtn) {
             const ventaId = pdfBtn.dataset.id;
             const venta = ventas.find(v => v.id === ventaId);
             if (venta) {
                 generatePDF(venta.ticketId, venta);
             }
-        } 
-        
+        }
+
         else if (anularBtn) {
             const ventaId = anularBtn.dataset.id;
             anularVenta(ventaId);

@@ -58,6 +58,7 @@
                 <div class="card-header bg-success text-white">
                     <h5 class="mb-0"><i class="fas fa-money-bill-wave me-2"></i>Métodos de Pago</h5>
                 </div>
+
                 <div class="card-body">
                     <div class="row g-2 mb-3">
                         <div class="col-6">
@@ -65,7 +66,7 @@
                                 data-metodo="contado">
                                 <div class="d-flex flex-column justify-content-center align-items-center h-100">
                                     <i class="fas fa-hand-holding-usd fa-2x mb-2"></i>
-                                    <span class="btn-pago-texto">Contado</span>
+                                    <span class="btn-pago-texto">Contado <kbd>F1</kbd></span>
                                     <span id="montoContadoRapido" class="btn-pago-monto mt-1">$0</span>
                                 </div>
                             </button>
@@ -75,7 +76,7 @@
                                 data-metodo="transferencia">
                                 <div class="d-flex flex-column justify-content-center align-items-center h-100">
                                     <i class="fas fa-exchange-alt fa-2x mb-2"></i>
-                                    <span class="btn-pago-texto">Transfer.</span>
+                                    <span class="btn-pago-texto">Transfer. <kbd>F2</kbd></span>
                                     <span id="montoTransferenciaRapido" class="btn-pago-monto mt-1">$0</span>
                                 </div>
                             </button>
@@ -85,7 +86,7 @@
                                 data-metodo="debito">
                                 <div class="d-flex flex-column justify-content-center align-items-center h-100">
                                     <i class="fas fa-credit-card fa-2x mb-2"></i>
-                                    <span class="btn-pago-texto">Débito</span>
+                                    <span class="btn-pago-texto">Débito <kbd>F3</kbd></span>
                                     <span id="montoDebitoRapido" class="btn-pago-monto mt-1">$0</span>
                                 </div>
                             </button>
@@ -95,12 +96,14 @@
                                 data-metodo="credito">
                                 <div class="d-flex flex-column justify-content-center align-items-center h-100">
                                     <i class="far fa-credit-card fa-2x mb-2"></i>
-                                    <span class="btn-pago-texto">Crédito</span>
+                                    <span class="btn-pago-texto">Crédito <kbd>F4</kbd></span>
                                     <span id="montoCreditoRapido" class="btn-pago-monto mt-1">$0</span>
                                 </div>
                             </button>
                         </div>
                     </div>
+
+
 
                     <div class="text-center">
                         <a data-bs-toggle="collapse" href="#collapsePagosManuales" role="button" aria-expanded="false"

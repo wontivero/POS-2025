@@ -30,10 +30,40 @@ let ventaData;
 let genericPriceModalEl, genericPriceModal, genericProductName, genericPriceInput, btnConfirmGenericPrice;
 let genericProductToAdd = null; // Nuevo estado para el producto genérico
 
-
-
+let ventaExitosaTimer = null;
+let lastEnterPressTime = 0;
 // --- Funciones de la Sección de Ventas ---
+// AÑADE ESTA FUNCIÓN NUEVA EN ventas.js
 
+function startVentaExitosaCountdown() {
+    // Detenemos cualquier temporizador anterior por si acaso
+    if (ventaExitosaTimer) clearInterval(ventaExitosaTimer);
+
+    let countdown = 10;
+    const countdownElement = document.getElementById('venta-exitosa-countdown');
+    const okButton = document.getElementById('btnConfirmacionVentaOK');
+
+    // Nos aseguramos de que el contador esté visible y en 10
+    if (countdownElement) {
+        countdownElement.textContent = countdown;
+        countdownElement.style.display = 'inline-block';
+    }
+
+    ventaExitosaTimer = setInterval(() => {
+        countdown--;
+        if (countdownElement) {
+            countdownElement.textContent = countdown;
+        }
+
+        // Si el contador llega a 0
+        if (countdown <= 0) {
+            clearInterval(ventaExitosaTimer); // Detenemos el temporizador
+            if (okButton) {
+                okButton.click(); // Simulamos un clic en el botón OK
+            }
+        }
+    }, 1000); // 1000ms = 1 segundo AUTO CIERRE DE LA VENTANA  VENTA EXITOSA
+}
 async function loadData() {
     // Escuchamos cambios en la colección 'productos' en tiempo real
     const q = query(collection(db, 'productos'), orderBy('nombre_lowercase'));
@@ -96,7 +126,7 @@ function setDefaultCliente() {
 
 // REEMPLAZA ESTA FUNCIÓN EN ventas.js
 
-// REEMPLAZA ESTA FUNCIÓN EN ventas.js
+// REEMPLAZA ESTA FUNCIÓN ENTERA EN ventas.js
 
 function renderTicket() {
     ticketItems.innerHTML = '';
@@ -111,16 +141,17 @@ function renderTicket() {
     }
     ticket.forEach((item, index) => {
         const itemDiv = document.createElement('div');
-        itemDiv.className = 'list-group-item d-flex justify-content-between align-items-center p-2';
+        // Añadimos una clase 'ticket-item' para darle estilos
+        itemDiv.className = 'list-group-item d-flex justify-content-between align-items-center p-2 ticket-item';
         const genericIndicator = item.isGeneric ? '<i class="fas fa-pencil-alt fa-xs text-info ms-2" title="Precio manual"></i>' : '';
 
         itemDiv.innerHTML = `
             <div>
-                <h6 class="mb-1">${item.nombre}${genericIndicator}</h6>
+                <h6 class="mb-1 ticket-item-nombre">${item.nombre}${genericIndicator}</h6>
                 <small class="text-muted" id="desc-${index}">${item.cantidad} x ${formatCurrency(item.precio)}</small>
             </div>
             <div class="d-flex align-items-center">
-                <div class="input-group input-group-sm me-2" style="width: 120px;">
+                <div class="input-group me-2" style="width: 140px;">
                     <button class="btn btn-outline-secondary btn-sm change-quantity" data-index="${index}" data-action="decrement" ${item.isGeneric ? 'disabled' : ''}><i class="fas fa-minus"></i></button>
                     <input type="number" class="form-control text-center quantity-input" value="${item.cantidad}" data-index="${index}" min="1" ${item.isGeneric ? 'disabled' : ''}>
                     <button class="btn btn-outline-secondary btn-sm change-quantity" data-index="${index}" data-action="increment" ${item.isGeneric ? 'disabled' : ''}><i class="fas fa-plus"></i></button>
@@ -133,6 +164,7 @@ function renderTicket() {
     });
     checkFinalizarVenta();
 }
+
 // AÑADE ESTA NUEVA FUNCIÓN EN ventas.js
 
 function handleQuantityLiveUpdate(e) {
@@ -272,7 +304,7 @@ async function addProductToTicket(productId) {
     if (producto.isGeneric) {
         // Guardamos el producto que queremos agregar
         genericProductToAdd = producto;
-        
+
         // Preparamos y mostramos el modal
         genericProductName.textContent = producto.nombre;
         genericPriceInput.value = ''; // Limpiamos el valor anterior
@@ -337,7 +369,7 @@ async function handleConfirmGenericPrice() {
 
     genericPriceModal.hide(); // Ocultamos el modal
     genericProductToAdd = null; // Limpiamos la variable temporal
-    
+
     productoSearch.value = '';
     searchResults.innerHTML = '';
     renderTicket();
@@ -345,46 +377,28 @@ async function handleConfirmGenericPrice() {
 
 // REEMPLAZA LA FUNCIÓN handleSearchKeyUp ENTERA en ventas.js con esta:
 
+// REEMPLAZA ESTA FUNCIÓN ENTERA EN ventas.js
+
 function handleSearchKeyUp(e) {
-    if (searchResults.innerHTML.trim() === '') return;
+    // Esta función ahora solo se ocupa de la navegación de la lista de resultados.
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+
+    e.preventDefault();
     const items = searchResults.querySelectorAll('.list-group-item-action');
     if (items.length === 0) return;
-    const unselect = () => {
-        const selected = searchResults.querySelector('.active');
-        if (selected) selected.classList.remove('active');
-    };
-    const select = () => {
-        unselect();
-        if (selectedIndex >= 0 && selectedIndex < items.length) {
-            items[selectedIndex].classList.add('active');
-            items[selectedIndex].scrollIntoView({ block: 'nearest' });
-        }
-    };
-    switch (e.key) {
-        case 'ArrowDown':
-            e.preventDefault();
-            selectedIndex = (selectedIndex + 1) % items.length;
-            select();
-            break;
-        case 'ArrowUp':
-            e.preventDefault();
-            selectedIndex = (selectedIndex - 1 + items.length) % items.length;
-            select();
-            break;
-        case 'Enter':
-            e.preventDefault();
-            let productIdToAdd = null;
-            if (selectedIndex >= 0) {
-                productIdToAdd = items[selectedIndex].dataset.id;
-            } else if (items.length === 1) {
-                productIdToAdd = items[0].dataset.id;
-            }
-            if (productIdToAdd) {
-                addProductToTicket(productIdToAdd);
-            }
-            break;
-    }
+
+    selectedIndex = (e.key === 'ArrowDown')
+        ? (selectedIndex + 1) % items.length
+        : (selectedIndex - 1 + items.length) % items.length;
+
+    items.forEach((item, index) => item.classList.toggle('active', index === selectedIndex));
+    if (selectedIndex > -1) items[selectedIndex].scrollIntoView({ block: 'nearest' });
 }
+
+
+
+
+
 
 function changeQuantity(e) {
     const index = parseInt(e.target.closest('.change-quantity').dataset.index);
@@ -440,8 +454,6 @@ async function handleQuickPayment(e) {
 
 // REEMPLAZA ESTA FUNCIÓN ENTERA EN ventas.js
 
-// REEMPLAZA ESTA FUNCIÓN ENTERA EN ventas.js
-
 async function finalizarVenta() {
     if (!haySesionActiva()) {
         await showAlertModal('Operación denegada: No hay una sesión de caja abierta.', 'Caja Cerrada');
@@ -459,69 +471,44 @@ async function finalizarVenta() {
 
         await runTransaction(db, async (transaction) => {
             const productsToUpdate = [];
-            
-            // FASE DE LECTURA Y VALIDACIÓN
+
             for (const item of ticket) {
                 if (item.isGeneric) continue;
-
                 const productRef = doc(db, 'productos', item.id);
                 const productDoc = await transaction.get(productRef);
-
-                if (!productDoc.exists()) {
-                    throw new Error(`El producto "${item.nombre}" ya no existe.`);
-                }
-                
+                if (!productDoc.exists()) throw new Error(`El producto "${item.nombre}" ya no existe.`);
                 const currentStock = productDoc.data().stock;
                 if (currentStock < item.cantidad) {
                     throw new Error(`Stock insuficiente para "${item.nombre}". Disponible: ${currentStock}, Solicitado: ${item.cantidad}.`);
                 }
-
-                productsToUpdate.push({
-                    ref: productRef,
-                    newStock: currentStock - item.cantidad
-                });
+                productsToUpdate.push({ ref: productRef, newStock: currentStock - item.cantidad });
             }
 
-            // FASE DE ESCRITURA
+            productsToUpdate.forEach(p => transaction.update(p.ref, { stock: p.newStock }));
 
-            // 1. Actualizamos el stock
-            productsToUpdate.forEach(p => {
-                transaction.update(p.ref, { stock: p.newStock });
-            });
-
-            // 2. Creamos el objeto de la nueva venta (LÓGICA COMPLETA AQUÍ)
             const productosParaGuardar = ticket.map(item => {
                 if (item.isGeneric) {
                     const margen = (item.genericProfitMargin || 70) / 100;
-                    const costoCalculado = item.precio / (1 + margen);
-                    return { ...item, costo: costoCalculado };
+                    return { ...item, costo: item.precio / (1 + margen) };
                 }
                 return item;
             });
-            
-            const gananciaTotal = productosParaGuardar.reduce((sum, item) => {
-                const gananciaItem = (item.precio - item.costo) * item.cantidad;
-                return sum + gananciaItem;
-            }, 0);
 
+            const gananciaTotal = productosParaGuardar.reduce((sum, item) => sum + ((item.precio - item.costo) * item.cantidad), 0);
             const montoCredito = parseFloat(txtCredito.value) || 0;
             const recargo = (parseFloat(txtRecargoCredito.value) || 0) / 100;
             const montoCreditoConRecargo = Math.round(montoCredito * (1 + recargo));
             const totalConRecargo = totalVentaBase + Math.round(montoCredito * recargo);
 
             const nuevaVenta = {
-                estado: 'finalizada', 
+                estado: 'finalizada',
                 sesionCajaId: getSesionActivaId(),
                 fecha: getTodayDate(),
                 timestamp: getFormattedDateTime(),
                 ticketId: ticketNumber,
                 cliente: clienteSeleccionado,
                 productos: productosParaGuardar.map(item => ({
-                    id: item.id,
-                    nombre: item.nombre,
-                    precio: item.precio,
-                    costo: item.costo,
-                    cantidad: item.cantidad,
+                    id: item.id, nombre: item.nombre, precio: item.precio, costo: item.costo, cantidad: item.cantidad,
                     rubro: productos.find(p => p.id === item.id)?.rubro || 'Desconocido',
                     marca: productos.find(p => p.id === item.id)?.marca || 'Desconocido'
                 })),
@@ -533,15 +520,38 @@ async function finalizarVenta() {
                     recargoCredito: parseFloat(txtRecargoCredito.value) || 0,
                 },
                 total: totalConRecargo,
-                ganancia: gananciaTotal // Ahora tendrá un valor numérico
+                ganancia: gananciaTotal
             };
 
-            // 3. Guardamos el documento de la venta
             const newVentaRef = doc(collection(db, 'ventas'));
             transaction.set(newVentaRef, nuevaVenta);
-            
             ventaData = { id: ticketNumber, data: nuevaVenta };
         });
+
+        // --- INICIO DE LA MODIFICACIÓN ---
+        // Preparamos el contenido del modal antes de mostrarlo
+        const detalleContainer = document.getElementById('detalle-venta-exitosa');
+        const totalContainer = document.getElementById('total-venta-exitosa');
+        let detalleHtml = '<ul class="list-group list-group-flush text-start">';
+
+        const capitalize = s => s.charAt(0).toUpperCase() + s.slice(1);
+
+        for (const [metodo, monto] of Object.entries(ventaData.data.pagos)) {
+            // Mostramos solo los métodos de pago con monto mayor a 0
+            if (monto > 0 && metodo !== 'recargoCredito') {
+                detalleHtml += `
+                    <li class="list-group-item d-flex justify-content-between px-0">
+                        <span>${capitalize(metodo)}:</span>
+                        <span class="fw-bold">${formatCurrency(monto)}</span>
+                    </li>
+                `;
+            }
+        }
+        detalleHtml += '</ul>';
+
+        detalleContainer.innerHTML = detalleHtml;
+        totalContainer.textContent = formatCurrency(ventaData.data.total);
+        // --- FIN DE LA MODIFICACIÓN ---
 
         const modal = new bootstrap.Modal(confirmacionVentaModal);
         modal.show();
@@ -712,7 +722,7 @@ export async function init() {
         try {
             const productosParaCargar = JSON.parse(ventaGuardadaStr);
             // Limpiamos el ticket actual y cargamos los productos de la venta anulada
-            ticket = []; 
+            ticket = [];
             productosParaCargar.forEach(producto => {
                 // Creamos un objeto para el ticket con las propiedades necesarias
                 ticket.push({
@@ -738,7 +748,7 @@ export async function init() {
 
 
     await verificarEstadoCaja();
-    
+
     // 1. OBTENER ELEMENTOS DEL DOM (Sin cambios)
     productoSearch = document.getElementById('productoSearch');
     searchResults = document.getElementById('searchResults');
@@ -818,6 +828,15 @@ export async function init() {
         if (okButton) {
             okButton.focus();
         }
+        startVentaExitosaCountdown(); // <-- AÑADE ESTA LLAMADA para iniciar el contador
+    });
+
+    confirmacionVentaModal.addEventListener('hidden.bs.modal', () => {
+        // AÑADE ESTE BLOQUE para detener el contador si se cierra manualmente
+        if (ventaExitosaTimer) {
+            clearInterval(ventaExitosaTimer);
+            ventaExitosaTimer = null;
+        }
         resetVentas();
     });
 
@@ -827,15 +846,15 @@ export async function init() {
     btnGuardarCliente.addEventListener('click', handleGuardarCliente);
 
 
-    if(btnConfirmGenericPrice) btnConfirmGenericPrice.addEventListener('click', handleConfirmGenericPrice);
+    if (btnConfirmGenericPrice) btnConfirmGenericPrice.addEventListener('click', handleConfirmGenericPrice);
 
-    if(genericPriceInput) genericPriceInput.addEventListener('keyup', (e) => {
+    if (genericPriceInput) genericPriceInput.addEventListener('keyup', (e) => {
         if (e.key === 'Enter') {
             handleConfirmGenericPrice();
         }
     });
 
-    if(genericPriceModalEl) genericPriceModalEl.addEventListener('shown.bs.modal', () => {
+    if (genericPriceModalEl) genericPriceModalEl.addEventListener('shown.bs.modal', () => {
         genericPriceInput.focus();
         genericPriceInput.select();
     });
@@ -844,11 +863,10 @@ export async function init() {
     // Dentro de la función init(), reemplaza este bloque completo
 
     if (!window.ventasListenersAttached) {
-        // Listener unificado para CLICS
+        // --- Listener unificado para CLICS (sin cambios) ---
         document.addEventListener('click', (e) => {
             const seccionVentas = document.getElementById('seccion-ventas');
             if (!seccionVentas || !seccionVentas.contains(e.target)) return;
-
             const quickAccessCard = e.target.closest('.product-card-mini');
             if (quickAccessCard) {
                 addProductToTicket(quickAccessCard.dataset.id);
@@ -868,30 +886,116 @@ export async function init() {
             }
         });
 
-        // Listeners para el TICKET (input y change)
+        // --- Listeners para el TICKET (input, change, focus - sin cambios) ---
         ticketItems.addEventListener('input', (e) => {
-            if (e.target.classList.contains('quantity-input')) {
-                handleQuantityLiveUpdate(e);
-            }
+            if (e.target.classList.contains('quantity-input')) handleQuantityLiveUpdate(e);
         });
         ticketItems.addEventListener('change', (e) => {
-            if (e.target.classList.contains('quantity-input')) {
-                handleQuantityManualChange(e);
-            }
+            if (e.target.classList.contains('quantity-input')) handleQuantityManualChange(e);
         });
+        ticketItems.addEventListener('focus', (e) => {
+            if (e.target.classList.contains('quantity-input')) e.target.select();
+        }, true);
 
-        // Listener para la tecla ENTER
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' && e.target.classList.contains('quantity-input')) {
+        // --- LISTENER DE TECLADO UNIFICADO Y DEFINITIVO ---
+        document.addEventListener('keydown', async (e) => {
+            const seccionVentas = document.getElementById('seccion-ventas');
+            if (!seccionVentas) return;
+
+            const activeElement = document.activeElement;
+            const isQuantityInput = activeElement && activeElement.classList.contains('quantity-input');
+            const isSearchInput = activeElement === productoSearch;
+            const currentTime = new Date().getTime();
+
+            // --- Lógica de la Tecla Enter (Contextual) ---
+            if (e.key === 'Enter') {
                 e.preventDefault();
-                e.target.blur();
-                productoSearch.focus();
-                productoSearch.select();
+                // 1. Prioridad: DOBLE ENTER RÁPIDO (en cualquier lugar)
+                if ((currentTime - lastEnterPressTime) < 400 && ticket.length > 0) {
+                    const lastItemIndex = ticket.length - 1;
+                    const lastQuantityInput = ticketItems.querySelector(`.quantity-input[data-index="${lastItemIndex}"]`);
+                    if (lastQuantityInput && !lastQuantityInput.disabled) lastQuantityInput.focus();
+                    lastEnterPressTime = 0; // Reseteamos
+                    return;
+                }
+                lastEnterPressTime = currentTime; // Guardamos el tiempo del Enter simple
+
+                // 2. Acción de Enter en el Buscador
+                if (isSearchInput) {
+                    const searchTerm = productoSearch.value.trim();
+                    const items = searchResults.querySelectorAll('.list-group-item-action');
+                    let productIdToAdd = null;
+                    const productByBarcode = searchTerm ? productos.find(p => p.codigo === searchTerm) : null;
+
+                    if (productByBarcode) {
+                        addProductToTicket(productByBarcode.id);
+                    } else {
+                        if (selectedIndex >= 0 && items[selectedIndex]) {
+                            productIdToAdd = items[selectedIndex].dataset.id;
+                        } else if (items.length === 1) {
+                            productIdToAdd = items[0].dataset.id;
+                        }
+                        if (productIdToAdd) addProductToTicket(productIdToAdd);
+                    }
+                }
+                // 3. Acción de Enter en un campo de Cantidad
+                else if (isQuantityInput) {
+                    activeElement.blur();
+                    productoSearch.focus();
+                    productoSearch.select();
+                }
+                return;
+            }
+
+
+
+            // Listener dedicado para la navegación con flechas DENTRO del ticket
+            ticketItems.addEventListener('keydown', (e) => {
+                // Si la tecla no es Arriba o Abajo, no hacemos nada.
+                if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+
+                // Nos aseguramos de que el origen sea un campo de cantidad
+                if (e.target.classList.contains('quantity-input')) {
+                    e.preventDefault(); // Prevenimos el comportamiento por defecto de las flechas
+
+                    const currentIndex = parseInt(e.target.dataset.index);
+                    const nextIndex = e.key === 'ArrowDown' ? currentIndex + 1 : currentIndex - 1;
+
+                    const nextInput = ticketItems.querySelector(`.quantity-input[data-index="${nextIndex}"]`);
+
+                    // Si encontramos el siguiente campo, le damos el foco
+                    if (nextInput) {
+                        nextInput.focus(); // El listener 'focus' que ya tenemos se encargará de .select()
+                    }
+                }
+            });
+
+            // --- Lógica para F1-F4 y Escape ---
+            switch (e.key) {
+                case 'F1': e.preventDefault(); document.getElementById('btnPagoRapidoContado')?.click(); break;
+                case 'F2': e.preventDefault(); document.getElementById('btnPagoRapidoTransferencia')?.click(); break;
+                case 'F3': e.preventDefault(); document.getElementById('btnPagoRapidoDebito')?.click(); break;
+                case 'F4': e.preventDefault(); document.getElementById('btnPagoRapidoCredito')?.click(); break;
+                case 'Escape':
+                    e.preventDefault();
+                    if (isSearchInput) {
+                        if (productoSearch.value.trim() !== '') {
+                            productoSearch.value = '';
+                            searchResults.innerHTML = '';
+                        } else if (ticket.length > 0) {
+                            const confirmado = await showConfirmationModal("¿Deseas limpiar todo el ticket?", "Limpiar Ticket");
+                            if (confirmado) resetVentas();
+                        }
+                    } else {
+                        productoSearch.focus();
+                    }
+                    break;
             }
         });
 
-        window.ventasListenersAttached = true; // Activamos la bandera
+        window.ventasListenersAttached = true;
     }
+
 
     // 5. CARGAR DATOS (Sin cambios)
     await loadData();

@@ -166,7 +166,7 @@ export async function generatePDF(ticketId, venta) {
         doc.setFontSize(size);
         const textWidth = doc.getStringUnitWidth(text) * size / doc.internal.scaleFactor;
         let xPos = x;
-        if (align === 'center') { xPos = x - textWidth / 2; } 
+        if (align === 'center') { xPos = x - textWidth / 2; }
         else if (align === 'right') { xPos = x - textWidth; }
         doc.text(text, xPos, yPos);
     };
@@ -250,7 +250,7 @@ export async function generatePDF(ticketId, venta) {
         if (producto.color && producto.color !== 'N/A') {
             descripcionCompleta += ` - ${producto.color}`;
         }
-        
+
         drawText(descripcionCompleta, margin, y, 10); // Usamos la nueva descripción
         // --- FIN DEL CAMBIO ---
 
@@ -310,11 +310,11 @@ export function showAlertModal(message, title = 'Aviso') {
             genericModalEl = document.getElementById('genericModal');
             genericModal = new bootstrap.Modal(genericModalEl);
         }
-        
+
         document.getElementById('genericModalLabel').textContent = title;
         document.getElementById('genericModalBody').innerHTML = message;
         document.getElementById('btn-generic-cancel').style.display = 'none';
-        
+
         const confirmButton = document.getElementById('btn-generic-confirm');
         confirmButton.textContent = 'OK';
 
@@ -344,6 +344,14 @@ export function showAlertModal(message, title = 'Aviso') {
  * @param {string} title El título del modal (opcional).
  * @returns {Promise<boolean>} Resuelve a 'true' si el usuario confirma, 'false' si cancela.
  */
+// REEMPLAZA ESTA FUNCIÓN ENTERA EN utils.js
+
+/**
+ * Muestra un modal de confirmación y espera la respuesta del usuario (reemplaza a confirm).
+ * @param {string} message El mensaje de confirmación.
+ * @param {string} title El título del modal (opcional).
+ * @returns {Promise<boolean>} Resuelve a 'true' si el usuario confirma, 'false' si cancela.
+ */
 export function showConfirmationModal(message, title = 'Confirmación') {
     return new Promise(resolve => {
         if (!genericModalEl) {
@@ -353,11 +361,22 @@ export function showConfirmationModal(message, title = 'Confirmación') {
 
         document.getElementById('genericModalLabel').textContent = title;
         document.getElementById('genericModalBody').innerHTML = message;
-        document.getElementById('btn-generic-cancel').style.display = 'inline-block'; // Mostramos el botón de cancelar
-        document.getElementById('btn-generic-confirm').textContent = 'Aceptar';
+        document.getElementById('btn-generic-cancel').style.display = 'inline-block';
 
         const confirmButton = document.getElementById('btn-generic-confirm');
         const cancelButton = document.getElementById('btn-generic-cancel');
+        confirmButton.textContent = 'Aceptar';
+
+        // --- INICIO DE LA NUEVA LÓGICA ---
+
+        // Función que se ejecuta al presionar una tecla
+        const handleKeyPress = (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault(); // Evita cualquier otra acción por defecto
+                onConfirm();
+            }
+        };
+        // --- FIN DE LA NUEVA LÓGICA ---
 
         const onConfirm = () => {
             genericModal.hide();
@@ -375,11 +394,20 @@ export function showConfirmationModal(message, title = 'Confirmación') {
             confirmButton.removeEventListener('click', onConfirm);
             cancelButton.removeEventListener('click', onCancel);
             genericModalEl.removeEventListener('hidden.bs.modal', onCancel);
+            // --- INICIO DE LA NUEVA LÓGICA ---
+            // Limpiamos el listener del teclado para que no interfiera después
+            document.removeEventListener('keydown', handleKeyPress);
+            // --- FIN DE LA NUEVA LÓGICA ---
         };
-        
+
         confirmButton.addEventListener('click', onConfirm, { once: true });
         cancelButton.addEventListener('click', onCancel, { once: true });
         genericModalEl.addEventListener('hidden.bs.modal', onCancel, { once: true });
+
+        // --- INICIO DE LA NUEVA LÓGICA ---
+        // Empezamos a escuchar el teclado solo cuando el modal es visible
+        document.addEventListener('keydown', handleKeyPress);
+        // --- FIN DE LA NUEVA LÓGICA ---
 
         genericModal.show();
     });

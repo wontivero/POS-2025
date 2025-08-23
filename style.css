@@ -12,7 +12,8 @@
 }
 
 .btn-pago-texto {
-    font-size: 1rem;
+    font-size: 1.2rem; /* Aumentamos el tamaño (antes era 1rem) */
+    font-weight: 600;  /* Hacemos el texto un poco más grueso */
 }
 
 .btn-pago-monto {
@@ -111,4 +112,30 @@
     /* Un fondo sutilmente más claro que el de la barra */
     background-color: rgba(255, 255, 255, 0.1); 
     color: white;
+}
+
+
+
+/* Estilos para mejorar la legibilidad del ticket de venta */
+.ticket-item {
+    padding-top: 1rem !important;
+    padding-bottom: 1rem !important;
+    border-bottom: 1px solid #eee;
+}
+
+.ticket-item-nombre {
+    font-size: 1.1rem;
+}
+
+.ticket-item .quantity-input {
+    font-size: 1.1rem;
+    font-weight: bold;
+    /* Quitamos las flechas por defecto del input numérico para un look más limpio */
+    -moz-appearance: textfield;
+}
+
+.ticket-item .quantity-input::-webkit-outer-spin-button,
+.ticket-item .quantity-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
 }
