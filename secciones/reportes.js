@@ -48,12 +48,11 @@ function renderReportes(ventasParaCalcular) {
 
 
 // AÑADE ESTA FUNCIÓN NUEVA EN reportes.js
-
 // REEMPLAZA ESTA FUNCIÓN ENTERA EN reportes.js
 
 async function anularVenta(ventaId) {
     const confirmado = await showConfirmationModal(
-        "¿Estás seguro? El stock será devuelto y se registrará un egreso de caja si hubo un pago en efectivo.",
+        "¿Estás seguro de que deseas anular esta venta? El stock de los productos será devuelto al inventario. Luego, serás redirigido para crear la venta corregida.",
         "Anular Venta"
     );
 
@@ -64,35 +63,52 @@ async function anularVenta(ventaId) {
 
     try {
         const db = getFirestore();
-        const ventaAnulada = ventasFiltradas.find(v => v.id === ventaId);
-
-        // --- INICIO DE NUEVA LÓGICA DE EGRESO ---
+        const ventaAnulada = ventas.find(v => v.id === ventaId);
+        
         const montoEfectivoDevuelto = ventaAnulada.pagos.contado || 0;
         if (montoEfectivoDevuelto > 0 && !haySesionActiva()) {
             throw new Error("No puedes anular una venta con pago en efectivo si no hay una sesión de caja abierta para registrar la devolución.");
         }
-        // --- FIN DE NUEVA LÓGICA DE EGRESO ---
-
+        
         await runTransaction(db, async (transaction) => {
             const ventaRef = doc(db, 'ventas', ventaId);
-            const ventaDoc = await transaction.get(ventaRef);
+            const ventaDoc = await transaction.get(ventaRef); // PRIMERA LECTURA
+
             if (!ventaDoc.exists()) throw new Error("La venta no existe.");
             const ventaData = ventaDoc.data();
             if (ventaData.estado === 'anulada') throw new Error("Esta venta ya ha sido anulada.");
 
+            const productUpdates = []; // Array para guardar las operaciones de escritura
+
+            // --- FASE DE LECTURA ---
+            // Primero, leemos todos los productos que necesitamos actualizar.
             for (const productoVendido of ventaData.productos) {
                 if (productoVendido.isGeneric) continue;
+
                 const productoRef = doc(db, 'productos', productoVendido.id);
-                const productoDoc = await transaction.get(productoRef);
+                const productoDoc = await transaction.get(productoRef); // SOLO LECTURA
+
                 if (productoDoc.exists()) {
                     const stockActual = productoDoc.data().stock;
-                    transaction.update(productoRef, { stock: stockActual + productoVendido.cantidad });
+                    const nuevoStock = stockActual + productoVendido.cantidad;
+                    // Guardamos la operación de escritura para después, sin ejecutarla aún.
+                    productUpdates.push({ ref: productoRef, data: { stock: nuevoStock } });
                 }
             }
-            transaction.update(ventaRef, { estado: 'anulada' });
+
+            // --- FASE DE ESCRITURA ---
+            // Ahora que todas las lecturas terminaron, realizamos todas las escrituras.
+            
+            // 1. Actualizamos el stock de cada producto.
+            productUpdates.forEach(update => {
+                transaction.update(update.ref, update.data); // SOLO ESCRITURA
+            });
+
+            // 2. Marcamos la venta como anulada.
+            transaction.update(ventaRef, { estado: 'anulada' }); // SOLO ESCRITURA
         });
 
-        // Si hubo devolución de efectivo, registramos el egreso en la caja actual
+        // El resto de la lógica para el egreso y la redirección no cambia...
         if (montoEfectivoDevuelto > 0) {
             const auth = getAuth();
             const egresoData = {
@@ -108,10 +124,8 @@ async function anularVenta(ventaId) {
 
         await showAlertModal("¡Venta anulada con éxito! El stock ha sido restaurado y el egreso de caja fue registrado.", "Proceso completado");
 
-        // Refrescamos los datos de reportes para que se actualice la vista
         await loadData();
-
-        // Guardamos los productos para recargarlos en la sección de ventas
+        
         sessionStorage.setItem('ventaParaCorregir', JSON.stringify(ventaAnulada.productos));
         document.querySelector('a[data-section="ventas"]').click();
 
