@@ -275,7 +275,7 @@ function handleSearch(e) {
     selectedIndex = -1;
     const query = e.target.value.toLowerCase();
     searchResults.innerHTML = '';
-    if (query.length < 3) return;
+    if (query.length < 2) return;
 
     const filteredProducts = productos.filter(p => p.nombre.toLowerCase().includes(query) || p.codigo?.toLowerCase().includes(query));
 

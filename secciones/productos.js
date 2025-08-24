@@ -534,8 +534,9 @@ async function exportarProductosAExcel() {
 }
 
 // --- NUEVA FUNCIÓN PARA IMPORTAR (CON SPINNER) ---
-// REEMPLAZAR en productos.js
-// REEMPLAZAR en productos.js
+
+// REEMPLAZA ESTA FUNCIÓN ENTERA EN productos.js
+// REEMPLAZA ESTA FUNCIÓN ENTERA EN productos.js
 async function handleFileUpload(event) {
     const file = event.target.files[0];
     if (!file) {
@@ -548,35 +549,44 @@ async function handleFileUpload(event) {
     const reader = new FileReader();
     reader.onload = async (e) => {
         const csvContent = e.target.result;
-
         const rows = csvContent.trim().split('\n');
-        const headers = rows.shift().split(';').map(h => h.trim().replace(/"/g, ''));
+        const headersRow = rows.shift();
+        const headers = headersRow.split(';').map(h => h.trim().replace(/"/g, ''));
 
         if (rows.length === 0) {
             await showAlertModal("El archivo CSV está vacío o no tiene un formato válido.");
             return;
         }
 
-        if (!confirm(`Se procesarán ${rows.length} registros del archivo CSV. ¿Deseas continuar?`)) {
+        // --- FIX 1: Usamos el modal de confirmación personalizado ---
+        const confirmado = await showConfirmationModal(`Se encontraron ${rows.length} productos en el archivo. ¿Deseas continuar?`, "Confirmar Importación");
+        if (!confirmado) {
             event.target.value = '';
             return;
         }
+        // --- FIN FIX 1 ---
 
         if (loader) loader.classList.remove('d-none');
         if (importButton) importButton.disabled = true;
 
-        const batch = writeBatch(db);
+        let productosAgregados = 0;
+        let productosActualizados = 0;
 
         try {
+            const batch = writeBatch(db);
             const productosCollection = collection(db, 'productos');
             const snapshotProductos = await getDocs(productosCollection);
             const productosExistentes = {};
             snapshotProductos.forEach(doc => {
                 const data = doc.data();
-                if (data.codigo) {
-                    productosExistentes[data.codigo] = { id: doc.id, ...data };
-                }
+                if (data.codigo) productosExistentes[data.codigo] = { id: doc.id, ...data };
             });
+
+            // --- FIX 2: Recolectamos nuevas categorías sin guardarlas aún ---
+            const nuevasMarcas = new Set();
+            const nuevosColores = new Set();
+            const nuevosRubros = new Set();
+            // --- FIN FIX 2 ---
 
             for (const row of rows) {
                 if (row.trim() === '') continue;
@@ -584,10 +594,9 @@ async function handleFileUpload(event) {
                 const values = row.split(';');
                 const productoCSV = headers.reduce((obj, header, index) => {
                     const keyMap = {
-                        "Codigo": "codigo", "Nombre": "nombre", "Marca": "marca",
-                        "Color": "color", "Rubro": "rubro", "Costo": "costo",
-                        "Venta": "venta", "Stock": "stock", "Stock Minimo": "stockMinimo",
-                        "Porcentaje": "porcentajeGanancia"
+                        "Codigo": "codigo", "Nombre": "nombre", "Marca": "marca", "Color": "color", 
+                        "Rubro": "rubro", "Costo": "costo", "Venta": "venta", "Stock": "stock", 
+                        "Stock Minimo": "stockMinimo", "Porcentaje": "porcentajeGanancia"
                     };
                     const key = keyMap[header];
                     if (key) obj[key] = (values[index] || '').trim().replace(/"/g, '');
@@ -599,35 +608,19 @@ async function handleFileUpload(event) {
                     continue;
                 }
 
-                // --- INICIO DE LA CORRECCIÓN DEFINITIVA ---
-                // Limpiamos explícitamente los símbolos de % y $ de los strings
-                const costoStr = (productoCSV.costo || '0').replace('$', '').trim();
-                const ventaStr = (productoCSV.venta || '').replace('$', '').trim();
-                const porcentajeStr = (productoCSV.porcentajeGanancia || '').replace('%', '').trim();
-
-                const costo = parseFloat(costoStr) || 0;
-                const ventaCSV = parseFloat(ventaStr);
-                const porcentajeCSV = parseFloat(porcentajeStr);
-                // --- FIN DE LA CORRECCIÓN DEFINITIVA ---
-
-                let ventaFinal;
-                if (!isNaN(ventaCSV) && ventaCSV > 0) {
-                    ventaFinal = ventaCSV;
-                }
-                else if (!isNaN(porcentajeCSV) && costo > 0) {
-                    ventaFinal = costo * (1 + porcentajeCSV / 100);
-                }
-                else {
-                    ventaFinal = costo;
-                }
+                const costo = parseFloat((productoCSV.costo || '0').replace('$', '').trim()) || 0;
+                const ventaCSV = parseFloat((productoCSV.venta || '0').replace('$', '').trim());
+                const porcentajeCSV = parseFloat((productoCSV.porcentajeGanancia || '0').replace('%', '').trim());
+                
+                let ventaFinal = (ventaCSV > 0) ? ventaCSV : (costo * (1 + (porcentajeCSV / 100)));
 
                 const productoData = {
                     nombre: productoCSV.nombre,
                     nombre_lowercase: productoCSV.nombre.toLowerCase(),
                     codigo: productoCSV.codigo,
-                    marca: productoCSV.marca,
-                    color: productoCSV.color,
-                    rubro: productoCSV.rubro,
+                    marca: productoCSV.marca || '',
+                    color: productoCSV.color || '',
+                    rubro: productoCSV.rubro || '',
                     costo: costo,
                     venta: ventaFinal,
                     stock: parseInt(productoCSV.stock, 10) || 0,
@@ -637,32 +630,61 @@ async function handleFileUpload(event) {
 
                 const productoExistente = productosExistentes[productoData.codigo];
                 if (productoExistente) {
-                    const docRef = doc(db, 'productos', productoExistente.id);
-                    batch.update(docRef, productoData);
+                    const needsUpdate = (
+                        productoData.nombre !== productoExistente.nombre ||
+                        productoData.marca !== productoExistente.marca ||
+                        productoData.color !== productoExistente.color ||
+                        productoData.rubro !== productoExistente.rubro ||
+                        productoData.costo !== productoExistente.costo ||
+                        productoData.venta !== productoExistente.venta ||
+                        productoData.stock !== productoExistente.stock ||
+                        productoData.stockMinimo !== productoExistente.stockMinimo
+                    );
+                    if (needsUpdate) {
+                        const docRef = doc(db, 'productos', productoExistente.id);
+                        batch.update(docRef, productoData);
+                        productosActualizados++;
+                    }
                 } else {
                     const newDocRef = doc(collection(db, 'productos'));
                     batch.set(newDocRef, productoData);
+                    productosAgregados++;
                 }
 
-                await addUniqueItem('marcas', productoData.marca);
-                await addUniqueItem('colores', productoData.color);
-                await addUniqueItem('rubros', productoData.rubro);
+                // FIX 2 (cont.): Agregamos las categorías a la lista para guardarlas después
+                if (productoData.marca) nuevasMarcas.add(productoData.marca);
+                if (productoData.color) nuevosColores.add(productoData.color);
+                if (productoData.rubro) nuevosRubros.add(productoData.rubro);
             }
 
             await batch.commit();
-            await showAlertModal(`¡Importación completada con éxito! Se procesaron ${rows.length} registros.`);
+
+            // FIX 2 (cont.): Guardamos las nuevas categorías DESPUÉS de la importación principal
+            for (const marca of nuevasMarcas) await addUniqueItem('marcas', marca);
+            for (const color of nuevosColores) await addUniqueItem('colores', color);
+            for (const rubro of nuevosRubros) await addUniqueItem('rubros', rubro);
+
+            if (loader) loader.classList.add('d-none');
+            await showAlertModal(
+                `¡Importación completada!<br><br>
+                 - Productos nuevos: <strong>${productosAgregados}</strong><br>
+                 - Productos actualizados: <strong>${productosActualizados}</strong><br>
+                 - Productos sin cambios: <strong>${rows.length - (productosAgregados + productosActualizados)}</strong>`
+            );
 
         } catch (error) {
             console.error("Error durante la importación masiva:", error);
+            if (loader) loader.classList.add('d-none');
             await showAlertModal("Ocurrió un error durante la importación. Revisa la consola para más detalles.");
         } finally {
-            if (loader) loader.classList.add('d-none');
             if (importButton) importButton.disabled = false;
             event.target.value = '';
         }
     };
     reader.readAsText(file, 'UTF-8');
 }
+
+
 
 
 // --- FUNCIÓN DE INICIALIZACIÓN ---
