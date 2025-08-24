@@ -1,5 +1,5 @@
 // secciones/productos.js
-import { getCollection, saveDocument, deleteDocument, formatCurrency, getTodayDate, updateDocument, capitalizeFirstLetter, showAlertModal, showConfirmationModal } from '../utils.js';
+import { getCollection, saveDocument, deleteDocument, formatCurrency, getTodayDate, updateDocument, capitalizeFirstLetter, showAlertModal, showConfirmationModal, roundUpToNearest50 } from '../utils.js';
 
 import { getFirestore, collection, onSnapshot, query, orderBy, getDocs, writeBatch, Timestamp, doc, where, addDoc } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
 
@@ -189,13 +189,14 @@ function renderizarTablaProductos(productos) {
             <td>${capitalizeFirstLetter(p.color) || 'N/A'}</td>
             <td><span class="badge bg-secondary">${capitalizeFirstLetter(p.rubro)}</span></td>
             <td>${p.costo ? formatCurrency(p.costo) : '0.00'}</td>
-            <td>${p.venta ? formatCurrency(p.venta) : '0.00'}</td>
+            <td class="precio-venta">${p.venta ? formatCurrency(p.venta) : '0.00'}</td>
             <td>${porcentajeGanancia}</td>
             <td>${p.stock || 0}</td>
             <td>${ultimaActualizacion}</td>
             <td>
-                <button class="btn btn-warning btn-sm btn-editar-producto" data-id="${p.id}"><i class="fas fa-edit"></i></button>
-                <button class="btn btn-danger btn-sm btn-eliminar-producto" data-id="${p.id}"><i class="fas fa-trash-alt"></i></button>
+                <button class="btn btn-warning btn-sm btn-editar-producto" data-id="${p.id}" title="Editar"><i class="fas fa-edit"></i></button>
+                <button class="btn btn-info btn-sm btn-duplicar-producto" data-id="${p.id}" title="Duplicar"><i class="fas fa-copy"></i></button>
+                <button class="btn btn-danger btn-sm btn-eliminar-producto" data-id="${p.id}" title="Eliminar"><i class="fas fa-trash-alt"></i></button>
             </td>
         `;
         tablaProductosBody.appendChild(row);
@@ -215,6 +216,17 @@ function renderizarTablaProductos(productos) {
         });
     }
 }
+
+// AÑADE ESTA FUNCIÓN NUEVA EN productos.js
+function handleDuplicate(e) {
+    const id = e.target.closest('.btn-duplicar-producto').dataset.id;
+    const producto = listaCompletaProductos.find(p => p.id === id);
+    if (producto) {
+        // Preparamos el modal en modo "duplicar"
+        abrirProductoModal('duplicar', producto);
+    }
+}
+
 
 async function handleFormSubmit(e) {
     e.preventDefault();
@@ -296,61 +308,9 @@ async function handleDelete(e) {
     }
 }
 
-function handleEdit(e) {
-    const id = e.target.closest('.btn-editar-producto').dataset.id;
-    const producto = listaCompletaProductos.find(p => p.id === id);
-    if (producto) {
-        if (modalProductoLabel) modalProductoLabel.textContent = 'Editar Producto';
 
-        if (formProducto) {
-            formProducto.reset();
-            if (productoId) productoId.value = producto.id ?? '';
-            if (productoNombre) productoNombre.value = producto.nombre ?? '';
-            if (productoCodigo) productoCodigo.value = producto.codigo ?? '';
-            if (productoMarca) productoMarca.value = producto.marca ?? '';
-            if (productoColor) productoColor.value = producto.color ?? '';
-            if (productoRubro) productoRubro.value = producto.rubro ?? '';
-            if (productoCosto) productoCosto.value = producto.costo ?? 0;
-            if (productoVenta) productoVenta.value = producto.venta ?? 0;
-            if (productoStock) productoStock.value = producto.stock ?? 0;
-            if (productoStockMinimo) productoStockMinimo.value = producto.stockMinimo ?? 0;
 
-            // --- INICIO DE LÍNEAS NUEVAS ---
-            const productoGenericoSwitch = document.getElementById('producto-generico');
-            const genericProfitFields = document.getElementById('generic-profit-fields');
-            const productoMargenGenerico = document.getElementById('producto-margen-generico');
-            const productoDestacado = document.getElementById('producto-destacado');
 
-            if (productoGenericoSwitch) productoGenericoSwitch.checked = producto.isGeneric ?? false;
-            if (productoMargenGenerico) productoMargenGenerico.value = producto.genericProfitMargin ?? 70;
-            if (productoDestacado) productoDestacado.checked = producto.isFeatured ?? false;
-
-            // Actualizamos la visibilidad del campo de margen
-            if (genericProfitFields) genericProfitFields.style.display = producto.isGeneric ? 'block' : 'none';
-            // --- FIN DE LÍNEAS NUEVAS ---
-        }
-
-        updatePorcentajeField();
-        if (productoModal) productoModal.show();
-    }
-}
-
-function handleNewProduct() {
-    if (formProducto) {
-        formProducto.reset();
-        if (productoId) productoId.value = '';
-        // --- INICIO DE LÍNEAS NUEVAS ---
-        // Asegurarnos de que los campos nuevos estén en su estado inicial
-        const productoGenericoSwitch = document.getElementById('producto-generico');
-        const genericProfitFields = document.getElementById('generic-profit-fields');
-        if (productoGenericoSwitch) productoGenericoSwitch.checked = false;
-        if (genericProfitFields) genericProfitFields.style.display = 'none';
-        // --- FIN DE LÍNEAS NUEVAS ---
-    }
-    if (modalProductoLabel) modalProductoLabel.textContent = 'Nuevo Producto';
-    updatePorcentajeField();
-    if (productoModal) productoModal.show();
-}
 
 function updatePorcentajeField() {
     if (!productoCosto || !productoVenta || !productoPorcentaje) return;
@@ -375,8 +335,12 @@ function updateVentaField() {
 
     if (!isNaN(costo) && !isNaN(porcentaje) && costo >= 0) {
         const venta = costo * (1 + porcentaje / 100);
-        productoVenta.value = venta.toFixed(2);
+        // Aplicamos el redondeo
+        const ventaRedondeada = roundUpToNearest50(venta);
+        productoVenta.value = ventaRedondeada.toFixed(2);
     }
+    // Volvemos a calcular el porcentaje real después de redondear
+    // updatePorcentajeField();
 }
 
 function handleSort(e) {
@@ -392,7 +356,6 @@ function handleSort(e) {
 
 // Reemplazar la función entera en productos.js
 
-// Reemplazar la función entera en productos.js
 
 async function handleActualizacionMasiva() {
     if (!updateField || !updateAmount || !updateTypePercentage || !updateTypeFixed) return;
@@ -438,7 +401,7 @@ async function handleActualizacionMasiva() {
                 if (oldCost > 0) {
                     const profitPercentage = (p.venta - oldCost) / oldCost;
                     const newSalePrice = newCost * (1 + profitPercentage);
-                    updateData.venta = newSalePrice;
+                    updateData.venta = roundUpToNearest50(newSalePrice);
                 }
 
             } else {
@@ -453,7 +416,7 @@ async function handleActualizacionMasiva() {
                 }
                 newSalePrice = newSalePrice < 0 ? 0 : newSalePrice; // No permitir ventas negativas
 
-                updateData.venta = newSalePrice;
+                updateData.venta = roundUpToNearest50(newSalePrice);
             }
 
             updateData.fechaUltimoCambioPrecio = Timestamp.now();
@@ -535,8 +498,6 @@ async function exportarProductosAExcel() {
 
 // --- NUEVA FUNCIÓN PARA IMPORTAR (CON SPINNER) ---
 
-// REEMPLAZA ESTA FUNCIÓN ENTERA EN productos.js
-// REEMPLAZA ESTA FUNCIÓN ENTERA EN productos.js
 async function handleFileUpload(event) {
     const file = event.target.files[0];
     if (!file) {
@@ -594,8 +555,8 @@ async function handleFileUpload(event) {
                 const values = row.split(';');
                 const productoCSV = headers.reduce((obj, header, index) => {
                     const keyMap = {
-                        "Codigo": "codigo", "Nombre": "nombre", "Marca": "marca", "Color": "color", 
-                        "Rubro": "rubro", "Costo": "costo", "Venta": "venta", "Stock": "stock", 
+                        "Codigo": "codigo", "Nombre": "nombre", "Marca": "marca", "Color": "color",
+                        "Rubro": "rubro", "Costo": "costo", "Venta": "venta", "Stock": "stock",
                         "Stock Minimo": "stockMinimo", "Porcentaje": "porcentajeGanancia"
                     };
                     const key = keyMap[header];
@@ -611,8 +572,10 @@ async function handleFileUpload(event) {
                 const costo = parseFloat((productoCSV.costo || '0').replace('$', '').trim()) || 0;
                 const ventaCSV = parseFloat((productoCSV.venta || '0').replace('$', '').trim());
                 const porcentajeCSV = parseFloat((productoCSV.porcentajeGanancia || '0').replace('%', '').trim());
-                
+
                 let ventaFinal = (ventaCSV > 0) ? ventaCSV : (costo * (1 + (porcentajeCSV / 100)));
+                // Aplicamos el redondeo
+                const ventaRedondeada = roundUpToNearest50(ventaFinal);
 
                 const productoData = {
                     nombre: productoCSV.nombre,
@@ -622,7 +585,7 @@ async function handleFileUpload(event) {
                     color: productoCSV.color || '',
                     rubro: productoCSV.rubro || '',
                     costo: costo,
-                    venta: ventaFinal,
+                    venta: ventaRedondeada,
                     stock: parseInt(productoCSV.stock, 10) || 0,
                     stockMinimo: parseInt(productoCSV.stockMinimo, 10) || 0,
                     fechaUltimoCambioPrecio: Timestamp.now()
@@ -684,7 +647,74 @@ async function handleFileUpload(event) {
     reader.readAsText(file, 'UTF-8');
 }
 
+// AÑADE ESTA NUEVA FUNCIÓN CENTRAL EN productos.js
+function abrirProductoModal(modo, producto = null) {
+    if (!formProducto) return;
+    formProducto.reset();
 
+    const modalTitle = document.getElementById('productoModalLabel');
+    const saveButton = document.getElementById('btnGuardarProducto'); // Asume que tu botón de guardar tiene este ID. Si no, ajústalo.
+
+    if (modo === 'editar' && producto) {
+        modalTitle.textContent = 'Editar Producto';
+        saveButton.textContent = 'Guardar Cambios';
+        // Llenamos todos los campos, incluyendo ID y código
+        productoId.value = producto.id ?? '';
+        productoCodigo.value = producto.codigo ?? '';
+        productoNombre.value = producto.nombre ?? '';
+        // ... (resto de los campos)
+    } else if (modo === 'duplicar' && producto) {
+        modalTitle.textContent = 'Duplicar Producto';
+        saveButton.textContent = 'Crear Producto';
+        // Llenamos todos los campos EXCEPTO ID y CÓDIGO
+        productoId.value = ''; // ID vacío para que se cree uno nuevo
+        productoCodigo.value = ''; // Código vacío para que el usuario ingrese uno nuevo
+        productoNombre.value = producto.nombre ?? '';
+        // ... (resto de los campos)
+    } else { // modo 'nuevo'
+        modalTitle.textContent = 'Nuevo Producto';
+        saveButton.textContent = 'Crear Producto';
+        productoId.value = '';
+    }
+
+    // Llenamos el resto de los campos para editar y duplicar (código común)
+    if (modo === 'editar' || modo === 'duplicar') {
+        productoMarca.value = producto.marca ?? '';
+        productoColor.value = producto.color ?? '';
+        productoRubro.value = producto.rubro ?? '';
+        productoCosto.value = producto.costo ?? 0;
+        productoVenta.value = producto.venta ?? 0;
+        productoStock.value = producto.stock ?? 0;
+        productoStockMinimo.value = producto.stockMinimo ?? 0;
+
+        const productoGenericoSwitch = document.getElementById('producto-generico');
+        const genericProfitFields = document.getElementById('generic-profit-fields');
+        const productoMargenGenerico = document.getElementById('producto-margen-generico');
+        const productoDestacado = document.getElementById('producto-destacado');
+
+        if (productoGenericoSwitch) productoGenericoSwitch.checked = producto.isGeneric ?? false;
+        if (productoMargenGenerico) productoMargenGenerico.value = producto.genericProfitMargin ?? 70;
+        if (productoDestacado) productoDestacado.checked = producto.isFeatured ?? false;
+        if (genericProfitFields) genericProfitFields.style.display = producto.isGeneric ? 'block' : 'none';
+        
+        updatePorcentajeField();
+    }
+
+    if (productoModal) productoModal.show();
+}
+
+// REEMPLAZA TUS FUNCIONES handleEdit Y handleNewProduct CON ESTAS VERSIONES SIMPLIFICADAS
+function handleEdit(e) {
+    const id = e.target.closest('.btn-editar-producto').dataset.id;
+    const producto = listaCompletaProductos.find(p => p.id === id);
+    if (producto) {
+        abrirProductoModal('editar', producto);
+    }
+}
+
+function handleNewProduct() {
+    abrirProductoModal('nuevo');
+}
 
 
 // --- FUNCIÓN DE INICIALIZACIÓN ---
@@ -764,6 +794,7 @@ export function init() {
         tablaProductosBody.addEventListener('click', (e) => {
             if (e.target.closest('.btn-eliminar-producto')) handleDelete(e);
             if (e.target.closest('.btn-editar-producto')) handleEdit(e);
+            if (e.target.closest('.btn-duplicar-producto')) handleDuplicate(e); 
         });
     }
     if (tablaProductosHead) tablaProductosHead.addEventListener('click', handleSort);

@@ -298,53 +298,53 @@ export async function generatePDF(ticketId, venta) {
 
 let genericModalEl, genericModal;
 
+
+
+// REEMPLAZA ESTAS DOS FUNCIONES COMPLETAS EN utils.js
+
 /**
- * Muestra un modal de aviso (reemplaza a alert).
+ * Muestra un modal de aviso (reemplaza a alert) y espera a que se cierre.
  * @param {string} message El mensaje a mostrar.
  * @param {string} title El título del modal (opcional).
  */
 export function showAlertModal(message, title = 'Aviso') {
-    // La función ahora devuelve una Promesa para poder usar 'await'
     return new Promise(resolve => {
         if (!genericModalEl) {
             genericModalEl = document.getElementById('genericModal');
             genericModal = new bootstrap.Modal(genericModalEl);
         }
-
+        
         document.getElementById('genericModalLabel').textContent = title;
         document.getElementById('genericModalBody').innerHTML = message;
         document.getElementById('btn-generic-cancel').style.display = 'none';
-
+        
         const confirmButton = document.getElementById('btn-generic-confirm');
         confirmButton.textContent = 'OK';
 
-        // --- INICIO DE LA CORRECCIÓN ---
-        // Esta función se ejecutará cuando el modal se cierre por cualquier motivo
-        const onModalClose = () => {
-            genericModal.hide();
-            // Limpiamos el listener para que no se acumule
-            confirmButton.removeEventListener('click', onModalClose);
-            genericModalEl.removeEventListener('hidden.bs.modal', onModalClose);
-            resolve(); // Le decimos a la promesa que hemos terminado
+        // ---- Lógica de Eventos Corregida ----
+        const triggerHide = () => genericModal.hide();
+        
+        const handleKeyPress = (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                triggerHide();
+            }
         };
 
-        // Asignamos el listener al botón OK
-        confirmButton.addEventListener('click', onModalClose, { once: true });
-        // También escuchamos si se cierra de otra forma (con la X, tecla Esc, etc.)
-        genericModalEl.addEventListener('hidden.bs.modal', onModalClose, { once: true });
-        // --- FIN DE LA CORRECCIÓN ---
+        const cleanupAndResolve = () => {
+            confirmButton.removeEventListener('click', triggerHide);
+            document.removeEventListener('keydown', handleKeyPress);
+            resolve();
+        };
+
+        confirmButton.addEventListener('click', triggerHide, { once: true });
+        document.addEventListener('keydown', handleKeyPress);
+        genericModalEl.addEventListener('hidden.bs.modal', cleanupAndResolve, { once: true });
+        // ---- Fin de la Corrección ----
 
         genericModal.show();
     });
 }
-
-/**
- * Muestra un modal de confirmación y espera la respuesta del usuario (reemplaza a confirm).
- * @param {string} message El mensaje de confirmación.
- * @param {string} title El título del modal (opcional).
- * @returns {Promise<boolean>} Resuelve a 'true' si el usuario confirma, 'false' si cancela.
- */
-// REEMPLAZA ESTA FUNCIÓN ENTERA EN utils.js
 
 /**
  * Muestra un modal de confirmación y espera la respuesta del usuario (reemplaza a confirm).
@@ -362,53 +362,55 @@ export function showConfirmationModal(message, title = 'Confirmación') {
         document.getElementById('genericModalLabel').textContent = title;
         document.getElementById('genericModalBody').innerHTML = message;
         document.getElementById('btn-generic-cancel').style.display = 'inline-block';
-
+        
         const confirmButton = document.getElementById('btn-generic-confirm');
         const cancelButton = document.getElementById('btn-generic-cancel');
         confirmButton.textContent = 'Aceptar';
 
-        // --- INICIO DE LA NUEVA LÓGICA ---
-
-        // Función que se ejecuta al presionar una tecla
+        // ---- Lógica de Eventos Corregida ----
         const handleKeyPress = (e) => {
             if (e.key === 'Enter') {
-                e.preventDefault(); // Evita cualquier otra acción por defecto
-                onConfirm();
+                e.preventDefault();
+                resolveAndHide(true);
             }
         };
-        // --- FIN DE LA NUEVA LÓGICA ---
 
-        const onConfirm = () => {
-            genericModal.hide();
-            resolve(true);
+        const resolveAndHide = (value) => {
             cleanup();
-        };
-
-        const onCancel = () => {
             genericModal.hide();
-            resolve(false);
-            cleanup();
+            resolve(value);
         };
-
+        
         const cleanup = () => {
-            confirmButton.removeEventListener('click', onConfirm);
-            cancelButton.removeEventListener('click', onCancel);
-            genericModalEl.removeEventListener('hidden.bs.modal', onCancel);
-            // --- INICIO DE LA NUEVA LÓGICA ---
-            // Limpiamos el listener del teclado para que no interfiera después
+            confirmButton.removeEventListener('click', confirmListener);
+            cancelButton.removeEventListener('click', cancelListener);
             document.removeEventListener('keydown', handleKeyPress);
-            // --- FIN DE LA NUEVA LÓGICA ---
         };
 
-        confirmButton.addEventListener('click', onConfirm, { once: true });
-        cancelButton.addEventListener('click', onCancel, { once: true });
-        genericModalEl.addEventListener('hidden.bs.modal', onCancel, { once: true });
+        const confirmListener = () => resolveAndHide(true);
+        const cancelListener = () => resolveAndHide(false);
 
-        // --- INICIO DE LA NUEVA LÓGICA ---
-        // Empezamos a escuchar el teclado solo cuando el modal es visible
+        confirmButton.addEventListener('click', confirmListener, { once: true });
+        cancelButton.addEventListener('click', cancelListener, { once: true });
         document.addEventListener('keydown', handleKeyPress);
-        // --- FIN DE LA NUEVA LÓGICA ---
+        genericModalEl.addEventListener('hidden.bs.modal', () => resolveAndHide(false), { once: true });
+        // ---- Fin de la Corrección ----
 
         genericModal.show();
     });
+}
+
+
+
+// AÑADE ESTA FUNCIÓN EN utils.js
+
+/**
+ * Redondea un número hacia arriba al múltiplo de 50 más cercano.
+ * Ejemplo: 18122 -> 18150
+ * @param {number} num El número a redondear.
+ * @returns {number} El número redondeado.
+ */
+export function roundUpToNearest50(num) {
+    if (typeof num !== 'number' || num <= 0) return 0;
+    return Math.ceil(num / 50) * 50;
 }
