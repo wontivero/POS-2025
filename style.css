@@ -145,3 +145,77 @@ td.precio-venta {
     -webkit-appearance: none;
     margin: 0;
 }
+
+
+/* Estilos para el nuevo diseño del ticket y la animación */
+
+/* Fondo más oscuro para la lista del ticket */
+#ticketItems {
+    background-color: #f8f9fa; /* Un gris muy claro */
+    border: 1px solid #dee2e6;
+    border-radius: .375rem;
+}
+
+.ticket-item {
+    background-color: transparent; /* Hacemos los items transparentes para que se vea el fondo */
+    padding-top: 1rem !important;
+    padding-bottom: 1rem !important;
+    border-bottom: 1px solid #e9ecef !important;
+}
+.ticket-item:last-child {
+    border-bottom: none !important;
+}
+
+.ticket-item-nombre {
+    font-size: 1.1rem;
+}
+
+.ticket-item .quantity-input {
+    font-size: 1.1rem;
+    font-weight: bold;
+}
+
+
+
+/* Animación de resaltado para el ticket */
+@keyframes highlight-item {
+    from {
+        transform: scale(1.52);
+        box-shadow: 0 4px 15px rgba(25, 135, 84, 0.4); /* Sombra verde */
+         background-color: #6df1b6;  /* Verde claro de Bootstrap */
+    }
+    to {
+        transform: scale(1);
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        background-color: transparent
+    }
+}
+
+.animate-highlight {
+    
+    /* animation: highlight 3.5s ease-out;     */
+    animation: highlight-item 0.51s ease-out;
+}
+
+/* Estilos para el nuevo diseño del ticket de venta */
+
+/* Contenedor principal del ticket */
+#ticketItems {
+    background-color: #f0f7f2; /* Un verde pastel muy claro */
+    border: 1px solid #cce8d4;
+    border-radius: .375rem;
+    padding: 0.5rem;
+}
+
+/* Cada producto individual en el ticket */
+.ticket-item {
+    background-color: #ffffff; /* Fondo blanco para cada item, creando contraste */
+    margin-bottom: 0.5rem;
+    border-radius: .375rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    border: none !important; /* Sobreescribimos los bordes por defecto de list-group */
+}
+.ticket-item:last-child {
+    margin-bottom: 0;
+}
+

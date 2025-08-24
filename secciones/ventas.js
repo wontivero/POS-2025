@@ -143,6 +143,15 @@ function renderTicket() {
         const itemDiv = document.createElement('div');
         // Añadimos una clase 'ticket-item' para darle estilos
         itemDiv.className = 'list-group-item d-flex justify-content-between align-items-center p-2 ticket-item';
+        // --- Lógica para el efecto visual ---
+        if (item.justAdded || item.justChanged) {
+            itemDiv.classList.add('animate-highlight');
+            // Limpiamos las marcas para que no se repita la animación
+            delete item.justAdded;
+            delete item.justChanged;
+        }
+        // --- Fin de la lógica para el efecto visual ---
+        
         const genericIndicator = item.isGeneric ? '<i class="fas fa-pencil-alt fa-xs text-info ms-2" title="Precio manual"></i>' : '';
 
         itemDiv.innerHTML = `
@@ -213,13 +222,15 @@ async function handleQuantityManualChange(e) {
         await showAlertModal(`Stock insuficiente. Stock disponible: ${productoOriginal.stock}`);
         item.cantidad = productoOriginal.stock;
         item.total = item.cantidad * item.precio;
+        item.justChanged = true;
     }
     // Si todo es correcto, actualizamos la cantidad y el total
     else {
         item.cantidad = newQuantity;
         item.total = item.cantidad * item.precio;
+        item.justChanged = true;
     }
-
+    
     renderTicket(); // Volvemos a renderizar el ticket para reflejar todos los cambios
 }
 
@@ -309,6 +320,7 @@ async function addProductToTicket(productId) {
         genericProductName.textContent = producto.nombre;
         genericPriceInput.value = ''; // Limpiamos el valor anterior
         genericPriceModal.show(); // Mostramos el modal
+        
     } else {
         // La lógica para productos normales sigue igual
         let productoEncontradoEnTicket = false;
@@ -317,9 +329,11 @@ async function addProductToTicket(productId) {
                 if (item.cantidad < producto.stock) {
                     item.cantidad++;
                     item.total = item.precio * item.cantidad;
+                    item.justChanged = true;
                 } else {
                     await showAlertModal('No hay más stock disponible para este producto.');
                 }
+                item.justChanged = true;
                 productoEncontradoEnTicket = true;
                 break;
             }
@@ -327,7 +341,7 @@ async function addProductToTicket(productId) {
         if (!productoEncontradoEnTicket) {
             ticket.push({
                 id: producto.id, nombre: producto.nombre, precio: producto.venta, costo: producto.costo,
-                cantidad: 1, total: producto.venta, isGeneric: false
+                cantidad: 1, total: producto.venta, isGeneric: false,justAdded: true 
             });
         }
         productoSearch.value = '';
@@ -364,7 +378,8 @@ async function handleConfirmGenericPrice() {
         cantidad: 1,
         total: finalPrice,
         isGeneric: true,
-        genericProfitMargin: genericProductToAdd.genericProfitMargin || 70
+        genericProfitMargin: genericProductToAdd.genericProfitMargin || 70,
+        justAdded: true 
     });
 
     genericPriceModal.hide(); // Ocultamos el modal
@@ -415,6 +430,7 @@ function changeQuantity(e) {
         ticket.splice(index, 1);
     } else {
         item.total = item.cantidad * item.precio;
+        item.justChanged = true;
     }
 
     renderTicket();
