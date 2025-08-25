@@ -180,7 +180,7 @@ td.precio-venta {
 /* Animación de resaltado para el ticket */
 @keyframes highlight-item {
     from {
-        transform: scale(1.52);
+        transform: scale(1.2);
         box-shadow: 0 4px 15px rgba(25, 135, 84, 0.4); /* Sombra verde */
          background-color: #6df1b6;  /* Verde claro de Bootstrap */
     }

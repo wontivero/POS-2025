@@ -430,7 +430,7 @@ function changeQuantity(e) {
         ticket.splice(index, 1);
     } else {
         item.total = item.cantidad * item.precio;
-        item.justChanged = true;
+        // item.justChanged = true;
     }
 
     renderTicket();
@@ -729,18 +729,16 @@ function renderQuickAccessProducts() {
 // --- Función de inicialización para esta sección ---
 // REEMPLAZA TU FUNCIÓN init ENTERA EN ventas.js CON ESTA VERSIÓN CORREGIDA Y LIMPIA
 
+
+
 export async function init() {
-
-
-    // --- INICIO DEL NUEVO BLOQUE DE "RE-FACTURACIÓN" ---
+    // --- INICIO DEL NUEVO BLOQUE DE "RE-FACTURACIÓN" --- (Sin cambios)
     const ventaGuardadaStr = sessionStorage.getItem('ventaParaCorregir');
     if (ventaGuardadaStr) {
         try {
             const productosParaCargar = JSON.parse(ventaGuardadaStr);
-            // Limpiamos el ticket actual y cargamos los productos de la venta anulada
             ticket = [];
             productosParaCargar.forEach(producto => {
-                // Creamos un objeto para el ticket con las propiedades necesarias
                 ticket.push({
                     id: producto.id,
                     nombre: producto.nombre,
@@ -754,14 +752,12 @@ export async function init() {
             });
         } catch (error) {
             console.error("Error al cargar la venta para corregir:", error);
-            ticket = []; // Reseteamos el ticket en caso de error
+            ticket = [];
         } finally {
-            // Limpiamos el sessionStorage para no volver a cargarla
             sessionStorage.removeItem('ventaParaCorregir');
         }
     }
     // --- FIN DEL NUEVO BLOQUE ---
-
 
     await verificarEstadoCaja();
 
@@ -806,7 +802,15 @@ export async function init() {
     // 2. INICIALIZAR MODAL (Sin cambios)
     productoModal = initProductosModal();
 
-    // 3. LISTENERS PARA ELEMENTOS ESPECÍFICOS DE LA SECCIÓN (Estos no necesitan protección)
+    // ========================================================================
+    // --- INICIO DE LA CORRECCIÓN ---
+    // ========================================================================
+
+    // 3. LISTENERS LOCALES A LA SECCIÓN DE VENTAS
+    // Estos listeners se reasignan CADA VEZ que se entra a la sección,
+    // asegurando que funcionen con los nuevos elementos del DOM.
+    // Por eso, los sacamos del bloque 'if (!window.ventasListenersAttached)'.
+
     productoSearch.addEventListener('input', handleSearch);
     productoSearch.addEventListener('keyup', handleSearchKeyUp);
 
@@ -834,21 +838,13 @@ export async function init() {
         resetVentas();
     });
 
-
-    // confirmacionVentaModal.addEventListener('hidden.bs.modal', (e) => {
-    //     resetVentas();
-    // });
-
     confirmacionVentaModal.addEventListener('shown.bs.modal', () => {
         const okButton = document.getElementById('btnConfirmacionVentaOK');
-        if (okButton) {
-            okButton.focus();
-        }
-        startVentaExitosaCountdown(); // <-- AÑADE ESTA LLAMADA para iniciar el contador
+        if (okButton) okButton.focus();
+        startVentaExitosaCountdown();
     });
 
     confirmacionVentaModal.addEventListener('hidden.bs.modal', () => {
-        // AÑADE ESTE BLOQUE para detener el contador si se cierra manualmente
         if (ventaExitosaTimer) {
             clearInterval(ventaExitosaTimer);
             ventaExitosaTimer = null;
@@ -861,13 +857,10 @@ export async function init() {
     btnEditarCliente.addEventListener('click', handleEditarCliente);
     btnGuardarCliente.addEventListener('click', handleGuardarCliente);
 
-
     if (btnConfirmGenericPrice) btnConfirmGenericPrice.addEventListener('click', handleConfirmGenericPrice);
 
     if (genericPriceInput) genericPriceInput.addEventListener('keyup', (e) => {
-        if (e.key === 'Enter') {
-            handleConfirmGenericPrice();
-        }
+        if (e.key === 'Enter') handleConfirmGenericPrice();
     });
 
     if (genericPriceModalEl) genericPriceModalEl.addEventListener('shown.bs.modal', () => {
@@ -875,14 +868,40 @@ export async function init() {
         genericPriceInput.select();
     });
 
-    // 4. GESTIÓN DE LISTENERS GLOBALES Y PERSISTENTES (AQUÍ ESTÁ LA CORRECCIÓN)
-    // Dentro de la función init(), reemplaza este bloque completo
+    // LISTENERS CLAVE PARA EL TICKET (DELEGADOS)
+    // También deben reasignarse porque 'ticketItems' es un nuevo elemento.
+    ticketItems.addEventListener('input', (e) => {
+        if (e.target.classList.contains('quantity-input')) handleQuantityLiveUpdate(e);
+    });
+    ticketItems.addEventListener('change', (e) => {
+        if (e.target.classList.contains('quantity-input')) handleQuantityManualChange(e);
+    });
+    ticketItems.addEventListener('focus', (e) => {
+        if (e.target.classList.contains('quantity-input')) e.target.select();
+    }, true);
+    
+    // Listener para la navegación con flechas dentro del ticket
+    ticketItems.addEventListener('keydown', (e) => {
+        if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+        if (e.target.classList.contains('quantity-input')) {
+            e.preventDefault();
+            const currentIndex = parseInt(e.target.dataset.index);
+            const nextIndex = e.key === 'ArrowDown' ? currentIndex + 1 : currentIndex - 1;
+            const nextInput = ticketItems.querySelector(`.quantity-input[data-index="${nextIndex}"]`);
+            if (nextInput) nextInput.focus();
+        }
+    });
 
+
+    // 4. GESTIÓN DE LISTENERS GLOBALES Y PERSISTENTES
+    // Estos se asignan al 'document' y SÓLO DEBEN AGREGARSE UNA VEZ en toda la vida de la aplicación.
+    // Por eso, los dejamos dentro del bloque de seguridad.
     if (!window.ventasListenersAttached) {
-        // --- Listener unificado para CLICS (sin cambios) ---
+        // Listener unificado para CLICS en todo el documento
         document.addEventListener('click', (e) => {
             const seccionVentas = document.getElementById('seccion-ventas');
             if (!seccionVentas || !seccionVentas.contains(e.target)) return;
+            
             const quickAccessCard = e.target.closest('.product-card-mini');
             if (quickAccessCard) {
                 addProductToTicket(quickAccessCard.dataset.id);
@@ -902,18 +921,7 @@ export async function init() {
             }
         });
 
-        // --- Listeners para el TICKET (input, change, focus - sin cambios) ---
-        ticketItems.addEventListener('input', (e) => {
-            if (e.target.classList.contains('quantity-input')) handleQuantityLiveUpdate(e);
-        });
-        ticketItems.addEventListener('change', (e) => {
-            if (e.target.classList.contains('quantity-input')) handleQuantityManualChange(e);
-        });
-        ticketItems.addEventListener('focus', (e) => {
-            if (e.target.classList.contains('quantity-input')) e.target.select();
-        }, true);
-
-        // --- LISTENER DE TECLADO UNIFICADO Y DEFINITIVO ---
+        // LISTENER DE TECLADO UNIFICADO Y DEFINITIVO
         document.addEventListener('keydown', async (e) => {
             const seccionVentas = document.getElementById('seccion-ventas');
             if (!seccionVentas) return;
@@ -923,26 +931,22 @@ export async function init() {
             const isSearchInput = activeElement === productoSearch;
             const currentTime = new Date().getTime();
 
-            // --- Lógica de la Tecla Enter (Contextual) ---
             if (e.key === 'Enter') {
                 e.preventDefault();
-                // 1. Prioridad: DOBLE ENTER RÁPIDO (en cualquier lugar)
                 if ((currentTime - lastEnterPressTime) < 400 && ticket.length > 0) {
                     const lastItemIndex = ticket.length - 1;
                     const lastQuantityInput = ticketItems.querySelector(`.quantity-input[data-index="${lastItemIndex}"]`);
                     if (lastQuantityInput && !lastQuantityInput.disabled) lastQuantityInput.focus();
-                    lastEnterPressTime = 0; // Reseteamos
+                    lastEnterPressTime = 0;
                     return;
                 }
-                lastEnterPressTime = currentTime; // Guardamos el tiempo del Enter simple
+                lastEnterPressTime = currentTime;
 
-                // 2. Acción de Enter en el Buscador
                 if (isSearchInput) {
                     const searchTerm = productoSearch.value.trim();
                     const items = searchResults.querySelectorAll('.list-group-item-action');
                     let productIdToAdd = null;
                     const productByBarcode = searchTerm ? productos.find(p => p.codigo === searchTerm) : null;
-
                     if (productByBarcode) {
                         addProductToTicket(productByBarcode.id);
                     } else {
@@ -953,40 +957,14 @@ export async function init() {
                         }
                         if (productIdToAdd) addProductToTicket(productIdToAdd);
                     }
-                }
-                // 3. Acción de Enter en un campo de Cantidad
-                else if (isQuantityInput) {
+                } else if (isQuantityInput) {
                     activeElement.blur();
                     productoSearch.focus();
                     productoSearch.select();
                 }
                 return;
             }
-
-
-
-            // Listener dedicado para la navegación con flechas DENTRO del ticket
-            ticketItems.addEventListener('keydown', (e) => {
-                // Si la tecla no es Arriba o Abajo, no hacemos nada.
-                if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
-
-                // Nos aseguramos de que el origen sea un campo de cantidad
-                if (e.target.classList.contains('quantity-input')) {
-                    e.preventDefault(); // Prevenimos el comportamiento por defecto de las flechas
-
-                    const currentIndex = parseInt(e.target.dataset.index);
-                    const nextIndex = e.key === 'ArrowDown' ? currentIndex + 1 : currentIndex - 1;
-
-                    const nextInput = ticketItems.querySelector(`.quantity-input[data-index="${nextIndex}"]`);
-
-                    // Si encontramos el siguiente campo, le damos el foco
-                    if (nextInput) {
-                        nextInput.focus(); // El listener 'focus' que ya tenemos se encargará de .select()
-                    }
-                }
-            });
-
-            // --- Lógica para F1-F4 y Escape ---
+            
             switch (e.key) {
                 case 'F1': e.preventDefault(); document.getElementById('btnPagoRapidoContado')?.click(); break;
                 case 'F2': e.preventDefault(); document.getElementById('btnPagoRapidoTransferencia')?.click(); break;
@@ -1011,7 +989,9 @@ export async function init() {
 
         window.ventasListenersAttached = true;
     }
-
+    // ========================================================================
+    // --- FIN DE LA CORRECCIÓN ---
+    // ========================================================================
 
     // 5. CARGAR DATOS (Sin cambios)
     await loadData();
