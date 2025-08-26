@@ -25,7 +25,7 @@
     </div>
 
     <div class="row">
-        
+
         <div class="col-xl-3 col-md-6 mb-4">
             <div class="card border-left-primary shadow h-100 py-2">
                 <div class="card-body">
@@ -81,7 +81,19 @@
     </div>
 
     <div class="row mb-4">
-        <div class="col-lg-6 mb-4">
+        <div class="col-lg-4 mb-4">
+            <div class="card shadow mb-4 h-100">
+                <div class="card-header py-3 bg-primary text-white">
+                    <h6 class="m-0 font-weight-bold">Desglose de Ventas por Rubro y Método de Pago</h6>
+                </div>
+                <div class="card-body">
+                    <div class="chart-bar" style="height: 350px; position: relative;">
+                        <canvas id="chartContadoPorRubro"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-4 mb-4">
             <div class="card shadow mb-4 h-100">
                 <div class="card-header py-3 bg-primary text-white">
                     <h6 class="m-0 font-weight-bold">Ventas por Rubro</h6>
@@ -100,7 +112,7 @@
                 </div>
             </div>
         </div>
-        <div class="col-lg-6 mb-4">
+        <div class="col-lg-4 mb-4">
             <div class="card shadow mb-4 h-100">
                 <div class="card-header py-3 bg-success text-white">
                     <h6 class="m-0 font-weight-bold">Métodos de Pago Utilizados</h6>

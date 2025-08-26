@@ -12,7 +12,7 @@ let ventasFiltradas = [];
 // --- Elementos del DOM (variables que se inicializarán en init) ---
 let reporteFechaDesde, reporteFechaHasta, btnGenerarReporte, btnQuitarFiltro, filtroReporteRubro, datalistRubrosReporte;
 let reporteTotalVentas, reporteTotalGanancia, reporteNumVentas, reporteTicketPromedio, tablaVentasDetalleBody, tablaTopProductosBody;
-let chartRubros, chartPagos, chartVentasTiempo;
+let chartRubros, chartPagos, chartVentasTiempo, chartContadoPorRubro;
 
 // --- Funciones de la Sección de Reportes ---
 
@@ -221,65 +221,22 @@ function renderTopProductos(ventasParaCalcular) {
 }
 
 // REEMPLAZA LA FUNCIÓN ENTERA EN reportes.js
-
 // REEMPLAZA ESTA FUNCIÓN ENTERA EN reportes.js
 
 function renderCharts(ventasParaCalcular) {
-    // --- Lógica de cálculo de datos (sin cambios) ---
-    const datosRubros = {};
-    const datosPagos = { contado: 0, transferencia: 0, debito: 0, credito: 0 };
-    const datosVentasTiempo = {};
-
-    ventasParaCalcular.forEach(venta => {
-        if (Array.isArray(venta.productos)) {
-            venta.productos.forEach(p => {
-                const rubro = p.rubro || 'Desconocido';
-                const totalProducto = (p.cantidad || 0) * (p.precio || 0);
-                datosRubros[rubro] = (datosRubros[rubro] || 0) + totalProducto;
-            });
-        }
-        datosPagos.contado += venta.pagos.contado || 0;
-        datosPagos.transferencia += venta.pagos.transferencia || 0;
-        datosPagos.debito += venta.pagos.debito || 0;
-        datosPagos.credito += venta.pagos.credito || 0;
-        let fechaVenta;
-        if (venta.fecha && typeof venta.fecha.toDate === 'function') {
-            fechaVenta = venta.fecha.toDate();
-        } else {
-            fechaVenta = new Date(venta.fecha + 'T00:00:00');
-        }
-        if (!isNaN(fechaVenta)) {
-            const fechaKey = fechaVenta.toISOString().split('T')[0];
-            datosVentasTiempo[fechaKey] = (datosVentasTiempo[fechaKey] || 0) + venta.total;
-        }
-    });
-
-    // --- INICIO DE LA CORRECCIÓN ---
-
-    // 1. Ordenamos los datos de Rubros y Pagos de mayor a menor ANTES de hacer nada.
-    const sortedRubros = Object.entries(datosRubros).sort(([, a], [, b]) => b - a);
-    const sortedPagos = Object.entries(datosPagos).sort(([, a], [, b]) => b - a);
-
-    // 2. Extraemos las etiquetas (labels) y los datos (data) de las listas ya ordenadas.
-    const rubrosLabels = sortedRubros.map(entry => entry[0]);
-    const rubrosData = sortedRubros.map(entry => entry[1]);
-
-    const pagosLabels = sortedPagos.map(item => item[0].charAt(0).toUpperCase() + item[0].slice(1));
-    const pagosData = sortedPagos.map(item => item[1]);
-
-    // Función auxiliar para crear las leyendas (ahora recibe la lista ya ordenada)
+    // Función auxiliar para las leyendas (sin cambios)
     const renderLegend = (containerId, sortedData, colors, title) => {
         const container = document.getElementById(containerId);
         if (!container) return;
-
         let legendHtml = `<h6 class="mb-3">${title}</h6><ul class="list-unstyled">`;
         sortedData.forEach(([label, value], index) => {
             const color = colors[index % colors.length];
+            const formattedLabel = label.charAt(0).toUpperCase() + label.slice(1);
             legendHtml += `
                 <li class="d-flex justify-content-between align-items-center mb-2">
                     <span class="d-flex align-items-center">
                         <span style="display: inline-block; width: 15px; height: 15px; background-color: ${color}; border-radius: 3px; margin-right: 8px;"></span>
-                        ${label.charAt(0).toUpperCase() + label.slice(1)}
+                        ${formattedLabel}
                     </span>
                     <span class="fw-bold">${formatCurrency(value)}</span>
                 </li>`;
@@ -288,79 +245,112 @@ function renderCharts(ventasParaCalcular) {
         container.innerHTML = legendHtml;
     };
 
-    const chartColors = ['#4e73df', '#1cc88a', '#36b9cc', '#f6c23e', '#e74a3b', '#858796', '#f8f9fc', '#5a5c69'];
+    // --- Cálculo de datos (sin cambios) ---
+    const datosRubros = {};
+    const datosPagos = { contado: 0, transferencia: 0, debito: 0, credito: 0 };
+    const datosVentasTiempo = {};
+    const datosVentasPorRubroMetodo = {};
 
-    // 3. Usamos las listas ordenadas para crear el gráfico de Rubros.
+    ventasParaCalcular.forEach(venta => {
+        if (Array.isArray(venta.productos)) {
+            venta.productos.forEach(p => {
+                const rubro = p.rubro || 'Desconocido';
+                datosRubros[rubro] = (datosRubros[rubro] || 0) + (p.cantidad || 0) * (p.precio || 0);
+            });
+        }
+        Object.keys(datosPagos).forEach(metodo => {
+            datosPagos[metodo] += venta.pagos[metodo] || 0;
+        });
+        
+        let fechaVenta = venta.fecha && typeof venta.fecha.toDate === 'function' ? venta.fecha.toDate() : new Date(venta.fecha + 'T00:00:00');
+        if (!isNaN(fechaVenta)) {
+            const fechaKey = fechaVenta.toISOString().split('T')[0];
+            datosVentasTiempo[fechaKey] = (datosVentasTiempo[fechaKey] || 0) + venta.total;
+        }
+
+        const totalVenta = venta.total;
+        if (totalVenta > 0 && Array.isArray(venta.productos)) {
+            venta.productos.forEach(p => {
+                const rubro = p.rubro || 'Desconocido';
+                const proporcion = ((p.precio || 0) * (p.cantidad || 0)) / totalVenta;
+                if (!datosVentasPorRubroMetodo[rubro]) {
+                    datosVentasPorRubroMetodo[rubro] = { contado: 0, transferencia: 0, debito: 0, credito: 0 };
+                }
+                Object.keys(datosVentasPorRubroMetodo[rubro]).forEach(metodo => {
+                    datosVentasPorRubroMetodo[rubro][metodo] += (venta.pagos[metodo] || 0) * proporcion;
+                });
+            });
+        }
+    });
+
+    const chartColors = ['#4e73df', '#1cc88a', '#36b9cc', '#f6c23e', '#e74a3b', '#858796'];
+    const pagoColors = { contado: '#1cc88a', transferencia: '#4e73df', debito: '#858796', credito: '#f6c23e' };
+
+    // Renderizado de Gráfico de Ventas por Rubro (sin cambios)
     if (chartRubros) chartRubros.destroy();
-    chartRubros = new Chart(document.getElementById('chartRubros'), {
-        type: 'pie',
-        data: {
-            labels: rubrosLabels, // <--- Usamos la lista ordenada
-            datasets: [{ data: rubrosData, backgroundColor: chartColors, hoverBackgroundColor: chartColors }], // <--- Usamos la lista ordenada
-        },
-        options: { maintainAspectRatio: false, plugins: { legend: { display: false } } },
-    });
-    // 4. Pasamos la lista ordenada a la función de la leyenda.
-    renderLegend('chartRubros-legend', sortedRubros, chartColors, 'Total por Rubro');
+    const sortedRubros = Object.entries(datosRubros).sort(([, a], [, b]) => b - a);
+    const ctxRubros = document.getElementById('chartRubros');
+    if (ctxRubros) {
+        chartRubros = new Chart(ctxRubros, { type: 'pie', data: { labels: sortedRubros.map(e => e[0]), datasets: [{ data: sortedRubros.map(e => e[1]), backgroundColor: chartColors }] }, options: { maintainAspectRatio: false, plugins: { legend: { display: false } } } });
+        renderLegend('chartRubros-legend', sortedRubros, chartColors, 'Total por Rubro');
+    }
 
-    // 5. Hacemos lo mismo para el gráfico de Pagos.
+    // --- INICIO DE LA MODIFICACIÓN: Gráfico de Métodos de Pago ---
     if (chartPagos) chartPagos.destroy();
-    chartPagos = new Chart(document.getElementById('chartPagos'), {
-        type: 'doughnut',
-        data: {
-            labels: pagosLabels, // <--- Usamos la lista ordenada
-            datasets: [{ data: pagosData, backgroundColor: chartColors, hoverBackgroundColor: chartColors }], // <--- Usamos la lista ordenada
-        },
-        options: { maintainAspectRatio: false, plugins: { legend: { display: false } } },
-    });
-    renderLegend('chartPagos-legend', sortedPagos, chartColors, 'Total por Método');
+    const sortedPagos = Object.entries(datosPagos).sort(([, a], [, b]) => b - a);
+    const ctxPagos = document.getElementById('chartPagos');
+    if (ctxPagos) {
+        // Creamos un array de colores que respeta el orden de los datos, usando nuestro mapa de colores fijos.
+        const pagosChartColores = sortedPagos.map(([metodo, value]) => pagoColors[metodo] || '#cccccc');
 
-    // --- FIN DE LA CORRECCIÓN ---
-
-    // --- Renderizado del Gráfico de Ventas en el Tiempo (sin cambios) ---
-    const fechasOrdenadas = Object.keys(datosVentasTiempo).sort((a, b) => new Date(a) - new Date(b));
-    const ventasOrdenadas = fechasOrdenadas.map(fecha => datosVentasTiempo[fecha]);
-    if (chartVentasTiempo) chartVentasTiempo.destroy();
-    chartVentasTiempo = new Chart(document.getElementById('chartVentasTiempo'), {
-        type: 'line',
-        data: {
-            labels: fechasOrdenadas,
-            datasets: [{
-                label: 'Ventas Diarias',
-                data: ventasOrdenadas,
-                borderColor: '#4e73df',
-                backgroundColor: 'rgba(78, 115, 223, 0.05)',
-                borderWidth: 2,
-                pointRadius: 3,
-                pointBackgroundColor: '#4e73df',
-                pointBorderColor: '#4e73df',
-            }],
-        },
-        options: {
-            maintainAspectRatio: false,
-            scales: {
-                x: { title: { display: true, text: 'Fecha' } },
-                y: { beginAtZero: true, title: { display: true, text: 'Monto de Venta' } },
+        chartPagos = new Chart(ctxPagos, {
+            type: 'doughnut',
+            data: {
+                labels: sortedPagos.map(e => e[0]),
+                datasets: [{
+                    data: sortedPagos.map(e => e[1]),
+                    backgroundColor: pagosChartColores // Usamos los colores fijos y ordenados
+                }]
             },
-        },
-    });
+            options: { maintainAspectRatio: false, plugins: { legend: { display: false } } }
+        });
+        // Pasamos los mismos colores a la leyenda para que coincida.
+        renderLegend('chartPagos-legend', sortedPagos, pagosChartColores, 'Total por Método');
+    }
+    // --- FIN DE LA MODIFICACIÓN ---
+
+    // Renderizado de Gráfico de Ventas en el Tiempo (sin cambios)
+    if (chartVentasTiempo) chartVentasTiempo.destroy();
+    const fechasOrdenadas = Object.keys(datosVentasTiempo).sort((a, b) => new Date(a) - new Date(b));
+    const ctxTiempo = document.getElementById('chartVentasTiempo');
+    if (ctxTiempo) {
+        chartVentasTiempo = new Chart(ctxTiempo, { type: 'line', data: { labels: fechasOrdenadas, datasets: [{ label: 'Ventas Diarias', data: fechasOrdenadas.map(f => datosVentasTiempo[f]), borderColor: '#4e73df', borderWidth: 2 }] }, options: { maintainAspectRatio: false, scales: { y: { beginAtZero: true } } } });
+    }
+
+    // Renderizado de Gráfico de Barras Apiladas (sin cambios)
+    if (chartContadoPorRubro) chartContadoPorRubro.destroy();
+    const ctxStacked = document.getElementById('chartContadoPorRubro');
+    if (ctxStacked) {
+        const rubrosLabels = Object.keys(datosVentasPorRubroMetodo);
+        const datasets = Object.keys(pagoColors).map(metodo => ({
+            label: metodo.charAt(0).toUpperCase() + metodo.slice(1),
+            data: rubrosLabels.map(rubro => datosVentasPorRubroMetodo[rubro][metodo]),
+            backgroundColor: pagoColors[metodo],
+        }));
+        chartContadoPorRubro = new Chart(ctxStacked, { type: 'bar', data: { labels: rubrosLabels, datasets: datasets }, options: { maintainAspectRatio: false, scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, ticks: { callback: (value) => formatCurrency(value) } } }, plugins: { legend: { position: 'top' }, tooltip: { callbacks: { label: (context) => { const label = context.dataset.label || ''; const value = context.raw || 0; if (value > 0) { return `${label}: ${formatCurrency(value)}`; } return null; } } } } } });
+    }
 }
 
 
-// REEMPLAZA ESTA FUNCIÓN ENTERA EN reportes.js
-
-// REEMPLAZA ESTA FUNCIÓN ENTERA EN reportes.js
 
 async function filtrarReporte() {
     if (!reporteFechaDesde) return;
     const desde = reporteFechaDesde.value;
     const hasta = reporteFechaHasta.value;
-    const rubroFiltro = filtroReporteRubro.value.trim();
+    const rubroFiltro = filtroReporteRubro.value.trim().toLowerCase();
 
-    // --- INICIO DE LA NUEVA LÓGICA ---
-
-    // 1. PRIMER FILTRADO: Obtenemos TODAS las ventas del período (activas y anuladas)
-    const todasLasVentasDelPeriodo = ventas.filter(venta => {
+    // 1. Filtramos por fecha, como antes.
+    const ventasPorFecha = ventas.filter(venta => {
         let fechaVenta;
         if (venta.fecha && typeof venta.fecha.toDate === 'function') {
             fechaVenta = venta.fecha.toDate();
@@ -375,24 +365,57 @@ async function filtrarReporte() {
         const fechaDesde = desde ? new Date(desde + 'T00:00:00') : null;
         const fechaHasta = hasta ? new Date(hasta + 'T23:59:59') : null;
 
-        const matchesDate = (!fechaDesde || fechaVenta >= fechaDesde) && (!fechaHasta || fechaVenta <= fechaHasta);
-
-        const matchesRubro = !rubroFiltro || (Array.isArray(venta.productos) && venta.productos.some(p => {
-            const rubroProducto = p.rubro || 'Desconocido';
-            return rubroProducto.toLowerCase() === rubroFiltro.toLowerCase();
-        }));
-
-        return matchesDate && matchesRubro;
+        return (!fechaDesde || fechaVenta >= fechaDesde) && (!fechaHasta || fechaVenta <= fechaHasta);
     });
 
-    // 2. SEGUNDO FILTRADO: Creamos una lista "limpia" solo con las ventas activas para los cálculos.
-    ventasFiltradas = todasLasVentasDelPeriodo.filter(venta => venta.estado !== 'anulada');
+    // 2. Procesamos las ventas según el filtro de rubro.
+    let ventasProcesadas;
 
-    // 3. RENDERIZADO:
-    // Pasamos la lista COMPLETA a la tabla de detalle.
-    renderTablaDetalle(todasLasVentasDelPeriodo);
-    // Pasamos la lista "LIMPIA" al resto de los reportes.
-    renderReportes(ventasFiltradas);
+    if (rubroFiltro) {
+        ventasProcesadas = [];
+        ventasPorFecha.forEach(venta => {
+            const productosFiltrados = venta.productos.filter(p =>
+                (p.rubro || 'desconocido').toLowerCase() === rubroFiltro
+            );
+
+            if (productosFiltrados.length > 0) {
+                const nuevoTotal = productosFiltrados.reduce((sum, p) => sum + (p.precio * p.cantidad), 0);
+                const nuevaGanancia = productosFiltrados.reduce((sum, p) => sum + ((p.precio - p.costo) * p.cantidad), 0);
+                
+                // --- INICIO DE LA NUEVA LÓGICA DE PRORRATEO ---
+                const totalOriginal = venta.total;
+                // Calculamos la proporción del nuevo total respecto al original.
+                const ratio = totalOriginal > 0 ? nuevoTotal / totalOriginal : 0;
+
+                // Aplicamos esa proporción a cada método de pago.
+                const nuevosPagos = {
+                    contado: (venta.pagos.contado || 0) * ratio,
+                    transferencia: (venta.pagos.transferencia || 0) * ratio,
+                    debito: (venta.pagos.debito || 0) * ratio,
+                    credito: (venta.pagos.credito || 0) * ratio,
+                    recargoCredito: venta.pagos.recargoCredito || 0 // El % de recargo no se prorratea
+                };
+                // --- FIN DE LA NUEVA LÓGICA DE PRORRATEO ---
+
+                const ventaModificada = {
+                    ...venta,
+                    productos: productosFiltrados,
+                    total: nuevoTotal,
+                    ganancia: nuevaGanancia,
+                    pagos: nuevosPagos, // Usamos el objeto de pagos prorrateado.
+                };
+                ventasProcesadas.push(ventaModificada);
+            }
+        });
+    } else {
+        ventasProcesadas = ventasPorFecha;
+    }
+
+    // 3. El resto del proceso se mantiene igual.
+    const ventasActivasParaCalculos = ventasProcesadas.filter(venta => venta.estado !== 'anulada');
+
+    renderTablaDetalle(ventasProcesadas);
+    renderReportes(ventasActivasParaCalculos);
 
     btnQuitarFiltro.classList.toggle('d-none', !desde && !hasta && !rubroFiltro);
 }
