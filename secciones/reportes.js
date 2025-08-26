@@ -1,6 +1,6 @@
 // secciones/reportes.js
 // AL PRINCIPIO de reportes.js
-import { getFirestore, collection, onSnapshot, query, orderBy, runTransaction, doc } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
+import { getFirestore, collection, query, where, getDocs, orderBy, runTransaction, doc } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
 import { getCollection, getDocumentById, formatCurrency, getTodayDate, generatePDF, showConfirmationModal, showAlertModal } from '../utils.js';
 import { getAuth } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-auth.js";
 import { haySesionActiva, getSesionActivaId, verificarEstadoCaja } from './caja.js';
@@ -16,10 +16,11 @@ let chartRubros, chartPagos, chartVentasTiempo, chartContadoPorRubro;
 
 // --- Funciones de la Sección de Reportes ---
 
+// REEMPLAZA ESTA FUNCIÓN EN reportes.js
 async function loadData() {
-    ventas = await getCollection('ventas');
-    filtrarReporte();
-    renderDatalistRubros();
+    // Ya no cargamos todas las ventas aquí.
+    // Solo preparamos los elementos necesarios para los filtros.
+    await renderDatalistRubros();
 }
 
 // REEMPLAZA ESTA FUNCIÓN ENTERA EN reportes.js
@@ -343,82 +344,74 @@ function renderCharts(ventasParaCalcular) {
 
 
 
+// REEMPLAZA ESTA FUNCIÓN ENTERA EN reportes.js
 async function filtrarReporte() {
-    if (!reporteFechaDesde) return;
-    const desde = reporteFechaDesde.value;
-    const hasta = reporteFechaHasta.value;
-    const rubroFiltro = filtroReporteRubro.value.trim().toLowerCase();
+    const loadingOverlay = document.getElementById('loadingOverlay');
+    if (loadingOverlay) loadingOverlay.style.display = 'flex';
 
-    // 1. Filtramos por fecha, como antes.
-    const ventasPorFecha = ventas.filter(venta => {
-        let fechaVenta;
-        if (venta.fecha && typeof venta.fecha.toDate === 'function') {
-            fechaVenta = venta.fecha.toDate();
-        } else if (venta.fecha) {
-            fechaVenta = new Date(venta.fecha + 'T00:00:00');
-        } else {
-            return false;
+    try {
+        // 1. Obtenemos los valores de los filtros (fechas y rubro)
+        const desde = reporteFechaDesde.value;
+        const hasta = reporteFechaHasta.value;
+        const rubroFiltro = filtroReporteRubro.value.trim().toLowerCase();
+
+        if (!desde || !hasta) {
+            await showAlertModal("Por favor, selecciona un rango de fechas válido.", "Fechas requeridas");
+            return;
         }
 
-        if (isNaN(fechaVenta.getTime())) return false;
-
-        const fechaDesde = desde ? new Date(desde + 'T00:00:00') : null;
-        const fechaHasta = hasta ? new Date(hasta + 'T23:59:59') : null;
-
-        return (!fechaDesde || fechaVenta >= fechaDesde) && (!fechaHasta || fechaVenta <= fechaHasta);
-    });
-
-    // 2. Procesamos las ventas según el filtro de rubro.
-    let ventasProcesadas;
-
-    if (rubroFiltro) {
-        ventasProcesadas = [];
-        ventasPorFecha.forEach(venta => {
-            const productosFiltrados = venta.productos.filter(p =>
-                (p.rubro || 'desconocido').toLowerCase() === rubroFiltro
-            );
-
-            if (productosFiltrados.length > 0) {
-                const nuevoTotal = productosFiltrados.reduce((sum, p) => sum + (p.precio * p.cantidad), 0);
-                const nuevaGanancia = productosFiltrados.reduce((sum, p) => sum + ((p.precio - p.costo) * p.cantidad), 0);
-                
-                // --- INICIO DE LA NUEVA LÓGICA DE PRORRATEO ---
-                const totalOriginal = venta.total;
-                // Calculamos la proporción del nuevo total respecto al original.
-                const ratio = totalOriginal > 0 ? nuevoTotal / totalOriginal : 0;
-
-                // Aplicamos esa proporción a cada método de pago.
-                const nuevosPagos = {
-                    contado: (venta.pagos.contado || 0) * ratio,
-                    transferencia: (venta.pagos.transferencia || 0) * ratio,
-                    debito: (venta.pagos.debito || 0) * ratio,
-                    credito: (venta.pagos.credito || 0) * ratio,
-                    recargoCredito: venta.pagos.recargoCredito || 0 // El % de recargo no se prorratea
-                };
-                // --- FIN DE LA NUEVA LÓGICA DE PRORRATEO ---
-
-                const ventaModificada = {
-                    ...venta,
-                    productos: productosFiltrados,
-                    total: nuevoTotal,
-                    ganancia: nuevaGanancia,
-                    pagos: nuevosPagos, // Usamos el objeto de pagos prorrateado.
-                };
-                ventasProcesadas.push(ventaModificada);
-            }
+        // 2. Creamos la consulta a Firebase para traer solo las ventas del rango de fechas
+        const db = getFirestore();
+        const ventasRef = collection(db, 'ventas');
+        const q = query(ventasRef, where('fecha', '>=', desde), where('fecha', '<=', hasta));
+        
+        // 3. Ejecutamos la consulta
+        const querySnapshot = await getDocs(q);
+        let ventasFetched = [];
+        querySnapshot.forEach((doc) => {
+            ventasFetched.push({ id: doc.id, ...doc.data() });
         });
-    } else {
-        ventasProcesadas = ventasPorFecha;
+
+        // 4. A partir de aquí, el resto de la lógica (filtrar por rubro, prorratear, etc.)
+        // funciona exactamente igual que antes, pero sobre el conjunto de datos más pequeño que acabamos de traer.
+        let ventasProcesadas;
+        if (rubroFiltro) {
+            ventasProcesadas = [];
+            ventasFetched.forEach(venta => {
+                const productosFiltrados = venta.productos.filter(p => (p.rubro || 'desconocido').toLowerCase() === rubroFiltro);
+                if (productosFiltrados.length > 0) {
+                    const totalOriginal = venta.total;
+                    const nuevoTotal = productosFiltrados.reduce((sum, p) => sum + (p.precio * p.cantidad), 0);
+                    const nuevaGanancia = productosFiltrados.reduce((sum, p) => sum + ((p.precio - p.costo) * p.cantidad), 0);
+                    const ratio = totalOriginal > 0 ? nuevoTotal / totalOriginal : 0;
+                    const nuevosPagos = {
+                        contado: (venta.pagos.contado || 0) * ratio,
+                        transferencia: (venta.pagos.transferencia || 0) * ratio,
+                        debito: (venta.pagos.debito || 0) * ratio,
+                        credito: (venta.pagos.credito || 0) * ratio,
+                        recargoCredito: venta.pagos.recargoCredito || 0
+                    };
+                    ventasProcesadas.push({ ...venta, productos: productosFiltrados, total: nuevoTotal, ganancia: nuevaGanancia, pagos: nuevosPagos });
+                }
+            });
+        } else {
+            ventasProcesadas = ventasFetched;
+        }
+
+        // 5. Renderizamos todo con los datos nuevos
+        const ventasActivasParaCalculos = ventasProcesadas.filter(venta => venta.estado !== 'anulada');
+        renderTablaDetalle(ventasProcesadas);
+        renderReportes(ventasActivasParaCalculos);
+        btnQuitarFiltro.classList.toggle('d-none', !desde && !hasta && !filtroReporteRubro.value.trim());
+
+    } catch (error) {
+        console.error("Error al generar el reporte:", error);
+        await showAlertModal("Ocurrió un error al consultar las ventas. Es posible que necesites crear un índice en Firestore (revisa la consola del navegador para ver el enlace).", "Error de Consulta");
+    } finally {
+        if (loadingOverlay) loadingOverlay.style.display = 'none';
     }
-
-    // 3. El resto del proceso se mantiene igual.
-    const ventasActivasParaCalculos = ventasProcesadas.filter(venta => venta.estado !== 'anulada');
-
-    renderTablaDetalle(ventasProcesadas);
-    renderReportes(ventasActivasParaCalculos);
-
-    btnQuitarFiltro.classList.toggle('d-none', !desde && !hasta && !rubroFiltro);
 }
+
 
 function limpiarFiltros(filtrar = true) {
     reporteFechaDesde.value = getTodayDate();
