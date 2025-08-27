@@ -48,7 +48,6 @@ function renderReportes(ventasParaCalcular) {
 }
 
 
-// AÑADE ESTA FUNCIÓN NUEVA EN reportes.js
 // REEMPLAZA ESTA FUNCIÓN ENTERA EN reportes.js
 
 async function anularVenta(ventaId) {
@@ -64,7 +63,14 @@ async function anularVenta(ventaId) {
 
     try {
         const db = getFirestore();
-        const ventaAnulada = ventas.find(v => v.id === ventaId);
+
+        // --- INICIO DE LA CORRECCIÓN ---
+        // 1. En lugar de buscar en el array local, traemos la venta específica desde Firestore por su ID.
+        const ventaAnulada = await getDocumentById('ventas', ventaId);
+        if (!ventaAnulada) {
+            throw new Error("No se pudo encontrar la venta en la base de datos para anularla.");
+        }
+        // --- FIN DE LA CORRECCIÓN ---
         
         const montoEfectivoDevuelto = ventaAnulada.pagos.contado || 0;
         if (montoEfectivoDevuelto > 0 && !haySesionActiva()) {
@@ -73,43 +79,25 @@ async function anularVenta(ventaId) {
         
         await runTransaction(db, async (transaction) => {
             const ventaRef = doc(db, 'ventas', ventaId);
-            const ventaDoc = await transaction.get(ventaRef); // PRIMERA LECTURA
+            const ventaDoc = await transaction.get(ventaRef);
 
             if (!ventaDoc.exists()) throw new Error("La venta no existe.");
             const ventaData = ventaDoc.data();
             if (ventaData.estado === 'anulada') throw new Error("Esta venta ya ha sido anulada.");
 
-            const productUpdates = []; // Array para guardar las operaciones de escritura
-
-            // --- FASE DE LECTURA ---
-            // Primero, leemos todos los productos que necesitamos actualizar.
             for (const productoVendido of ventaData.productos) {
                 if (productoVendido.isGeneric) continue;
-
                 const productoRef = doc(db, 'productos', productoVendido.id);
-                const productoDoc = await transaction.get(productoRef); // SOLO LECTURA
-
+                const productoDoc = await transaction.get(productoRef);
                 if (productoDoc.exists()) {
                     const stockActual = productoDoc.data().stock;
                     const nuevoStock = stockActual + productoVendido.cantidad;
-                    // Guardamos la operación de escritura para después, sin ejecutarla aún.
-                    productUpdates.push({ ref: productoRef, data: { stock: nuevoStock } });
+                    transaction.update(productoRef, { stock: nuevoStock });
                 }
             }
-
-            // --- FASE DE ESCRITURA ---
-            // Ahora que todas las lecturas terminaron, realizamos todas las escrituras.
-            
-            // 1. Actualizamos el stock de cada producto.
-            productUpdates.forEach(update => {
-                transaction.update(update.ref, update.data); // SOLO ESCRITURA
-            });
-
-            // 2. Marcamos la venta como anulada.
-            transaction.update(ventaRef, { estado: 'anulada' }); // SOLO ESCRITURA
+            transaction.update(ventaRef, { estado: 'anulada' });
         });
 
-        // El resto de la lógica para el egreso y la redirección no cambia...
         if (montoEfectivoDevuelto > 0) {
             const auth = getAuth();
             const egresoData = {
@@ -118,14 +106,19 @@ async function anularVenta(ventaId) {
                 monto: montoEfectivoDevuelto,
                 concepto: `Devolución por anulación de Venta #${ventaAnulada.ticketId}`,
                 usuario: auth.currentUser.email,
-                fecha: Timestamp.now()
+                fecha: new Date() // Usamos new Date() para que Firestore lo convierta a Timestamp
             };
+            // Asumiendo que tienes una función saveDocument en utils.js
+            const { saveDocument, Timestamp } = await import('../utils.js');
             await saveDocument('caja_movimientos', egresoData);
         }
 
-        await showAlertModal("¡Venta anulada con éxito! El stock ha sido restaurado y el egreso de caja fue registrado.", "Proceso completado");
+        await showAlertModal("¡Venta anulada con éxito! El stock ha sido restaurado.", "Proceso completado");
 
-        await loadData();
+        // --- INICIO DE LA CORRECCIÓN ---
+        // 2. En lugar de loadData(), volvemos a ejecutar el filtro actual para refrescar la tabla.
+        await filtrarReporte();
+        // --- FIN DE LA CORRECCIÓN ---
         
         sessionStorage.setItem('ventaParaCorregir', JSON.stringify(ventaAnulada.productos));
         document.querySelector('a[data-section="ventas"]').click();
@@ -137,6 +130,8 @@ async function anularVenta(ventaId) {
         loadingOverlay.style.display = 'none';
     }
 }
+
+
 // REEMPLAZA ESTA FUNCIÓN ENTERA EN reportes.js
 
 function renderTablaDetalle(ventasParaMostrar) {
