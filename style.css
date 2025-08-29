@@ -219,3 +219,24 @@ td.precio-venta {
     margin-bottom: 0;
 }
 
+/* Añadir esto a tu archivo de estilos */
+form.duplicando {
+    border: 2px solid #0dcaf0; /* Un borde celeste brillante */
+    box-shadow: 0 0 15px rgba(13, 202, 240, 0.5);
+    position: relative;
+    border-radius: .375rem;
+    padding: 1.5rem;
+}
+
+form.duplicando::before {
+    content: 'MODO DUPLICACIÓN: Ingrese un nuevo código';
+    position: absolute;
+    top: -15px;
+    left: 15px;
+    background-color: #0dcaf0;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 5px;
+    font-size: 0.8em;
+    font-weight: bold;
+}

@@ -1,0 +1,154 @@
+<section id="seccion-carga-productos">
+    <h2 class="mb-4">Carga y Preparación de Productos</h2>
+
+    <div class="card shadow-sm mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center bg-info text-white"
+            data-bs-toggle="collapse" data-bs-target="#collapseCargaForm" aria-expanded="true" style="cursor: pointer;">
+            <h5 class="mb-0">Formulario de Carga</h5>
+            <i id="form-chevron-icon" class="fas fa-chevron-up"></i>
+        </div>
+
+        <div class="collapse show" id="collapseCargaForm">
+            <div class="card-body">
+                <form id="form-carga-producto" novalidate>
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <div class="form-floating">
+                                <input type="text" class="form-control" id="prod-codigo" placeholder="Código" required
+                                    autofocus>
+                                <label for="prod-codigo">Código</label>
+                            </div>
+                        </div>
+                        <div class="col-md-8 mb-3">
+                            <div class="form-floating">
+                                <input type="text" class="form-control" id="prod-nombre"
+                                    placeholder="Nombre del Producto" required>
+                                <label for="prod-nombre">Nombre del Producto</label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <div class="form-floating">
+                                <input class="form-control" list="marcas-list-carga" id="prod-marca"
+                                    placeholder="Marca">
+                                <label for="prod-marca">Marca</label>
+                                <datalist id="marcas-list-carga"></datalist>
+                            </div>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <div class="form-floating">
+                                <input class="form-control" list="colores-list-carga" id="prod-color"
+                                    placeholder="Color">
+                                <label for="prod-color">Color</label>
+                                <datalist id="colores-list-carga"></datalist>
+                            </div>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <div class="form-floating">
+                                <input class="form-control" list="rubros-list-carga" id="prod-rubro"
+                                    placeholder="Rubro">
+                                <label for="prod-rubro">Rubro</label>
+                                <datalist id="rubros-list-carga"></datalist>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-2 mb-3">
+                            <div class="form-floating">
+                                <input type="number" class="form-control" id="prod-costo" placeholder="Costo"
+                                    step="0.01" min="0">
+                                <label for="prod-costo">Costo</label>
+                            </div>
+                        </div>
+                        <div class="col-md-2 mb-3">
+                            <div class="form-floating">
+                                <input type="number" class="form-control" id="prod-ganancia" value="75"
+                                    placeholder="Margen %">
+                                <label for="prod-ganancia">Margen %</label>
+                            </div>
+                        </div>
+                        <div class="col-md-2 mb-3">
+                            <div class="form-floating">
+                                <input type="number" class="form-control" id="prod-venta" placeholder="Venta" step="1">
+                                <label for="prod-venta">Venta</label>
+                            </div>
+                        </div>
+                        <div class="col-md-2 mb-3">
+                            <div class="form-floating">
+                                <input type="number" class="form-control" id="prod-stock" value="1" placeholder="Stock"
+                                    min="0">
+                                <label for="prod-stock">Stock</label>
+                            </div>
+                        </div>
+                        <div class="col-md-2 mb-3">
+                            <div class="form-floating">
+                                <input type="number" class="form-control" id="prod-stock-minimo" value="0"
+                                    placeholder="Stock Mínimo" min="0">
+                                <label for="prod-stock-minimo">Stock Mínimo</label>
+                            </div>
+                        </div>
+                        <div
+                            class="col-md-2 mb-3 d-flex align-items-center justify-content-around bg-light rounded border">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" role="switch" id="prod-generico">
+                                <label class="form-check-label" for="prod-generico">Genérico</label>
+                            </div>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" role="switch" id="prod-destacado">
+                                <label class="form-check-label" for="prod-destacado">Destacado</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <hr>
+                    <div class="text-end">
+                        <button type="button" id="btn-limpiar-formulario" class="btn btn-secondary"><i
+                                class="fas fa-undo me-2"></i>Limpiar</button>
+
+                        <button type="button" id="btn-agregar-y-duplicar" class="btn btn-info"><i
+                                class="fas fa-copy me-2"></i>Agregar y Duplicar</button>
+
+                        <button type="submit" id="btn-agregar-a-grilla" class="btn btn-success"><i
+                                class="fas fa-arrow-down me-2"></i>Agregar a la Lista</button>
+
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-header bg-success text-white">
+            <h5 class="mb-0">Productos en Preparación (<span id="contador-productos">0</span>)</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover table-sm">
+                    <thead>
+                        <tr>
+                            <th style="width: 10%;">Código</th>
+                            <th style="width: 25%;">Nombre</th>
+                            <th>Marca</th>
+                            <th>Color</th>
+                            <th>Rubro</th>
+                            <th style="width: 8%;">Costo</th>
+                            <th>Margen %</th>
+                            <th style="width: 8%;">Venta</th>
+                            <th>Stock</th>
+                            <th>Stock Min.</th>
+                            <th style="width: 120px;">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="grilla-productos"></tbody>
+                </table>
+            </div>
+            <p id="grilla-vacia-mensaje" class="text-center text-muted mt-3">La lista está vacía.</p>
+        </div>
+        <div class="card-footer text-end">
+            <button id="btn-guardar-todo" class="btn btn-success btn-lg" disabled><i
+                    class="fas fa-save me-2"></i>Guardar Todo en la Base de Datos</button>
+        </div>
+    </div>
+</section>
