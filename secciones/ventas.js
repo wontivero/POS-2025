@@ -151,12 +151,13 @@ function renderTicket() {
             delete item.justChanged;
         }
         // --- Fin de la lógica para el efecto visual ---
-        
+
         const genericIndicator = item.isGeneric ? '<i class="fas fa-pencil-alt fa-xs text-info ms-2" title="Precio manual"></i>' : '';
+        const marcaTexto = item.marca ? `<span class="text-muted fw-normal"> - ${item.marca}</span>` : '';
 
         itemDiv.innerHTML = `
             <div>
-                <h6 class="mb-1 ticket-item-nombre">${item.nombre}${genericIndicator}</h6>
+                <h6 class="mb-1 ticket-item-nombre">${item.nombre}${marcaTexto}${genericIndicator}</h6>
                 <small class="text-muted" id="desc-${index}">${item.cantidad} x ${formatCurrency(item.precio)}</small>
             </div>
             <div class="d-flex align-items-center">
@@ -230,7 +231,7 @@ async function handleQuantityManualChange(e) {
         item.total = item.cantidad * item.precio;
         item.justChanged = true;
     }
-    
+
     renderTicket(); // Volvemos a renderizar el ticket para reflejar todos los cambios
 }
 
@@ -288,14 +289,14 @@ function handleSearch(e) {
     searchResults.innerHTML = '';
     if (query.length < 2) return;
 
-    const filteredProducts = productos.filter(p => p.nombre.toLowerCase().includes(query) || p.codigo?.toLowerCase().includes(query));
+    const filteredProducts = productos.filter(p => p.nombre.toLowerCase().includes(query) || p.codigo?.toLowerCase().includes(query) || p.marca?.toLowerCase().includes(query));
 
     if (filteredProducts.length > 0) {
         filteredProducts.forEach(producto => {
             const resultItem = document.createElement('a');
             resultItem.href = '#';
             resultItem.className = 'list-group-item list-group-item-action';
-            resultItem.textContent = `${producto.nombre} (${producto.codigo}) - ${formatCurrency(producto.venta)}`;
+            resultItem.textContent = `${producto.nombre} (${producto.codigo}) [${producto.marca.toUpperCase()}] - ${formatCurrency(producto.venta)}`;
             resultItem.dataset.id = producto.id;
             searchResults.appendChild(resultItem);
         });
@@ -320,7 +321,7 @@ async function addProductToTicket(productId) {
         genericProductName.textContent = producto.nombre;
         genericPriceInput.value = ''; // Limpiamos el valor anterior
         genericPriceModal.show(); // Mostramos el modal
-        
+
     } else {
         // La lógica para productos normales sigue igual
         let productoEncontradoEnTicket = false;
@@ -340,8 +341,8 @@ async function addProductToTicket(productId) {
         }
         if (!productoEncontradoEnTicket) {
             ticket.push({
-                id: producto.id, nombre: producto.nombre, precio: producto.venta, costo: producto.costo,
-                cantidad: 1, total: producto.venta, isGeneric: false,justAdded: true 
+                id: producto.id, nombre: producto.nombre, marca: producto.marca || '', precio: producto.venta, costo: producto.costo,
+                cantidad: 1, total: producto.venta, isGeneric: false, justAdded: true
             });
         }
         productoSearch.value = '';
@@ -379,7 +380,7 @@ async function handleConfirmGenericPrice() {
         total: finalPrice,
         isGeneric: true,
         genericProfitMargin: genericProductToAdd.genericProfitMargin || 70,
-        justAdded: true 
+        justAdded: true
     });
 
     genericPriceModal.hide(); // Ocultamos el modal
@@ -879,7 +880,7 @@ export async function init() {
     ticketItems.addEventListener('focus', (e) => {
         if (e.target.classList.contains('quantity-input')) e.target.select();
     }, true);
-    
+
     // Listener para la navegación con flechas dentro del ticket
     ticketItems.addEventListener('keydown', (e) => {
         if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
@@ -901,7 +902,7 @@ export async function init() {
         document.addEventListener('click', (e) => {
             const seccionVentas = document.getElementById('seccion-ventas');
             if (!seccionVentas || !seccionVentas.contains(e.target)) return;
-            
+
             const quickAccessCard = e.target.closest('.product-card-mini');
             if (quickAccessCard) {
                 addProductToTicket(quickAccessCard.dataset.id);
@@ -964,7 +965,7 @@ export async function init() {
                 }
                 return;
             }
-            
+
             switch (e.key) {
                 case 'F1': e.preventDefault(); document.getElementById('btnPagoRapidoContado')?.click(); break;
                 case 'F2': e.preventDefault(); document.getElementById('btnPagoRapidoTransferencia')?.click(); break;

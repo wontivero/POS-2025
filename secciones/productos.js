@@ -115,7 +115,8 @@ function aplicarFiltrosYRenderizar() {
         const busquedaRapidaTermino = filtroProductos.value.toLowerCase().trim();
         productosFiltrados = productosFiltrados.filter(p =>
             (p.nombre_lowercase && p.nombre_lowercase.includes(busquedaRapidaTermino)) ||
-            (p.codigo && p.codigo.toLowerCase().includes(busquedaRapidaTermino))
+            (p.codigo && p.codigo.toLowerCase().includes(busquedaRapidaTermino)) ||
+            (p.marca && p.marca.toLowerCase().includes(busquedaRapidaTermino))
         );
     }
 
