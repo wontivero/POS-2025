@@ -19,6 +19,7 @@ let currentSortDirection = 'asc';
 let tablaProductosBody, tablaProductosHead, btnNuevoProducto, productoModalEl, productoModal, formProducto, modalProductoLabel, btnExportarProductos;
 let filtroProductos, filtroMarca, filtroColor, filtroRubro, filtroStockMin, filtroStockMax, filtroVentaMin, filtroVentaMax, btnAplicarFiltros, btnLimpiarFiltros;
 let updateField, updateTypePercentage, updateTypeFixed, updateAmount, btnAplicarActualizacionMasiva;
+let filtroFechaActDesde, filtroFechaActHasta;
 let datalistMarcasFiltro, datalistColoresFiltro, datalistRubrosFiltro;
 let datalistMarcasModal, datalistColoresModal, datalistRubrosModal;
 let productoId, productoNombre, productoCodigo, productoMarca, productoColor, productoRubro, productoCosto, productoVenta, productoPorcentaje, productoStock, productoStockMinimo, productoDestacado;
@@ -153,6 +154,22 @@ function aplicarFiltrosYRenderizar() {
     if (filtroVentaMax && !isNaN(parseFloat(filtroVentaMax.value))) {
         const ventaMax = parseFloat(filtroVentaMax.value);
         productosFiltrados = productosFiltrados.filter(p => p.venta <= ventaMax);
+    }
+    const fechaDesdeStr = filtroFechaActDesde.value;
+    const fechaHastaStr = filtroFechaActHasta.value;
+
+    if (fechaDesdeStr) {
+        const fechaDesde = new Date(fechaDesdeStr + 'T00:00:00'); // Inicio del día
+        productosFiltrados = productosFiltrados.filter(p => {
+            return p.fechaUltimoCambioPrecio && p.fechaUltimoCambioPrecio.toDate() >= fechaDesde;
+        });
+    }
+
+    if (fechaHastaStr) {
+        const fechaHasta = new Date(fechaHastaStr + 'T23:59:59'); // Final del día
+        productosFiltrados = productosFiltrados.filter(p => {
+            return p.fechaUltimoCambioPrecio && p.fechaUltimoCambioPrecio.toDate() <= fechaHasta;
+        });
     }
 
     productosFiltradosActuales = productosFiltrados;
@@ -697,7 +714,7 @@ function abrirProductoModal(modo, producto = null) {
         if (productoMargenGenerico) productoMargenGenerico.value = producto.genericProfitMargin ?? 70;
         if (productoDestacado) productoDestacado.checked = producto.isFeatured ?? false;
         if (genericProfitFields) genericProfitFields.style.display = producto.isGeneric ? 'block' : 'none';
-        
+
         updatePorcentajeField();
     }
 
@@ -741,6 +758,8 @@ export function init() {
     filtroStockMax = document.getElementById('filtro-stock-max');
     filtroVentaMin = document.getElementById('filtro-venta-min');
     filtroVentaMax = document.getElementById('filtro-venta-max');
+    filtroFechaActDesde = document.getElementById('filtro-fecha-act-desde'); // <-- AÑADE ESTA LÍNEA
+    filtroFechaActHasta = document.getElementById('filtro-fecha-act-hasta');
     btnAplicarFiltros = document.getElementById('btnAplicarFiltros');
     btnLimpiarFiltros = document.getElementById('btnLimpiarFiltros');
 
@@ -795,7 +814,7 @@ export function init() {
         tablaProductosBody.addEventListener('click', (e) => {
             if (e.target.closest('.btn-eliminar-producto')) handleDelete(e);
             if (e.target.closest('.btn-editar-producto')) handleEdit(e);
-            if (e.target.closest('.btn-duplicar-producto')) handleDuplicate(e); 
+            if (e.target.closest('.btn-duplicar-producto')) handleDuplicate(e);
         });
     }
     if (tablaProductosHead) tablaProductosHead.addEventListener('click', handleSort);
@@ -816,6 +835,8 @@ export function init() {
             if (filtroStockMax) filtroStockMax.value = '';
             if (filtroVentaMin) filtroVentaMin.value = '';
             if (filtroVentaMax) filtroVentaMax.value = '';
+            if (filtroFechaActDesde) filtroFechaActDesde.value = ''; // <-- AÑADE ESTA LÍNEA
+            if (filtroFechaActHasta) filtroFechaActHasta.value = '';
             aplicarFiltrosYRenderizar();
         });
     }
