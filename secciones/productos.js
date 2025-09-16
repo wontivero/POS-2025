@@ -264,9 +264,9 @@ async function handleFormSubmit(e) {
         nombre: productoNombre.value.trim(),
         nombre_lowercase: productoNombre.value.trim().toLowerCase(),
         codigo: productoCodigo.value.trim(),
-        marca: productoMarca.value.trim(),
-        color: productoColor.value.trim(),
-        rubro: productoRubro.value.trim(),
+        marca: productoMarca.value.trim().toLowerCase(),
+        color: productoColor.value.trim().toLowerCase(),
+        rubro: productoRubro.value.trim().toLowerCase(),
         costo: parseFloat(productoCosto.value) || 0,
         venta: parseFloat(productoVenta.value) || 0,
         stock: parseInt(productoStock.value) || 0,
@@ -304,8 +304,9 @@ async function handleFormSubmit(e) {
 
 async function addUniqueItem(collectionName, itemName) {
     if (!itemName) return;
+    const itemNormalizado = itemName.trim().toLowerCase();
     const itemRef = collection(db, collectionName);
-    const q = query(itemRef, where('nombre', '==', itemName));
+    const q = query(itemRef, where('nombre', '==', itemNormalizado));
     const querySnapshot = await getDocs(q);
     if (querySnapshot.empty) {
         await addDoc(itemRef, { nombre: itemName });
@@ -451,20 +452,25 @@ async function handleActualizacionMasiva() {
     }
 }
 
-// REEMPLAZAR en productos.js
+// REEMPLAZA ESTA FUNCIÓN ENTERA EN productos.js
+
 async function exportarProductosAExcel() {
-    if (listaCompletaProductos.length === 0) {
-        await showAlertModal('No hay productos para exportar.');
+    // --- INICIO DE LA MODIFICACIÓN ---
+    // Ahora usamos la lista de productos ya filtrados que se muestra en la tabla.
+    const productosAExportar = productosFiltradosActuales;
+
+    if (productosAExportar.length === 0) {
+        await showAlertModal('No hay productos en la lista actual para exportar.');
         return;
     }
+    // --- FIN DE LA MODIFICACIÓN ---
 
-    // Pequeña función local para capitalizar, evitando errores de funciones externas.
     const capitalize = (s) => {
         if (typeof s !== 'string' || s.length === 0) return '';
         return s.charAt(0).toUpperCase() + s.slice(1);
     };
 
-    const data = listaCompletaProductos.map(p => {
+    const data = productosAExportar.map(p => { // <-- Usamos la lista filtrada
         let porcentajeGanancia = '0';
         if (p.costo > 0) {
             porcentajeGanancia = (((p.venta - p.costo) / p.costo) * 100).toFixed(2);
@@ -506,7 +512,7 @@ async function exportarProductosAExcel() {
     const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; // <-- LÍNEA FUNDAMENTAL RESTAURADA
+    a.href = url;
     a.download = `productos_exportados_${new Date().toISOString().slice(0, 10)}.csv`;
     document.body.appendChild(a);
     a.click();
@@ -735,6 +741,67 @@ function handleNewProduct() {
 }
 
 
+
+
+// ------------------------------------------------------------
+// AÑADE ESTA FUNCIÓN NUEVA EN productos.js
+
+// async function normalizarDatosAntiguos() {
+//     const confirmado = await showConfirmationModal(
+//         "Este es un proceso de mantenimiento de un solo uso. Se convertirán todos los campos de Marca, Color y Rubro a minúsculas en la base de datos para asegurar la consistencia. ¿Deseas continuar?",
+//         "Confirmar Normalización"
+//     );
+//     if (!confirmado) return;
+
+//     const loader = document.getElementById('loader-overlay');
+//     if (loader) loader.classList.remove('d-none');
+
+//     try {
+//         // La función 'writeBatch' ya está importada en este archivo, por lo que funcionará.
+//         const batch = writeBatch(db);
+//         let updatesCounter = 0;
+
+//         for (const producto of listaCompletaProductos) {
+//             const updateData = {};
+//             let needsUpdate = false;
+
+//             if (producto.marca && producto.marca !== producto.marca.toLowerCase()) {
+//                 updateData.marca = producto.marca.toLowerCase();
+//                 needsUpdate = true;
+//             }
+//             if (producto.color && producto.color !== producto.color.toLowerCase()) {
+//                 updateData.color = producto.color.toLowerCase();
+//                 needsUpdate = true;
+//             }
+//             if (producto.rubro && producto.rubro !== producto.rubro.toLowerCase()) {
+//                 updateData.rubro = producto.rubro.toLowerCase();
+//                 needsUpdate = true;
+//             }
+
+//             if (needsUpdate) {
+//                 const productoRef = doc(db, 'productos', producto.id);
+//                 batch.update(productoRef, updateData);
+//                 updatesCounter++;
+//             }
+//         }
+
+//         if (updatesCounter > 0) {
+//             await batch.commit();
+//             await showAlertModal(`¡Normalización completada! Se actualizaron ${updatesCounter} productos.`);
+//         } else {
+//             await showAlertModal("No se encontraron datos para normalizar. ¡Todo está en orden!");
+//         }
+
+//     } catch (error) {
+//         console.error("Error al normalizar datos:", error);
+//         await showAlertModal("Ocurrió un error durante la normalización. Revisa la consola.", "Error");
+//     } finally {
+//         if (loader) loader.classList.add('d-none');
+//     }
+// }
+
+//------------------------------------------------------------
+
 // --- FUNCIÓN DE INICIALIZACIÓN ---
 export function init() {
     console.log("Inicializando la sección de productos...");
@@ -791,6 +858,19 @@ export function init() {
     productoDestacado = document.getElementById('producto-destacado');
     const productoGenericoSwitch = document.getElementById('producto-generico');
     const genericProfitFields = document.getElementById('generic-profit-fields');
+
+
+
+    // --- AÑADE ESTE BLOQUE ---
+    // const btnNormalizar = document.getElementById('btnNormalizarDatos');
+    // if (btnNormalizar) {
+    //     btnNormalizar.addEventListener('click', normalizarDatosAntiguos);
+    // }
+    // --- FIN DEL BLOQUE ---
+
+
+
+
 
     // --- INICIALIZACIÓN DE IMPORTACIÓN ---
     btnImportarProductos = document.getElementById('btnImportarProductos');

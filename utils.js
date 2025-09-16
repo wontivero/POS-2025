@@ -414,3 +414,16 @@ export function roundUpToNearest50(num) {
     if (typeof num !== 'number' || num <= 0) return 0;
     return Math.ceil(num / 50) * 50;
 }
+
+
+
+/**
+ * Normaliza un string: lo convierte a minúsculas y le quita los acentos.
+ * Ejemplo: 'Informática' -> 'informatica'
+ * @param {string} str La cadena a normalizar.
+ * @returns {string} La cadena normalizada.
+ */
+export function normalizeString(str) {
+    if (!str || typeof str !== 'string') return '';
+    return str.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}

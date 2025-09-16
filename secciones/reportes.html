@@ -22,150 +22,170 @@
             <button class="btn btn-outline-secondary d-none" id="btnQuitarFiltro"><i class="fas fa-undo me-2"></i>Quitar
                 Filtro</button>
         </div>
+
     </div>
 
-    <div class="row">
+    <div id="reportes-avanzados">
+        <div class="row">
 
-        <div class="col-xl-3 col-md-6 mb-4">
-            <div class="card border-left-primary shadow h-100 py-2">
-                <div class="card-body">
-                    <div class="row no-gutters align-items-center">
-                        <div class="col mr-2">
-                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">Total Ventas</div>
-                            <div class="h5 mb-0 font-weight-bold text-gray-800" id="reporte-total-ventas">$0.00</div>
+            <div class="col-xl-3 col-md-6 mb-4">
+                <div class="card border-left-primary shadow h-100 py-2">
+                    <div class="card-body">
+                        <div class="row no-gutters align-items-center">
+                            <div class="col mr-2">
+                                <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">Total Ventas
+                                </div>
+                                <div class="h5 mb-0 font-weight-bold text-gray-800" id="reporte-total-ventas">$0.00
+                                </div>
+                            </div>
+                            <div class="col-auto"><i class="fas fa-dollar-sign fa-2x text-gray-300"></i></div>
                         </div>
-                        <div class="col-auto"><i class="fas fa-dollar-sign fa-2x text-gray-300"></i></div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-xl-3 col-md-6 mb-4">
+                <div class="card border-left-success shadow h-100 py-2">
+                    <div class="card-body">
+                        <div class="row no-gutters align-items-center">
+                            <div class="col mr-2">
+                                <div class="text-xs font-weight-bold text-success text-uppercase mb-1">Ganancia Bruta
+                                </div>
+                                <div class="h5 mb-0 font-weight-bold text-gray-800" id="reporte-total-ganancia">$0.00
+                                </div>
+                            </div>
+                            <div class="col-auto"><i class="fas fa-hand-holding-usd fa-2x text-gray-300"></i></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-xl-3 col-md-6 mb-4">
+                <div class="card border-left-info shadow h-100 py-2">
+                    <div class="card-body">
+                        <div class="row no-gutters align-items-center">
+                            <div class="col mr-2">
+                                <div class="text-xs font-weight-bold text-info text-uppercase mb-1">Número de Ventas
+                                </div>
+                                <div class="h5 mb-0 font-weight-bold text-gray-800" id="reporte-num-ventas">0</div>
+                            </div>
+                            <div class="col-auto"><i class="fas fa-clipboard-list fa-2x text-gray-300"></i></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-xl-3 col-md-6 mb-4">
+                <div class="card border-left-warning shadow h-100 py-2">
+                    <div class="card-body">
+                        <div class="row no-gutters align-items-center">
+                            <div class="col mr-2">
+                                <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">Ticket Promedio
+                                </div>
+                                <div class="h5 mb-0 font-weight-bold text-gray-800" id="reporte-ticket-promedio">$0.00
+                                </div>
+                            </div>
+                            <div class="col-auto"><i class="fas fa-comments dollar-sign fa-2x text-gray-300"></i></div>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
-        <div class="col-xl-3 col-md-6 mb-4">
-            <div class="card border-left-success shadow h-100 py-2">
-                <div class="card-body">
-                    <div class="row no-gutters align-items-center">
-                        <div class="col mr-2">
-                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">Ganancia Bruta</div>
-                            <div class="h5 mb-0 font-weight-bold text-gray-800" id="reporte-total-ganancia">$0.00</div>
-                        </div>
-                        <div class="col-auto"><i class="fas fa-hand-holding-usd fa-2x text-gray-300"></i></div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-xl-3 col-md-6 mb-4">
-            <div class="card border-left-info shadow h-100 py-2">
-                <div class="card-body">
-                    <div class="row no-gutters align-items-center">
-                        <div class="col mr-2">
-                            <div class="text-xs font-weight-bold text-info text-uppercase mb-1">Número de Ventas</div>
-                            <div class="h5 mb-0 font-weight-bold text-gray-800" id="reporte-num-ventas">0</div>
-                        </div>
-                        <div class="col-auto"><i class="fas fa-clipboard-list fa-2x text-gray-300"></i></div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-xl-3 col-md-6 mb-4">
-            <div class="card border-left-warning shadow h-100 py-2">
-                <div class="card-body">
-                    <div class="row no-gutters align-items-center">
-                        <div class="col mr-2">
-                            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">Ticket Promedio</div>
-                            <div class="h5 mb-0 font-weight-bold text-gray-800" id="reporte-ticket-promedio">$0.00</div>
-                        </div>
-                        <div class="col-auto"><i class="fas fa-comments dollar-sign fa-2x text-gray-300"></i></div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
 
-    <div class="row mb-4">
-        <div class="col-lg-4 mb-4">
-            <div class="card shadow mb-4 h-100">
-                <div class="card-header py-3 bg-primary text-white">
-                    <h6 class="m-0 font-weight-bold">Desglose de Ventas por Rubro y Método de Pago</h6>
-                </div>
-                <div class="card-body">
-                    <div class="chart-bar" style="height: 250px; position: relative;">
-                        <canvas id="chartContadoPorRubro"></canvas>
+        <div class="row mb-4">
+            <div class="col-lg-4 mb-4">
+                <div class="card shadow mb-4 h-100">
+                    <div class="card-header py-3 bg-primary text-white">
+                        <h6 class="m-0 font-weight-bold">Desglose de Ventas por Rubro y Método de Pago</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="chart-bar" style="height: 250px; position: relative;">
+                            <canvas id="chartContadoPorRubro"></canvas>
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
-        <div class="col-lg-4 mb-4">
-            <div class="card shadow mb-4 h-100">
-                <div class="card-header py-3 bg-primary text-white">
-                    <h6 class="m-0 font-weight-bold">Ventas por Rubro</h6>
-                </div>
-                <div class="card-body">
-                    <div class="row align-items-center">
-                        <div class="col-md-5">
-                            <div class="chart-pie pt-4 pb-2" style="height: 200px; position: relative;"><canvas
-                                    id="chartRubros"></canvas></div>
-                        </div>
-                        <div class="col-md-6">
-                            <div id="chartRubros-legend" class="mt-4">
+            <div class="col-lg-4 mb-4">
+                <div class="card shadow mb-4 h-100">
+                    <div class="card-header py-3 bg-primary text-white">
+                        <h6 class="m-0 font-weight-bold">Ventas por Rubro</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="row align-items-center">
+                            <div class="col-md-5">
+                                <div class="chart-pie pt-4 pb-2" style="height: 200px; position: relative;"><canvas
+                                        id="chartRubros"></canvas></div>
+                            </div>
+                            <div class="col-md-6">
+                                <div id="chartRubros-legend" class="mt-4">
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
-        </div>
-        <div class="col-lg-4 mb-4">
-            <div class="card shadow mb-4 h-100">
-                <div class="card-header py-3 bg-success text-white">
-                    <h6 class="m-0 font-weight-bold">Métodos de Pago Utilizados</h6>
-                </div>
-                <div class="card-body">
-                    <div class="row align-items-center">
-                        <div class="col-md-5">
-                            <div class="chart-pie pt-4 pb-2" style="height: 250px; position: relative;"><canvas
-                                    id="chartPagos"></canvas></div>
+
+
+            <div class="col-lg-4 mb-4">
+                <div class="card shadow mb-4 h-100">
+                    <div class="card-header py-3 bg-success text-white">
+                        <h6 class="m-0 font-weight-bold">Métodos de Pago Utilizados</h6>
+                    </div>
+                    <div class="card-body">
+
+                        <div id="filtro-rubros-pagos-container">
+                            <h6 class="mb-2 small text-uppercase fw-bold">Filtrar por Rubro:</h6>
+                            <div class="mb-3" id="filtro-rubros-pagos-checkboxes"
+                                style="max-height: 100px; overflow-y: auto; font-size: 0.9em;">
+                            </div>
                         </div>
-                        <div class="col-md-6">
-                            <div id="chartPagos-legend" class="mt-4">
+                        <div class="row align-items-center">
+                            <div class="col-md-5">
+                                <div class="chart-pie pt-4 pb-2" style="height: 250px; position: relative;"><canvas
+                                        id="chartPagos"></canvas></div>
+                            </div>
+                            <div class="col-md-6">
+                                <div id="chartPagos-legend" class="mt-4">
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
-        </div>
-    </div>
 
-    <div class="row mb-4">
-        <div class="col-lg-8 mb-4">
-            <div class="card shadow mb-4 h-100">
-                <div class="card-header py-3 bg-info text-white">
-                    <h6 class="m-0 font-weight-bold">Ventas Diarias</h6>
+
+        </div>
+
+        <div class="row mb-4">
+            <div class="col-lg-8 mb-4">
+                <div class="card shadow mb-4 h-100">
+                    <div class="card-header py-3 bg-info text-white">
+                        <h6 class="m-0 font-weight-bold">Ventas Diarias</h6>
+                    </div>
+                    <div class="card-body ">
+                        <div class="chart-area" style="height: 350px; position: relative;">
+                            <canvas id="chartVentasTiempo"></canvas>
+                        </div>
+                    </div>
                 </div>
-                <div class="card-body ">
-                    <div class="chart-area" style="height: 350px; position: relative;">
-                        <canvas id="chartVentasTiempo"></canvas>
+            </div>
+            <div class="col-lg-4 mb-4">
+                <div class="card shadow mb-4">
+                    <div class="card-header py-3 bg-warning text-white">
+                        <h6 class="m-0 font-weight-bold">Top 10 Productos Vendidos (Unidades)</h6>
+                    </div>
+                    <div class="card-body">
+                        <table class="table table-striped table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Producto</th>
+                                    <th>Unidades</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tablaTopProductos"></tbody>
+                        </table>
                     </div>
                 </div>
             </div>
         </div>
-        <div class="col-lg-4 mb-4">
-            <div class="card shadow mb-4">
-                <div class="card-header py-3 bg-warning text-white">
-                    <h6 class="m-0 font-weight-bold">Top 10 Productos Vendidos (Unidades)</h6>
-                </div>
-                <div class="card-body">
-                    <table class="table table-striped table-sm">
-                        <thead>
-                            <tr>
-                                <th>Producto</th>
-                                <th>Unidades</th>
-                            </tr>
-                        </thead>
-                        <tbody id="tablaTopProductos"></tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
     </div>
-
     <div class="card shadow mb-4">
         <div class="card-header py-3 bg-secondary text-white">
             <h6 class="m-0 font-weight-bold">Detalle de Ventas del Periodo</h6>

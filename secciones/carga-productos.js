@@ -130,6 +130,7 @@ function handleEnterAsTab(e) {
     }
 }
 
+
 // --- LÓGICA DE LA GRILLA (RENDERIZADO) ---
 function renderizarGrilla() {
     const rubroColors = { 'libreria': 'table-primary', 'informatica': 'table-info', 'impresion': 'table-success' };

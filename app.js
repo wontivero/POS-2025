@@ -2,15 +2,37 @@
 
 import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-auth.js";
 import { auth, db } from './firebase.js';
-
+import { getDocs, collection, query, where } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
 // --- Lista de correos autorizados ---
 const emailsAutorizados = [
     'wontivero@gmail.com',
     'consulta.infotech@gmail.com'
 ];
 
+let currentUserRole = null; // Variable global para guardar el rol del usuario
 // --- Elementos del DOM Globales ---
 const mainContent = document.getElementById('main-content');
+
+// --- Nueva Función para obtener el Rol ---
+async function getUserRole(user) {
+    if (!user) return null;
+    const usersRef = collection(db, 'usuarios');
+    const q = query(usersRef, where("email", "==", user.email));
+    const querySnapshot = await getDocs(q);
+    
+    if (querySnapshot.empty) {
+        console.warn("Usuario no encontrado en la colección 'usuarios'. Asignando rol por defecto.");
+        return 'cajero'; // Rol por defecto si no está definido
+    } else {
+        return querySnapshot.docs[0].data().rol;
+    }
+}
+
+// Función exportada para que otros módulos puedan saber el rol actual
+export function getCurrentUserRole() {
+    return currentUserRole;
+}
+
 // La lógica para el menú de usuario y logout se manejará dentro de onAuthStateChanged
 
 // --- INICIO DE LA CORRECCIÓN ---
@@ -31,10 +53,11 @@ document.addEventListener('click', (e) => {
 
 
 // --- Lógica de Autenticación y Carga de la App ---
-onAuthStateChanged(auth, (user) => {
+onAuthStateChanged(auth, async (user) => {
     if (user) {
-        console.log("Usuario autenticado:", user.email);
-
+        currentUserRole = await getUserRole(user); // Obtenemos y guardamos el rol
+        console.log(`Usuario autenticado: ${user.email}, Rol: ${currentUserRole}`);
+        
         // --- Lógica para el menú de usuario ---
         const userAvatar = document.getElementById('user-avatar-img');
         const userDisplayName = document.getElementById('user-display-name');
