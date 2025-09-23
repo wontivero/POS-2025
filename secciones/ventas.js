@@ -3,7 +3,7 @@ import { init as initProductosModal } from './productos.js';
 import { haySesionActiva, getSesionActivaId, verificarEstadoCaja } from './caja.js';
 import { getFirestore, collection, onSnapshot, query, orderBy, runTransaction, doc } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
 import { getCollection, saveDocument, formatCurrency, getTodayDate, getNextTicketNumber, updateDocument, deleteDocument, getFormattedDateTime, generatePDF, showAlertModal, showConfirmationModal } from '../utils.js';
-
+import { getProductos } from './dataManager.js';
 import { companyInfo } from '../config.js';
 
 const db = getFirestore();
@@ -64,22 +64,21 @@ function startVentaExitosaCountdown() {
         }
     }, 1000); // 1000ms = 1 segundo AUTO CIERRE DE LA VENTANA  VENTA EXITOSA
 }
-async function loadData() {
-    // Escuchamos cambios en la colección 'productos' en tiempo real
-    const q = query(collection(db, 'productos'), orderBy('nombre_lowercase'));
-    onSnapshot(q, (snapshot) => {
-        productos = []; // Vaciamos la lista local para reconstruirla
-        snapshot.forEach(doc => {
-            productos.push({ id: doc.id, ...doc.data() });
-        });
-        console.log('Lista de productos actualizada en Ventas:', productos.length);
-        renderQuickAccessProducts();
-    });
 
-    // Las otras cargas se pueden mantener como estaban
+
+async function loadData() {
+    // Obtenemos la lista de productos directamente del caché. ¡Sin lecturas a Firebase!
+    productos = getProductos();
+
+    // Renderizamos los productos de acceso rápido con la lista que ya tenemos.
+    renderQuickAccessProducts();
+
+    // Las otras cargas se mantienen igual.
     await loadClientes();
     renderTicket();
 }
+
+
 
 async function loadClientes() {
     clientes = await getCollection('clientes');
@@ -218,13 +217,7 @@ async function handleQuantityManualChange(e) {
     if (isNaN(newQuantity) || newQuantity < 1) {
         ticket.splice(index, 1);
     }
-    // Si la nueva cantidad excede el stock, la ajustamos al máximo disponible
-    else if (productoOriginal && newQuantity > productoOriginal.stock) {
-        await showAlertModal(`Stock insuficiente. Stock disponible: ${productoOriginal.stock}`);
-        item.cantidad = productoOriginal.stock;
-        item.total = item.cantidad * item.precio;
-        item.justChanged = true;
-    }
+ 
     // Si todo es correcto, actualizamos la cantidad y el total
     else {
         item.cantidad = newQuantity;
@@ -285,18 +278,52 @@ function checkFinalizarVenta() {
 
 function handleSearch(e) {
     selectedIndex = -1;
-    const query = e.target.value.toLowerCase();
+    const userInput = e.target.value.toLowerCase();
     searchResults.innerHTML = '';
-    if (query.length < 2) return;
 
-    const filteredProducts = productos.filter(p => p.nombre.toLowerCase().includes(query) || p.codigo?.toLowerCase().includes(query) || p.marca?.toLowerCase().includes(query));
+    if (userInput.length < 2) return;
 
+    // 1. Dividimos la búsqueda en palabras clave individuales.
+    const searchTerms = userInput.split(' ').filter(term => term.trim().length > 0);
+
+    if (searchTerms.length === 0) return;
+
+    // 2. Filtramos los productos.
+    const filteredProducts = productos.filter(p => {
+        // 3. Creamos un único texto de búsqueda combinando los campos relevantes.
+        const searchableString = [
+            p.nombre,
+            p.codigo,
+            p.marca,
+            p.color // <-- Añadimos el color a los campos de búsqueda
+        ].join(' ').toLowerCase();
+
+        // 4. Verificamos que TODAS las palabras clave estén en el texto del producto.
+        return searchTerms.every(term => searchableString.includes(term));
+    });
+
+    // 5. Mostramos los resultados con el nuevo formato.
     if (filteredProducts.length > 0) {
         filteredProducts.forEach(producto => {
             const resultItem = document.createElement('a');
             resultItem.href = '#';
             resultItem.className = 'list-group-item list-group-item-action';
-            resultItem.textContent = `${producto.nombre} (${producto.codigo}) [${producto.marca.toUpperCase()}] - ${formatCurrency(producto.venta)}`;
+
+            // --- INICIO DE LA NUEVA LÓGICA DE VISUALIZACIÓN ---
+            // Construimos dinámicamente los detalles (marca y color).
+            let detalles = [];
+            if (producto.marca) {
+                detalles.push(producto.marca.toUpperCase());
+            }
+            if (producto.color) {
+                detalles.push(producto.color);
+            }
+            
+            // Unimos los detalles con un guion si ambos existen.
+            const detallesTexto = detalles.join(' - ');
+            // --- FIN DE LA NUEVA LÓGICA DE VISUALIZACIÓN ---
+
+            resultItem.textContent = `${producto.nombre} (${producto.codigo || 'S/C'}) [${detallesTexto}] - ${formatCurrency(producto.venta)}`;
             resultItem.dataset.id = producto.id;
             searchResults.appendChild(resultItem);
         });
@@ -327,14 +354,11 @@ async function addProductToTicket(productId) {
         let productoEncontradoEnTicket = false;
         for (const item of ticket) {
             if (item.id === productId && !item.isGeneric) {
-                if (item.cantidad < producto.stock) {
-                    item.cantidad++;
-                    item.total = item.precio * item.cantidad;
-                    item.justChanged = true;
-                } else {
-                    await showAlertModal('No hay más stock disponible para este producto.');
-                }
+                // Simplemente incrementamos la cantidad, sin importar el stock.
+                item.cantidad++;
+                item.total = item.precio * item.cantidad;
                 item.justChanged = true;
+
                 productoEncontradoEnTicket = true;
                 break;
             }
@@ -494,10 +518,12 @@ async function finalizarVenta() {
                 const productRef = doc(db, 'productos', item.id);
                 const productDoc = await transaction.get(productRef);
                 if (!productDoc.exists()) throw new Error(`El producto "${item.nombre}" ya no existe.`);
-                const currentStock = productDoc.data().stock;
-                if (currentStock < item.cantidad) {
-                    throw new Error(`Stock insuficiente para "${item.nombre}". Disponible: ${currentStock}, Solicitado: ${item.cantidad}.`);
-                }
+
+                // Obtenemos el stock actual, que puede ser 0 o incluso ya negativo.
+                const currentStock = productDoc.data().stock || 0;
+
+                // Se elimina el bloque 'if' que comprueba el stock.
+                // Ahora simplemente calculamos el nuevo stock, que podrá ser negativo.
                 productsToUpdate.push({ ref: productRef, newStock: currentStock - item.cantidad });
             }
 
@@ -990,9 +1016,18 @@ export async function init() {
 
         window.ventasListenersAttached = true;
     }
-    // ========================================================================
-    // --- FIN DE LA CORRECCIÓN ---
-    // ========================================================================
+    // Este es el NUEVO bloque que agregamos para la optimización.
+    // Se encarga únicamente de escuchar las actualizaciones de productos.
+    if (!window.productosUpdateListenerAttached) {
+        document.addEventListener('productos-updated', () => {
+            console.log("Evento 'productos-updated' recibido. Actualizando UI de Ventas...");
+            // Volvemos a obtener la lista actualizada y re-dibujamos los accesos rápidos.
+            productos = getProductos();
+            renderQuickAccessProducts();
+        });
+        window.productosUpdateListenerAttached = true;
+    }
+
 
     // 5. CARGAR DATOS (Sin cambios)
     await loadData();

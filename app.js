@@ -3,6 +3,7 @@
 import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-auth.js";
 import { auth, db } from './firebase.js';
 import { getDocs, collection, query, where } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
+import { initProductosListener } from './secciones/dataManager.js';
 // --- Lista de correos autorizados ---
 const emailsAutorizados = [
     'wontivero@gmail.com',
@@ -12,6 +13,10 @@ const emailsAutorizados = [
 let currentUserRole = null; // Variable global para guardar el rol del usuario
 // --- Elementos del DOM Globales ---
 const mainContent = document.getElementById('main-content');
+
+// Inicia el oyente de productos tan pronto como la app carga.
+// Esto establecerá la "línea directa" con Firebase para los productos.
+initProductosListener();
 
 // --- Nueva Función para obtener el Rol ---
 async function getUserRole(user) {
@@ -57,7 +62,7 @@ onAuthStateChanged(auth, async (user) => {
     if (user) {
         currentUserRole = await getUserRole(user); // Obtenemos y guardamos el rol
         console.log(`Usuario autenticado: ${user.email}, Rol: ${currentUserRole}`);
-        
+
         // --- Lógica para el menú de usuario ---
         const userAvatar = document.getElementById('user-avatar-img');
         const userDisplayName = document.getElementById('user-display-name');

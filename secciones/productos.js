@@ -112,15 +112,31 @@ function aplicarFiltrosYRenderizar() {
 
     let productosFiltrados = [...listaCompletaProductos];
 
+    // --- INICIO DE LA NUEVA LÓGICA DE BÚSQUEDA RÁPIDA ---
     if (filtroProductos && filtroProductos.value.trim() !== '') {
-        const busquedaRapidaTermino = filtroProductos.value.toLowerCase().trim();
-        productosFiltrados = productosFiltrados.filter(p =>
-            (p.nombre_lowercase && p.nombre_lowercase.includes(busquedaRapidaTermino)) ||
-            (p.codigo && p.codigo.toLowerCase().includes(busquedaRapidaTermino)) ||
-            (p.marca && p.marca.toLowerCase().includes(busquedaRapidaTermino))
-        );
-    }
+        const userInput = filtroProductos.value.toLowerCase().trim();
+        // Dividimos la búsqueda en palabras clave individuales
+        const searchTerms = userInput.split(' ').filter(term => term.length > 0);
 
+        if (searchTerms.length > 0) {
+            productosFiltrados = productosFiltrados.filter(p => {
+                // Combinamos todos los campos relevantes en un solo texto para la búsqueda
+                const searchableString = [
+                    p.nombre_lowercase,
+                    p.codigo,
+                    p.marca,
+                    p.color,
+                    p.rubro
+                ].join(' ').toLowerCase();
+
+                // Verificamos que TODAS las palabras clave estén presentes en el texto
+                return searchTerms.every(term => searchableString.includes(term));
+            });
+        }
+    }
+    // --- FIN DE LA NUEVA LÓGICA DE BÚSQUEDA RÁPIDA ---
+
+    // El resto de los filtros avanzados se aplican sobre los resultados de la búsqueda rápida
     if (filtroMarca && filtroMarca.value.trim() !== '') {
         const marca = filtroMarca.value.toLowerCase().trim();
         productosFiltrados = productosFiltrados.filter(p => (p.marca || '').toLowerCase().includes(marca));
