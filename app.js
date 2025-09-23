@@ -3,7 +3,12 @@
 import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-auth.js";
 import { auth, db } from './firebase.js';
 import { getDocs, collection, query, where } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
-import { initProductosListener } from './secciones/dataManager.js';
+import { 
+    initProductosListener, 
+    initMarcasListener, 
+    initColoresListener, 
+    initRubrosListener 
+} from './secciones/dataManager.js';
 // --- Lista de correos autorizados ---
 const emailsAutorizados = [
     'wontivero@gmail.com',
@@ -17,6 +22,9 @@ const mainContent = document.getElementById('main-content');
 // Inicia el oyente de productos tan pronto como la app carga.
 // Esto establecerá la "línea directa" con Firebase para los productos.
 initProductosListener();
+initMarcasListener();
+initColoresListener();
+initRubrosListener();
 
 // --- Nueva Función para obtener el Rol ---
 async function getUserRole(user) {

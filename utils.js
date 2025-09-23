@@ -313,17 +313,17 @@ export function showAlertModal(message, title = 'Aviso') {
             genericModalEl = document.getElementById('genericModal');
             genericModal = new bootstrap.Modal(genericModalEl);
         }
-        
+
         document.getElementById('genericModalLabel').textContent = title;
         document.getElementById('genericModalBody').innerHTML = message;
         document.getElementById('btn-generic-cancel').style.display = 'none';
-        
+
         const confirmButton = document.getElementById('btn-generic-confirm');
         confirmButton.textContent = 'OK';
 
         // ---- Lógica de Eventos Corregida ----
         const triggerHide = () => genericModal.hide();
-        
+
         const handleKeyPress = (e) => {
             if (e.key === 'Enter') {
                 e.preventDefault();
@@ -345,62 +345,81 @@ export function showAlertModal(message, title = 'Aviso') {
         genericModal.show();
     });
 }
-
 /**
- * Muestra un modal de confirmación y espera la respuesta del usuario (reemplaza a confirm).
- * @param {string} message El mensaje de confirmación.
- * @param {string} title El título del modal (opcional).
+ * Muestra un modal de confirmación y espera la respuesta del usuario.
+ * @param {string} message El mensaje de confirmación (puede ser HTML).
+ * @param {string} title El título del modal.
+ * @param {object} [options] Opciones para personalizar los botones y el estilo.
+ * @param {string} [options.confirmText='Aceptar'] Texto para el botón de confirmación.
+ * @param {string} [options.cancelText='Cancelar'] Texto para el botón de cancelación.
+ * @param {string} [options.customClass=''] Una clase CSS para añadir al modal-dialog.
  * @returns {Promise<boolean>} Resuelve a 'true' si el usuario confirma, 'false' si cancela.
  */
-export function showConfirmationModal(message, title = 'Confirmación') {
+export function showConfirmationModal(message, title = 'Confirmación', options = {}) {
+    const {
+        confirmText = 'Aceptar',
+        cancelText = 'Cancelar',
+        customClass = ''
+    } = options;
+
     return new Promise(resolve => {
         if (!genericModalEl) {
             genericModalEl = document.getElementById('genericModal');
             genericModal = new bootstrap.Modal(genericModalEl);
         }
 
+        document.body.classList.add('generic-modal-is-open');
+
+        const modalDialog = genericModalEl.querySelector('.modal-dialog');
+        modalDialog.className = 'modal-dialog';
+        if (customClass) {
+            modalDialog.classList.add(customClass);
+        }
+
         document.getElementById('genericModalLabel').textContent = title;
         document.getElementById('genericModalBody').innerHTML = message;
-        document.getElementById('btn-generic-cancel').style.display = 'inline-block';
-        
+
         const confirmButton = document.getElementById('btn-generic-confirm');
         const cancelButton = document.getElementById('btn-generic-cancel');
-        confirmButton.textContent = 'Aceptar';
 
-        // ---- Lógica de Eventos Corregida ----
-        const handleKeyPress = (e) => {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                resolveAndHide(true);
-            }
-        };
+        confirmButton.textContent = confirmText;
+        cancelButton.textContent = cancelText;
+        cancelButton.style.display = 'inline-block';
 
-        const resolveAndHide = (value) => {
-            cleanup();
-            genericModal.hide();
-            resolve(value);
-        };
-        
+        let isResolved = false;
+
         const cleanup = () => {
+            document.body.classList.remove('generic-modal-is-open');
             confirmButton.removeEventListener('click', confirmListener);
             cancelButton.removeEventListener('click', cancelListener);
-            document.removeEventListener('keydown', handleKeyPress);
+            genericModalEl.removeEventListener('hidden.bs.modal', hideListener);
+        };
+        
+        const resolveAndHide = (value) => {
+            if (isResolved) return;
+            isResolved = true;
+            
+            cleanup();
+            // Solo intentamos resolver la promesa una vez.
+            // Bootstrap puede emitir el evento 'hidden' después de un clic,
+            // esta guarda previene una doble resolución.
+            resolve(value);
+            genericModal.hide();
         };
 
         const confirmListener = () => resolveAndHide(true);
         const cancelListener = () => resolveAndHide(false);
+        // --- CORRECCIÓN CLAVE ---
+        // El listener para 'hide' ahora también llama a la lógica centralizada.
+        const hideListener = () => resolveAndHide(false);
 
         confirmButton.addEventListener('click', confirmListener, { once: true });
         cancelButton.addEventListener('click', cancelListener, { once: true });
-        document.addEventListener('keydown', handleKeyPress);
-        genericModalEl.addEventListener('hidden.bs.modal', () => resolveAndHide(false), { once: true });
-        // ---- Fin de la Corrección ----
+        genericModalEl.addEventListener('hidden.bs.modal', hideListener, { once: true });
 
         genericModal.show();
     });
 }
-
-
 
 // AÑADE ESTA FUNCIÓN EN utils.js
 

@@ -12,8 +12,10 @@
 }
 
 .btn-pago-texto {
-    font-size: 1.2rem; /* Aumentamos el tamaño (antes era 1rem) */
-    font-weight: 600;  /* Hacemos el texto un poco más grueso */
+    font-size: 1.2rem;
+    /* Aumentamos el tamaño (antes era 1rem) */
+    font-weight: 600;
+    /* Hacemos el texto un poco más grueso */
 }
 
 .btn-pago-monto {
@@ -24,12 +26,14 @@
 
 /* Agrega esto a style.css para controlar la altura del ticket */
 .ticket-body-scroll {
-    max-height: 350px; /* Puedes ajustar esta altura */
+    max-height: 350px;
+    /* Puedes ajustar esta altura */
     overflow-y: auto;
 }
 
 #searchResults .list-group-item-action.active {
-    background-color: #0d6efd; /* Color primario de Bootstrap */
+    background-color: #0d6efd;
+    /* Color primario de Bootstrap */
     color: white;
     border-color: #0d6efd;
 }
@@ -37,7 +41,8 @@
 /* Estilo para resaltar el precio de venta en la tabla de productos */
 td.precio-venta {
     font-weight: bold;
-    color: #0d6efd; /* Color primario de Bootstrap */
+    color: #0d6efd;
+    /* Color primario de Bootstrap */
     font-size: 1.05em;
 }
 
@@ -72,28 +77,37 @@ td.precio-venta {
 
 /* Colores de Stock */
 .product-card-mini.stock-ok {
-    border-left-color: #1cc88a; /* Verde */
+    border-left-color: #1cc88a;
+    /* Verde */
 }
+
 .product-card-mini.stock-warning {
-    border-left-color: #f6c23e; /* Amarillo */
+    border-left-color: #f6c23e;
+    /* Amarillo */
 }
+
 .product-card-mini.stock-danger {
-    border-left-color: #e74a3b; /* Rojo */
+    border-left-color: #e74a3b;
+    /* Rojo */
 }
 
 
 /* Estilos para el indicador de estado de caja en la navegación */
 .nav-link.caja-abierta {
-    color: #1cc88a !important; /* Verde */
+    color: #1cc88a !important;
+    /* Verde */
     font-weight: bold;
 }
 
 .nav-link.caja-cerrada {
-    color: #e74a3b !important; /* Rojo */
+    color: #e74a3b !important;
+    /* Rojo */
 }
+
 /* Estilos para el nuevo Navbar Oscuro */
 .navbar {
-    box-shadow: 0 2px 4px rgba(0, 0, 0, .4); /* Sombra un poco más notoria para el fondo oscuro */
+    box-shadow: 0 2px 4px rgba(0, 0, 0, .4);
+    /* Sombra un poco más notoria para el fondo oscuro */
 }
 
 /* Estilos para la nueva navegación con "píldoras" (Tema Oscuro) */
@@ -102,7 +116,7 @@ td.precio-venta {
     margin: 0 0.25rem;
     border-radius: 0.5rem;
     /* Color de texto claro y semitransparente para los inactivos */
-    color: rgba(255, 255, 255, 0.75); 
+    color: rgba(255, 255, 255, 0.75);
     transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out;
 }
 
@@ -116,7 +130,7 @@ td.precio-venta {
 /* Estilo al pasar el mouse sobre una píldora inactiva */
 .navbar-nav.nav-pills .nav-link:not(.active):hover {
     /* Un fondo sutilmente más claro que el de la barra */
-    background-color: rgba(255, 255, 255, 0.1); 
+    background-color: rgba(255, 255, 255, 0.1);
     color: white;
 }
 
@@ -151,17 +165,20 @@ td.precio-venta {
 
 /* Fondo más oscuro para la lista del ticket */
 #ticketItems {
-    background-color: #f8f9fa; /* Un gris muy claro */
+    background-color: #f8f9fa;
+    /* Un gris muy claro */
     border: 1px solid #dee2e6;
     border-radius: .375rem;
 }
 
 .ticket-item {
-    background-color: transparent; /* Hacemos los items transparentes para que se vea el fondo */
+    background-color: transparent;
+    /* Hacemos los items transparentes para que se vea el fondo */
     padding-top: 1rem !important;
     padding-bottom: 1rem !important;
     border-bottom: 1px solid #e9ecef !important;
 }
+
 .ticket-item:last-child {
     border-bottom: none !important;
 }
@@ -181,18 +198,21 @@ td.precio-venta {
 @keyframes highlight-item {
     from {
         transform: scale(1.2);
-        box-shadow: 0 4px 15px rgba(25, 135, 84, 0.4); /* Sombra verde */
-         background-color: #6df1b6;  /* Verde claro de Bootstrap */
+        box-shadow: 0 4px 15px rgba(25, 135, 84, 0.4);
+        /* Sombra verde */
+        background-color: #6df1b6;
+        /* Verde claro de Bootstrap */
     }
+
     to {
         transform: scale(1);
-        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
         background-color: transparent
     }
 }
 
 .animate-highlight {
-    
+
     /* animation: highlight 3.5s ease-out;     */
     animation: highlight-item 0.51s ease-out;
 }
@@ -201,7 +221,8 @@ td.precio-venta {
 
 /* Contenedor principal del ticket */
 #ticketItems {
-    background-color: #f0f7f2; /* Un verde pastel muy claro */
+    background-color: #f0f7f2;
+    /* Un verde pastel muy claro */
     border: 1px solid #cce8d4;
     border-radius: .375rem;
     padding: 0.5rem;
@@ -209,19 +230,23 @@ td.precio-venta {
 
 /* Cada producto individual en el ticket */
 .ticket-item {
-    background-color: #ffffff; /* Fondo blanco para cada item, creando contraste */
+    background-color: #ffffff;
+    /* Fondo blanco para cada item, creando contraste */
     margin-bottom: 0.5rem;
     border-radius: .375rem;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-    border: none !important; /* Sobreescribimos los bordes por defecto de list-group */
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    border: none !important;
+    /* Sobreescribimos los bordes por defecto de list-group */
 }
+
 .ticket-item:last-child {
     margin-bottom: 0;
 }
 
 /* Añadir esto a tu archivo de estilos */
 form.duplicando {
-    border: 2px solid #0dcaf0; /* Un borde celeste brillante */
+    border: 2px solid #0dcaf0;
+    /* Un borde celeste brillante */
     box-shadow: 0 0 15px rgba(13, 202, 240, 0.5);
     position: relative;
     border-radius: .375rem;
@@ -239,4 +264,53 @@ form.duplicando::before {
     border-radius: 5px;
     font-size: 0.8em;
     font-weight: bold;
+}
+
+/* Clase principal para el diálogo del modal */
+.modal-warning-custom.modal-dialog-centered .modal-content {
+    border: 1px solid #ffc107;
+    /* Borde de color ámbar (warning de Bootstrap) */
+}
+
+/* Encabezado del modal (más oscuro y llamativo) */
+.modal-warning-custom .modal-header {
+    background-color: #ffc107;
+    /* Color ámbar de Bootstrap */
+    color: #000;
+    /* Texto oscuro para mejor contraste */
+    border-bottom: 1px solid #ffca2c;
+}
+
+/* Cuerpo del modal (más claro) */
+.modal-warning-custom .modal-body {
+    background-color: #fff9e6;
+    /* Un amarillo muy pálido, fácil de leer */
+}
+
+/* Aseguramos que el botón de cerrar sea visible en el encabezado */
+.modal-warning-custom .modal-header .btn-close {
+    filter: invert(1) grayscale(100%) brightness(200%);
+}
+
+/* 1. Sube el nivel de apilamiento del modal de advertencia */
+#genericModal {
+    z-index: 1060 !important;
+}
+
+/* 2. Sube el nivel de la sombra Y LA HACE MÁS OSCURA,
+      pero SOLO cuando el modal de advertencia está activo (usando la clase del body) */
+body.generic-modal-is-open .modal-backdrop.show {
+    z-index: 1059 !important;
+    opacity: 0.8 !important;
+}
+
+.codigo-cell {
+  display: flex;         /* Activa el modo Flexbox para alinear elementos en una fila */
+  align-items: center;   /* Centra verticalmente el ícono y el campo de texto */
+  gap: 0.5rem;           /* Añade un pequeño espacio entre el ícono y el campo */
+}
+
+.codigo-cell .form-control {
+  width: auto;           /* Anula el 'width: 100%' de Bootstrap */
+  flex-grow: 1;          /* Permite que el campo de texto ocupe todo el espacio sobrante */
 }

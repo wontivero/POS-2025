@@ -3,6 +3,7 @@ import { getCollection, saveDocument, deleteDocument, formatCurrency, getTodayDa
 
 import { getFirestore, collection, onSnapshot, query, orderBy, getDocs, writeBatch, Timestamp, doc, where, addDoc } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
 
+import { getProductos, getMarcas, getColores, getRubros } from './dataManager.js';
 // Inicializar Firestore fuera de las funciones si se usa en todo el módulo
 const db = getFirestore();
 
@@ -28,56 +29,60 @@ let btnImportarProductos, importarArchivoInput; // Nuevos elementos para la impo
 // --- Funciones de la Sección de Productos ---
 
 function setupFirebaseListeners() {
-    onSnapshot(query(collection(db, 'marcas'), orderBy('nombre')), (snapshot) => {
-        listaMarcas = [];
-        if (datalistMarcasFiltro) datalistMarcasFiltro.innerHTML = '';
-        if (datalistMarcasModal) datalistMarcasModal.innerHTML = '';
-        snapshot.forEach(doc => {
-            const marca = doc.data().nombre;
-            listaMarcas.push(marca);
-            const option = document.createElement('option');
-            option.value = marca;
-            if (datalistMarcasFiltro) datalistMarcasFiltro.appendChild(option.cloneNode(true));
-            if (datalistMarcasModal) datalistMarcasModal.appendChild(option);
-        });
-    });
+    // Esta función ya no necesita hacer nada.
+    // dataManager.js se encarga de todo de forma centralizada.
 
-    onSnapshot(query(collection(db, 'colores'), orderBy('nombre')), (snapshot) => {
-        listaColores = [];
-        if (datalistColoresFiltro) datalistColoresFiltro.innerHTML = '';
-        if (datalistColoresModal) datalistColoresModal.innerHTML = '';
-        snapshot.forEach(doc => {
-            const color = doc.data().nombre;
-            listaColores.push(color);
-            const option = document.createElement('option');
-            option.value = color;
-            if (datalistColoresFiltro) datalistColoresFiltro.appendChild(option.cloneNode(true));
-            if (datalistColoresModal) datalistColoresModal.appendChild(option);
-        });
-    });
 
-    onSnapshot(query(collection(db, 'rubros'), orderBy('nombre')), (snapshot) => {
-        listaRubros = [];
-        if (datalistRubrosFiltro) datalistRubrosFiltro.innerHTML = '';
-        if (datalistRubrosModal) datalistRubrosModal.innerHTML = '';
-        snapshot.forEach(doc => {
-            const rubro = doc.data().nombre;
-            listaRubros.push(rubro);
-            const option = document.createElement('option');
-            option.value = rubro;
-            if (datalistRubrosFiltro) datalistRubrosFiltro.appendChild(option.cloneNode(true));
-            if (datalistRubrosModal) datalistRubrosModal.appendChild(option);
-        });
-    });
+    // onSnapshot(query(collection(db, 'marcas'), orderBy('nombre')), (snapshot) => {
+    //     listaMarcas = [];
+    //     if (datalistMarcasFiltro) datalistMarcasFiltro.innerHTML = '';
+    //     if (datalistMarcasModal) datalistMarcasModal.innerHTML = '';
+    //     snapshot.forEach(doc => {
+    //         const marca = doc.data().nombre;
+    //         listaMarcas.push(marca);
+    //         const option = document.createElement('option');
+    //         option.value = marca;
+    //         if (datalistMarcasFiltro) datalistMarcasFiltro.appendChild(option.cloneNode(true));
+    //         if (datalistMarcasModal) datalistMarcasModal.appendChild(option);
+    //     });
+    // });
 
-    onSnapshot(query(collection(db, 'productos'), orderBy('nombre_lowercase')), (snapshot) => {
-        listaCompletaProductos = [];
-        snapshot.forEach(doc => {
-            const productData = { id: doc.id, ...doc.data() };
-            listaCompletaProductos.push(productData);
-        });
-        aplicarFiltrosYRenderizar();
-    });
+    // onSnapshot(query(collection(db, 'colores'), orderBy('nombre')), (snapshot) => {
+    //     listaColores = [];
+    //     if (datalistColoresFiltro) datalistColoresFiltro.innerHTML = '';
+    //     if (datalistColoresModal) datalistColoresModal.innerHTML = '';
+    //     snapshot.forEach(doc => {
+    //         const color = doc.data().nombre;
+    //         listaColores.push(color);
+    //         const option = document.createElement('option');
+    //         option.value = color;
+    //         if (datalistColoresFiltro) datalistColoresFiltro.appendChild(option.cloneNode(true));
+    //         if (datalistColoresModal) datalistColoresModal.appendChild(option);
+    //     });
+    // });
+
+    // onSnapshot(query(collection(db, 'rubros'), orderBy('nombre')), (snapshot) => {
+    //     listaRubros = [];
+    //     if (datalistRubrosFiltro) datalistRubrosFiltro.innerHTML = '';
+    //     if (datalistRubrosModal) datalistRubrosModal.innerHTML = '';
+    //     snapshot.forEach(doc => {
+    //         const rubro = doc.data().nombre;
+    //         listaRubros.push(rubro);
+    //         const option = document.createElement('option');
+    //         option.value = rubro;
+    //         if (datalistRubrosFiltro) datalistRubrosFiltro.appendChild(option.cloneNode(true));
+    //         if (datalistRubrosModal) datalistRubrosModal.appendChild(option);
+    //     });
+    // });
+
+    // onSnapshot(query(collection(db, 'productos'), orderBy('nombre_lowercase')), (snapshot) => {
+    //     listaCompletaProductos = [];
+    //     snapshot.forEach(doc => {
+    //         const productData = { id: doc.id, ...doc.data() };
+    //         listaCompletaProductos.push(productData);
+    //     });
+    //     aplicarFiltrosYRenderizar();
+    // });
 }
 
 function sortProducts(products, column, direction) {
@@ -265,8 +270,9 @@ function handleDuplicate(e) {
 async function handleFormSubmit(e) {
     e.preventDefault();
 
-    if (!formProducto || !productoNombre || !productoCosto || !productoVenta || !productoStock) {
-        await showAlertModal("Error: El formulario o sus campos no están disponibles.");
+    const saveButton = document.getElementById('btnGuardarProducto');
+    if (!formProducto || !saveButton) {
+        await showAlertModal("Error: El formulario o el botón de guardar no están disponibles.");
         return;
     }
 
@@ -287,34 +293,50 @@ async function handleFormSubmit(e) {
         venta: parseFloat(productoVenta.value) || 0,
         stock: parseInt(productoStock.value) || 0,
         stockMinimo: parseInt(productoStockMinimo.value) || 0,
-        isGeneric: productoGenericoSwitch.checked,
-        genericProfitMargin: parseFloat(productoMargenGenerico.value) || 0,
-        isFeatured: productoDestacado.checked,
+        isGeneric: document.getElementById('producto-generico').checked,
+        genericProfitMargin: parseFloat(document.getElementById('producto-margen-generico').value) || 0,
+        isFeatured: document.getElementById('producto-destacado').checked,
         fechaUltimoCambioPrecio: Timestamp.now()
     };
 
-    if (!productoData.nombre || isNaN(productoData.costo) || isNaN(productoData.venta) || isNaN(productoData.stock)) {
-        await showAlertModal("Por favor, completa todos los campos obligatorios.");
+    if (!productoData.nombre || !productoData.codigo || isNaN(productoData.costo) || isNaN(productoData.venta) || isNaN(productoData.stock)) {
+        await showAlertModal("Por favor, completa los campos Nombre, Código y los valores numéricos.");
         return;
     }
 
-    try {
-        await saveDocument('productos', productoData, isNew ? null : id);
-        await showAlertModal(`Producto ${isNew ? 'creado' : 'actualizado'} correctamente.`);
 
+    const originalButtonContent = saveButton.innerHTML;
+    saveButton.disabled = true;
+    saveButton.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Guardando...`;
+
+    try {
+        // 2. Intentamos guardar el documento en Firebase
+        await saveDocument('productos', productoData, isNew ? null : id);
+
+        // Si es un producto nuevo, también guardamos sus categorías
         if (isNew) {
             await addUniqueItem('marcas', productoData.marca);
             await addUniqueItem('colores', productoData.color);
             await addUniqueItem('rubros', productoData.rubro);
         }
 
+        // 3. Si todo sale bien, cerramos el modal principal
         if (productoModal) {
             productoModal.hide();
         }
-        formProducto.reset();
+
+        // Y mostramos el mensaje de éxito
+        await showAlertModal(`Producto ${isNew ? 'creado' : 'actualizado'} correctamente.`);
+
     } catch (e) {
+        // 4. Si ocurre un error, mostramos un alerta de error
         console.error('Error al guardar el producto:', e);
         await showAlertModal('Ocurrió un error al guardar el producto. Revisa la consola para más detalles.');
+    } finally {
+        // 5. Se ejecuta siempre (después del éxito o del error)
+        // para restaurar el botón a su estado original.
+        saveButton.disabled = false;
+        saveButton.innerHTML = originalButtonContent;
     }
 }
 
@@ -689,35 +711,26 @@ async function handleFileUpload(event) {
 
 // AÑADE ESTA NUEVA FUNCIÓN CENTRAL EN productos.js
 function abrirProductoModal(modo, producto = null) {
-    if (!formProducto) return;
-    formProducto.reset();
-
+    // IMPORTANTE: Se elimina la llamada a resetProductoModal() de aquí.
+    if (productoCodigo) productoCodigo.classList.remove('is-invalid');
     const modalTitle = document.getElementById('productoModalLabel');
-    const saveButton = document.getElementById('btnGuardarProducto'); // Asume que tu botón de guardar tiene este ID. Si no, ajústalo.
+    const saveButton = document.getElementById('btnGuardarProducto');
 
     if (modo === 'editar' && producto) {
         modalTitle.textContent = 'Editar Producto';
         saveButton.textContent = 'Guardar Cambios';
-        // Llenamos todos los campos, incluyendo ID y código
         productoId.value = producto.id ?? '';
         productoCodigo.value = producto.codigo ?? '';
         productoNombre.value = producto.nombre ?? '';
-        // ... (resto de los campos)
     } else if (modo === 'duplicar' && producto) {
         modalTitle.textContent = 'Duplicar Producto';
         saveButton.textContent = 'Crear Producto';
-        // Llenamos todos los campos EXCEPTO ID y CÓDIGO
-        productoId.value = ''; // ID vacío para que se cree uno nuevo
-        productoCodigo.value = ''; // Código vacío para que el usuario ingrese uno nuevo
-        productoNombre.value = producto.nombre ?? '';
-        // ... (resto de los campos)
-    } else { // modo 'nuevo'
-        modalTitle.textContent = 'Nuevo Producto';
-        saveButton.textContent = 'Crear Producto';
         productoId.value = '';
+        productoCodigo.value = '';
+        productoNombre.value = producto.nombre ?? '';
     }
+    // El modo 'nuevo' ahora se gestiona en handleNewProduct.
 
-    // Llenamos el resto de los campos para editar y duplicar (código común)
     if (modo === 'editar' || modo === 'duplicar') {
         productoMarca.value = producto.marca ?? '';
         productoColor.value = producto.color ?? '';
@@ -753,12 +766,98 @@ function handleEdit(e) {
 }
 
 function handleNewProduct() {
-    abrirProductoModal('nuevo');
+    // 1. Limpiamos el formulario llamando a nuestra función de reseteo.
+    resetProductoModal();
+    // 2. Mostramos el modal, que ahora está garantizado que está vacío.
+    if (productoModal) productoModal.show();
+}
+
+
+/**
+ * Se ejecuta al salir del campo 'código' en el modal de producto.
+ * Verifica si el código ya existe en la base de datos y guía al usuario.
+ */
+async function handleCodigoBlur() {
+    // 1. Limpiamos cualquier estilo de error previo.
+    productoCodigo.classList.remove('is-invalid');
+
+    const codigo = productoCodigo.value.trim();
+    const idProductoActual = productoId.value; // ID del producto que estamos editando (si aplica)
+
+    // Si el campo está vacío, no hacemos nada.
+    if (codigo === '') return;
+
+    // 2. Buscamos en Firebase si existe otro producto con ese código.
+    const q = query(collection(db, 'productos'), where('codigo', '==', codigo));
+    const querySnapshot = await getDocs(q);
+
+    if (!querySnapshot.empty) {
+        // Encontramos al menos un producto con ese código.
+        const productoExistente = { id: querySnapshot.docs[0].id, ...querySnapshot.docs[0].data() };
+
+        // 3. Si el producto encontrado es el mismo que estamos editando, no es un duplicado.
+        if (productoExistente.id === idProductoActual) {
+            return; // No hacemos nada.
+        }
+
+        // 4. Si es un producto DIFERENTE, entonces es un duplicado.
+        productoCodigo.classList.add('is-invalid'); // Marcamos el campo en rojo.
+
+        const confirmado = await showConfirmationModal(
+            `El código <strong>${codigo}</strong> ya está en uso para el producto:<br><br>
+            <strong class="text-primary">"${productoExistente.nombre}"</strong>.<br><br>
+            ¿Qué deseas hacer?`,
+            "Código Duplicado Encontrado",
+            {
+                confirmText: 'Editar Producto Existente',
+                cancelText: 'Crear uno Nuevo',
+                customClass: 'modal-warning-custom' // <-- La nueva clase de estilo
+            }
+        );
+
+        if (confirmado) {
+            // Si el usuario confirma, cargamos el producto existente en el modal.
+            abrirProductoModal('editar', productoExistente);
+        } else {
+            // Si el usuario cancela, dejamos el campo en rojo como señal
+            // de que debe cambiar el código para poder guardar.
+            productoCodigo.focus();
+            productoCodigo.select();
+        }
+    }
 }
 
 
 
 
+/**
+ * Resetea todos los campos del formulario del modal de producto a su estado inicial.
+ */
+function resetProductoModal() {
+    if (!formProducto) return;
+
+    // Resetea el formulario a los valores por defecto del HTML
+    formProducto.reset();
+
+    // Limpia explícitamente los campos y el estado
+    productoId.value = '';
+    modalProductoLabel.textContent = 'Nuevo Producto';
+    const saveButton = document.getElementById('btnGuardarProducto');
+    if (saveButton) {
+        saveButton.textContent = 'Crear Producto';
+    }
+
+    // Oculta campos condicionales
+    const genericProfitFields = document.getElementById('generic-profit-fields');
+    if (genericProfitFields) {
+        genericProfitFields.style.display = 'none';
+    }
+
+    // Limpia cualquier estilo de validación de error
+    if (productoCodigo) {
+        productoCodigo.classList.remove('is-invalid');
+    }
+}
 // ------------------------------------------------------------
 // AÑADE ESTA FUNCIÓN NUEVA EN productos.js
 
@@ -883,8 +982,49 @@ export function init() {
     //     btnNormalizar.addEventListener('click', normalizarDatosAntiguos);
     // }
     // --- FIN DEL BLOQUE ---
+    // --- INICIO DE LA NUEVA LÓGICA DE DATOS ---
+
+    const actualizarDatalists = () => {
+        const poblar = (elemento, lista) => {
+            if (elemento) {
+                elemento.innerHTML = lista.map(item => `<option value="${item}"></option>`).join('');
+            }
+        };
+        poblar(datalistMarcasFiltro, getMarcas());
+        poblar(datalistMarcasModal, getMarcas());
+        poblar(datalistColoresFiltro, getColores());
+        poblar(datalistColoresModal, getColores());
+        poblar(datalistRubrosFiltro, getRubros());
+        poblar(datalistRubrosModal, getRubros());
+    };
+
+    const actualizarTablaProductos = () => {
+        listaCompletaProductos = getProductos();
+        aplicarFiltrosYRenderizar();
+    };
+
+    // Suscripción a los eventos de actualización
+    document.addEventListener('productos-updated', actualizarTablaProductos);
+    document.addEventListener('marcas-updated', actualizarDatalists);
+    document.addEventListener('colores-updated', actualizarDatalists);
+    document.addEventListener('rubros-updated', actualizarDatalists);
+
+    // Carga inicial de datos desde el caché
+    actualizarTablaProductos();
+    actualizarDatalists();
+
+    // --- FIN DE LA NUEVA LÓGICA DE DATOS ---
 
 
+    if (productoCodigo) {
+        // Ejecuta la verificación cuando el usuario sale del campo.
+        productoCodigo.addEventListener('blur', handleCodigoBlur);
+
+        // Limpia el borde rojo de error en cuanto el usuario empieza a escribir de nuevo.
+        productoCodigo.addEventListener('input', () => {
+            productoCodigo.classList.remove('is-invalid');
+        });
+    }
 
 
 
@@ -903,6 +1043,11 @@ export function init() {
     // --- FIN INICIALIZACIÓN DE IMPORTACIÓN ---
 
     if (btnNuevoProducto) btnNuevoProducto.addEventListener('click', handleNewProduct);
+
+    if (productoModalEl) {
+        productoModalEl.addEventListener('hidden.bs.modal', resetProductoModal);
+    }
+
     if (formProducto) formProducto.addEventListener('submit', handleFormSubmit);
     if (btnExportarProductos) btnExportarProductos.addEventListener('click', exportarProductosAExcel);
 

@@ -2,7 +2,7 @@
 import { db } from '../firebase.js';
 import { collection, writeBatch, doc, getDocs, query, where, addDoc, orderBy, Timestamp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
 import { showAlertModal, showConfirmationModal, roundUpToNearest50, formatCurrency } from '../utils.js';
-
+import { getMarcas, getColores, getRubros } from './dataManager.js';
 // --- ESTADO Y ELEMENTOS DEL DOM ---
 let productosEnPreparacion = [];
 let modoFormulario = 'nuevo';
@@ -37,10 +37,34 @@ export async function init() {
     datalistColores = document.getElementById('colores-list-carga');
     datalistRubros = document.getElementById('rubros-list-carga');
 
+
+    // --- INICIO DE LA NUEVA LÓGICA DE DATOS ---
+
+    const actualizarDatalistsCarga = () => {
+        const poblar = (elemento, lista) => {
+            if (elemento) {
+                elemento.innerHTML = lista.map(item => `<option value="${item}"></option>`).join('');
+            }
+        };
+        poblar(datalistMarcas, getMarcas());
+        poblar(datalistColores, getColores());
+        poblar(datalistRubros, getRubros());
+    };
+
+    // Suscripción a los eventos de actualización
+    document.addEventListener('marcas-updated', actualizarDatalistsCarga);
+    document.addEventListener('colores-updated', actualizarDatalistsCarga);
+    document.addEventListener('rubros-updated', actualizarDatalistsCarga);
+
+    // Carga inicial de datos desde el caché
+    actualizarDatalistsCarga();
+
+    // --- FIN DE LA NUEVA LÓGICA DE DATOS ---
+
+
     setupEventListeners();
-    await popularDatalists();
     renderizarGrilla();
-    
+
 }
 
 // --- CONFIGURACIÓN DE EVENTOS ---
@@ -51,7 +75,7 @@ function setupEventListeners() {
 
     prodCodigo.addEventListener('blur', () => verificarCodigo(prodCodigo));
     btnAgregarYDuplicar.addEventListener('click', async () => { await agregarProductoAGrilla(true); });
-    btnLimpiarFormulario.addEventListener('click', limpiarFormulario); 
+    btnLimpiarFormulario.addEventListener('click', limpiarFormulario);
 
     grillaBody.addEventListener('click', (e) => {
         const id = e.target.closest('tr')?.dataset.id;
@@ -62,11 +86,11 @@ function setupEventListeners() {
         else if (e.target.closest('.btn-confirmar-fila')) handleConfirmarFila(id);
         else if (e.target.closest('.btn-cancelar-fila')) handleEliminar(id);
     });
-    
+
     grillaBody.addEventListener('input', (e) => { if (e.target.tagName === 'INPUT') handleGridInput(e.target); });
     grillaBody.addEventListener('keydown', handleEnterAsTab);
     grillaBody.addEventListener('keydown', restrictToNumericInput);
-    
+
     grillaBody.addEventListener('blur', (e) => {
         const input = e.target;
         if (input.tagName === 'INPUT' && input.dataset.field === 'codigo') {
@@ -100,9 +124,9 @@ function restrictToNumericInput(e) {
     }
 
     // 3. Permitir punto decimal (solo uno) para campos específicos
-    const allowDecimal = e.target.id === 'prod-costo' || e.target.id === 'prod-ganancia' || 
-                         e.target.dataset.field === 'costo' || e.target.dataset.field === 'ganancia';
-    
+    const allowDecimal = e.target.id === 'prod-costo' || e.target.id === 'prod-ganancia' ||
+        e.target.dataset.field === 'costo' || e.target.dataset.field === 'ganancia';
+
     if (allowDecimal && e.key === '.' && !e.target.value.includes('.')) {
         return;
     }
@@ -133,24 +157,38 @@ function handleEnterAsTab(e) {
 
 // --- LÓGICA DE LA GRILLA (RENDERIZADO) ---
 function renderizarGrilla() {
-    const rubroColors = { 'libreria': 'table-primary', 'informatica': 'table-info', 'impresion': 'table-success' };
-    const defaultColor = 'table-light';
     grillaBody.innerHTML = '';
     productosEnPreparacion.forEach(p => {
         const row = document.createElement('tr');
         row.dataset.id = p.id;
+
         let accionesHtml = '';
-        if (p.status === 'pendiente') {
+        let iconoEstado = '';
+
+        // --- INICIO DE LA MODIFICACIÓN ---
+        // Definimos un conjunto de acciones comunes para re-utilizar
+        const accionesComunes = `
+            <button class="btn btn-sm btn-outline-secondary btn-duplicar-fila" title="Duplicar en Grilla"><i class="fas fa-plus-circle"></i></button>
+            <button class="btn btn-sm btn-outline-info btn-duplicar-form" title="Duplicar en Formulario"><i class="fas fa-copy"></i></button>
+            <button class="btn btn-sm btn-outline-danger btn-eliminar" title="Quitar de la lista"><i class="fas fa-trash"></i></button>
+        `;
+
+        if (p.status === 'editar') {
             row.className = 'table-warning';
+            iconoEstado = '<i class="fas fa-edit text-warning" title="Este producto se actualizará en la Base de Datos"></i>';
+            accionesHtml = accionesComunes; // Usamos las acciones comunes
+        } else if (p.status === 'pendiente') {
+            row.className = 'table-secondary';
+            // Las filas pendientes tienen sus propias acciones
             accionesHtml = `<button class="btn btn-sm btn-outline-success btn-confirmar-fila" title="Confirmar Fila"><i class="fas fa-check"></i></button> <button class="btn btn-sm btn-outline-danger btn-cancelar-fila" title="Cancelar"><i class="fas fa-times"></i></button>`;
-        } else {
-            const rubroKey = (p.rubro || '').toLowerCase();
-            row.className = rubroColors[rubroKey] || defaultColor;
-            accionesHtml = `<button class="btn btn-sm btn-outline-secondary btn-duplicar-fila" title="Duplicar en Grilla"><i class="fas fa-plus-circle"></i></button> <button class="btn btn-sm btn-outline-info btn-duplicar-form" title="Duplicar en Formulario"><i class="fas fa-copy"></i></button> <button class="btn btn-sm btn-outline-danger btn-eliminar" title="Eliminar"><i class="fas fa-trash"></i></button>`;
+        } else { // status 'nuevo'
+            iconoEstado = '<i class="fas fa-plus-circle text-success" title="Este producto se creará como nuevo"></i>';
+            accionesHtml = accionesComunes; // Usamos las acciones comunes también aquí
         }
-        
+        // --- FIN DE LA MODIFICACIÓN ---
+
         row.innerHTML = `
-            <td><input type="text" class="form-control form-control-sm" value="${p.codigo}" data-field="codigo"></td>
+            <td class="codigo-cell">${iconoEstado} <input type="text" class="form-control form-control-sm" value="${p.codigo}" data-field="codigo"></td>
             <td><input type="text" class="form-control form-control-sm" value="${p.nombre}" data-field="nombre"></td>
             <td><input type="text" class="form-control form-control-sm" value="${p.marca}" data-field="marca"></td>
             <td><input type="text" class="form-control form-control-sm" value="${p.color}" data-field="color"></td>
@@ -190,7 +228,7 @@ function handleGridInput(input) {
         producto.venta = nuevaVenta;
         const ventaInput = row.querySelector('input[data-field="venta"]');
         if (ventaInput) ventaInput.value = Math.round(nuevaVenta);
-    } 
+    }
     else if (field === 'venta') {
         let nuevaGanancia = 0;
         if (producto.costo > 0) {
@@ -217,19 +255,23 @@ function calcularMargen() {
     }
 }
 
+
 async function agregarProductoAGrilla(duplicarDespues = false) {
     const codigo = prodCodigo.value.trim();
     if (!codigo || !prodNombre.value.trim()) {
         showAlertModal("El Código y el Nombre son obligatorios.");
         return;
     }
+
     const verificacion = await verificarCodigoExistente(codigo, productoEnEdicionId);
     if (verificacion.existe) {
-        showAlertModal(`El código "${codigo}" ya existe en ${verificacion.origen}.`, "Código Duplicado");
+        showAlertModal(`El código "${codigo}" ya existe en ${verificacion.origen}. No se puede agregar.`, "Código Duplicado");
         return;
     }
-    const nuevoProducto = {
+
+    const productoParaGrilla = {
         id: productoEnEdicionId || Date.now().toString(),
+        status: modoFormulario === 'editar' ? 'editar' : 'nuevo',
         codigo: codigo,
         nombre: prodNombre.value.trim(),
         marca: prodMarca.value.trim(),
@@ -241,17 +283,22 @@ async function agregarProductoAGrilla(duplicarDespues = false) {
         stock: parseInt(prodStock.value) || 0,
         stockMinimo: parseInt(prodStockMinimo.value) || 0,
         isGeneric: prodGenerico.checked,
-        isFeatured: prodDestacado.checked,
+        // --- CORRECCIÓN AQUÍ ---
+        isFeatured: prodDestacado.checked, // La variable correcta es prodDestacado
     };
-    const indexExistente = productosEnPreparacion.findIndex(p => p.id === nuevoProducto.id);
+
+    const indexExistente = productosEnPreparacion.findIndex(p => p.id === productoParaGrilla.id);
+
     if (indexExistente > -1) {
-        productosEnPreparacion[indexExistente] = nuevoProducto;
+        productosEnPreparacion[indexExistente] = productoParaGrilla;
     } else {
-        productosEnPreparacion.push(nuevoProducto);
+        productosEnPreparacion.push(productoParaGrilla);
     }
+
     renderizarGrilla();
+
     if (duplicarDespues) {
-        poblarFormulario(nuevoProducto, true);
+        poblarFormulario(productoParaGrilla, true);
     } else {
         limpiarFormulario();
     }
@@ -266,6 +313,7 @@ function limpiarFormulario() {
 }
 
 function poblarFormulario(producto, modoDuplicar = false) {
+    if (prodCodigo) prodCodigo.classList.remove('is-invalid');
     prodNombre.value = producto.nombre;
     prodMarca.value = producto.marca;
     prodColor.value = producto.color;
@@ -308,7 +356,7 @@ function handleDuplicarEnGrilla(id) {
     const productoOriginal = productosEnPreparacion.find(p => p.id === id);
     if (!productoOriginal) return;
     const index = productosEnPreparacion.indexOf(productoOriginal);
-    const productoDuplicado = { ...productoOriginal, id: Date.now().toString(), codigo: '', status: 'pendiente' };
+    const productoDuplicado = { ...productoOriginal, id: Date.now().toString(), codigo: '', status: 'nuevo' };
     productosEnPreparacion.splice(index + 1, 0, productoDuplicado);
     renderizarGrilla();
 }
@@ -335,25 +383,62 @@ function handleEliminar(id) {
 }
 
 async function verificarCodigoExistente(codigo, idExcluir = null) {
+    // Primero busca en la grilla local
     const enGrilla = productosEnPreparacion.find(p => p.codigo === codigo && p.id !== idExcluir);
     if (enGrilla) return { existe: true, origen: 'la grilla de preparación' };
+
+    // Luego busca en la base de datos
     const q = query(collection(db, "productos"), where("codigo", "==", codigo));
     const querySnapshot = await getDocs(q);
-    if (!querySnapshot.empty) return { existe: true, origen: 'la base de datos', data: querySnapshot.docs[0].data() };
+
+    if (!querySnapshot.empty) {
+        const docEncontrado = querySnapshot.docs[0];
+        // IMPORTANTE: Comprueba si el ID encontrado es diferente al que estamos excluyendo
+        if (docEncontrado.id !== idExcluir) {
+            return { existe: true, origen: 'la base de datos', data: { id: docEncontrado.id, ...docEncontrado.data() } };
+        }
+    }
+
     return { existe: false };
 }
 
 async function verificarCodigo(inputElement) {
     const codigo = inputElement.value.trim();
-    if (codigo === '') return;
     const idExcluir = inputElement.closest('tr')?.dataset.id || productoEnEdicionId;
+
+    // Limpiamos cualquier error previo
     inputElement.classList.remove('is-invalid');
+
+    if (codigo === '') return;
+
     const verificacion = await verificarCodigoExistente(codigo, idExcluir);
+
     if (verificacion.existe) {
+        // Si el duplicado está en la base de datos y estamos en el formulario principal...
         if (verificacion.origen === 'la base de datos' && inputElement === prodCodigo) {
-            await showAlertModal(`Producto encontrado: "${verificacion.data.nombre}". Se han cargado sus datos para duplicarlo.`, "Código Existente");
-            poblarFormulario(verificacion.data, true);
+
+            const confirmado = await showConfirmationModal(
+                `El código <strong>${codigo}</strong> ya pertenece al producto:<br><br>
+                 <strong class="text-primary">"${verificacion.data.nombre}"</strong>.<br><br>
+                 ¿Qué deseas hacer?`,
+                "Código Existente Encontrado",
+                {
+                    confirmText: 'EDITAR Producto', // Botón principal (Aceptar)
+                    cancelText: 'DUPLICAR Producto (Crear Nuevo)', // Botón secundario (Cancelar)
+                    customClass: 'modal-warning-custom' // Estilo de advertencia
+                }
+            );
+
+            if (confirmado) {
+                // El usuario eligió "Cargar para Editar"
+                poblarFormulario(verificacion.data, false);
+            } else {
+                // El usuario eligió "Duplicar Datos"
+                poblarFormulario(verificacion.data, true);
+            }
+
         } else {
+            // Si el duplicado está en la grilla de preparación, solo mostramos un error simple.
             await showAlertModal(`El código "${codigo}" ya existe en ${verificacion.origen}.`, "Código Duplicado");
             inputElement.classList.add('is-invalid');
             inputElement.focus();
@@ -365,18 +450,27 @@ async function verificarCodigo(inputElement) {
 async function guardarTodoEnBD() {
     const hayPendientes = productosEnPreparacion.some(p => p.status === 'pendiente');
     if (hayPendientes) {
-        showAlertModal("Confirma o cancela las filas amarillas antes de guardar.");
+        showAlertModal("Confirma o cancela las filas pendientes antes de guardar.");
         return;
     }
-    const confirmado = await showConfirmationModal(`Se guardarán ${productosEnPreparacion.length} productos. ¿Continuar?`);
+    const aCrear = productosEnPreparacion.filter(p => p.status === 'nuevo').length;
+    const aEditar = productosEnPreparacion.filter(p => p.status === 'editar').length;
+
+    const confirmado = await showConfirmationModal(
+        `Se procesarán ${productosEnPreparacion.length} productos:<br>
+         - <strong>${aCrear}</strong> se crearán como nuevos.<br>
+         - <strong>${aEditar}</strong> se actualizarán en la base de datos.<br><br>
+         ¿Deseas continuar?`, "Confirmar Guardado"
+    );
     if (!confirmado) return;
+
     const loadingOverlay = document.getElementById('loadingOverlay');
     loadingOverlay.style.display = 'flex';
     try {
         const batch = writeBatch(db);
         const nuevasCategorias = { marcas: new Set(), colores: new Set(), rubros: new Set() };
-        productosEnPreparacion.forEach(p => {
-            const newDocRef = doc(collection(db, "productos"));
+
+        for (const p of productosEnPreparacion) {
             const productoData = {
                 codigo: p.codigo, nombre: p.nombre, nombre_lowercase: p.nombre.toLowerCase(),
                 marca: p.marca, color: p.color, rubro: p.rubro,
@@ -386,16 +480,31 @@ async function guardarTodoEnBD() {
                 genericProfitMargin: p.isGeneric ? p.ganancia : 0,
                 fechaUltimoCambioPrecio: Timestamp.now()
             };
-            batch.set(newDocRef, productoData);
+
+            if (p.status === 'editar') {
+                // Si el estado es 'editar', usamos UPDATE en el ID existente.
+                const docRef = doc(db, "productos", p.id);
+                batch.update(docRef, productoData);
+            } else { // 'nuevo'
+                // Si el estado es 'nuevo', usamos SET en una nueva referencia.
+                const newDocRef = doc(collection(db, "productos"));
+                batch.set(newDocRef, productoData);
+            }
+
+            // Recolectamos las categorías para asegurar que existan
             if (p.marca) nuevasCategorias.marcas.add(p.marca);
             if (p.color) nuevasCategorias.colores.add(p.color);
             if (p.rubro) nuevasCategorias.rubros.add(p.rubro);
-        });
+        }
+
         await batch.commit();
+
+        // Guardamos las nuevas categorías después del lote principal
         for (const marca of nuevasCategorias.marcas) await addUniqueItem('marcas', marca);
         for (const color of nuevasCategorias.colores) await addUniqueItem('colores', color);
         for (const rubro of nuevasCategorias.rubros) await addUniqueItem('rubros', rubro);
-        showAlertModal(`¡Éxito! Se guardaron ${productosEnPreparacion.length} productos.`);
+
+        showAlertModal(`¡Éxito! Se crearon ${aCrear} productos y se actualizaron ${aEditar}.`);
         productosEnPreparacion = [];
         renderizarGrilla();
         limpiarFormulario();
@@ -407,23 +516,24 @@ async function guardarTodoEnBD() {
     }
 }
 
-async function popularDatalists() {
-    const colecciones = [
-        { nombre: 'marcas', elemento: datalistMarcas },
-        { nombre: 'colores', elemento: datalistColores },
-        { nombre: 'rubros', elemento: datalistRubros }
-    ];
-    for (const col of colecciones) {
-        const q = query(collection(db, col.nombre), orderBy('nombre'));
-        const querySnapshot = await getDocs(q);
-        col.elemento.innerHTML = '';
-        querySnapshot.forEach(doc => {
-            const option = document.createElement('option');
-            option.value = doc.data().nombre;
-            col.elemento.appendChild(option);
-        });
-    }
-}
+
+// async function popularDatalists() {
+//     const colecciones = [
+//         { nombre: 'marcas', elemento: datalistMarcas },
+//         { nombre: 'colores', elemento: datalistColores },
+//         { nombre: 'rubros', elemento: datalistRubros }
+//     ];
+//     for (const col of colecciones) {
+//         const q = query(collection(db, col.nombre), orderBy('nombre'));
+//         const querySnapshot = await getDocs(q);
+//         col.elemento.innerHTML = '';
+//         querySnapshot.forEach(doc => {
+//             const option = document.createElement('option');
+//             option.value = doc.data().nombre;
+//             col.elemento.appendChild(option);
+//         });
+//     }
+// }
 
 async function addUniqueItem(collectionName, itemName) {
     if (!itemName) return;
