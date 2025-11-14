@@ -4,7 +4,6 @@ import { haySesionActiva, getSesionActivaId, verificarEstadoCaja } from './caja.
 import { getFirestore, collection, onSnapshot, query, orderBy, runTransaction, doc } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
 import { getCollection, saveDocument, formatCurrency, getTodayDate, getNextTicketNumber, updateDocument, deleteDocument, getFormattedDateTime, generatePDF, showAlertModal, showConfirmationModal } from '../utils.js';
 import { getProductos } from './dataManager.js';
-import { companyInfo } from '../config.js';
 
 const db = getFirestore();
 
@@ -508,6 +507,8 @@ async function finalizarVenta() {
     showLoading();
 
     try {
+        const { getAuth } = await import("https://www.gstatic.com/firebasejs/9.6.1/firebase-auth.js");
+        const auth = getAuth();
         const ticketNumber = await getNextTicketNumber();
 
         await runTransaction(db, async (transaction) => {
@@ -543,6 +544,13 @@ async function finalizarVenta() {
             const montoCreditoConRecargo = Math.round(montoCredito * (1 + recargo));
             const totalConRecargo = totalVentaBase + Math.round(montoCredito * recargo);
 
+            // --- INICIO DE LA MODIFICACIÓN ---
+            const currentUser = auth.currentUser;
+            const vendedorInfo = currentUser
+                ? { email: currentUser.email, nombre: currentUser.displayName || currentUser.email.split('@')[0] }
+                : { email: 'desconocido', nombre: 'Desconocido' };
+            // --- FIN DE LA MODIFICACIÓN ---
+
             const nuevaVenta = {
                 estado: 'finalizada',
                 sesionCajaId: getSesionActivaId(),
@@ -550,6 +558,7 @@ async function finalizarVenta() {
                 timestamp: getFormattedDateTime(),
                 ticketId: ticketNumber,
                 cliente: clienteSeleccionado,
+                vendedor: vendedorInfo, // <-- AÑADIMOS EL VENDEDOR
                 productos: productosParaGuardar.map(item => ({
                     id: item.id, nombre: item.nombre, precio: item.precio, costo: item.costo, cantidad: item.cantidad,
                     rubro: productos.find(p => p.id === item.id)?.rubro || 'Desconocido',

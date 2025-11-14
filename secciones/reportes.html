@@ -1,12 +1,13 @@
 <section id="seccion-reportes">
     <h2 class="mb-4" id="reporte-titulo">Dashboard de Reportes</h2>
 
+    <!-- INICIO DE LA MODIFICACIÓN: Reorganización de filtros -->
     <div class="row mb-4">
-        <div class="col-md-3">
+        <div class="col-md-2">
             <label for="reporte-fecha-desde" class="form-label">Desde:</label>
             <input type="date" class="form-control" id="reporte-fecha-desde">
         </div>
-        <div class="col-md-3">
+        <div class="col-md-2">
             <label for="reporte-fecha-hasta" class="form-label">Hasta:</label>
             <input type="date" class="form-control" id="reporte-fecha-hasta">
         </div>
@@ -17,13 +18,21 @@
             <datalist id="rubros-list-reporte">
             </datalist>
         </div>
-        <div class="col-md-3 d-flex align-items-end">
+        <div class="col-md-2">
+            <label for="filtro-reporte-vendedor" class="form-label">Filtrar por Vendedor:</label>
+            <select class="form-select" id="filtro-reporte-vendedor">
+                <option value="">Todos los vendedores</option>
+                <!-- Opciones generadas por JS -->
+            </select>
+        </div>
+        <div class="col-md-2 d-flex align-items-end">
             <button class="btn btn-primary me-2" id="btnGenerarReporte"><i class="fas fa-play me-2"></i>Generar</button>
             <button class="btn btn-outline-secondary d-none" id="btnQuitarFiltro"><i class="fas fa-undo me-2"></i>Quitar
                 Filtro</button>
         </div>
 
     </div>
+    <!-- FIN DE LA MODIFICACIÓN -->
 
     <div id="reportes-avanzados">
         <div class="row">
@@ -186,6 +195,31 @@
             </div>
         </div>
     </div>
+    <!-- INICIO DE LA MODIFICACIÓN: Tabla de Reporte por Vendedor -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 fw-bold text-primary">Reporte por Vendedor</h6>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-bordered" id="tabla-ventas-vendedor" width="100%" cellspacing="0">
+                    <thead>
+                        <tr>
+                            <th>Vendedor</th>
+                            <th>N° de Ventas</th>
+                            <th>Total Vendido</th>
+                            <th>Comisión (1%)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabla-ventas-vendedor-body">
+                        <!-- Las filas se generarán dinámicamente -->
+                    </tbody>
+                </table>
+            </div>
+            <small class="text-muted">La comisión se calcula como el 1% del "Total Vendido" para el período seleccionado.</small>
+        </div>
+    </div>
+    <!-- FIN DE LA MODIFICACIÓN -->
     <div class="card shadow mb-4">
         <div class="card-header py-3 bg-secondary text-white">
             <h6 class="m-0 font-weight-bold">Detalle de Ventas del Periodo</h6>

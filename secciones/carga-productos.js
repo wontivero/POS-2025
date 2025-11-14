@@ -283,8 +283,8 @@ async function agregarProductoAGrilla(duplicarDespues = false) {
         stock: parseInt(prodStock.value) || 0,
         stockMinimo: parseInt(prodStockMinimo.value) || 0,
         isGeneric: prodGenerico.checked,
-        // --- CORRECCIÓN AQUÍ ---
-        isFeatured: prodDestacado.checked, // La variable correcta es prodDestacado
+        
+        isFeatured: prodDestacado.checked,
     };
 
     const indexExistente = productosEnPreparacion.findIndex(p => p.id === productoParaGrilla.id);

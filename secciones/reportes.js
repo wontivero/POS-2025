@@ -1,6 +1,6 @@
 // secciones/reportes.js
 // AL PRINCIPIO de reportes.js
-import { getFirestore, collection, query, where, getDocs, orderBy, runTransaction, doc } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
+import { getFirestore, collection, query, where, getDocs, orderBy, runTransaction, doc, getDoc } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
 import { getCollection, getDocumentById, formatCurrency, getTodayDate, generatePDF, showConfirmationModal, showAlertModal, normalizeString } from '../utils.js';
 import { getAuth } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-auth.js";
 import { haySesionActiva, getSesionActivaId, verificarEstadoCaja } from './caja.js';
@@ -10,12 +10,29 @@ import { getCurrentUserRole } from '../app.js';
 let ventas = [];
 let ventasFiltradas = [];
 let ventasFiltradasActivas = [];
+let commissionPercentage = 1; // Valor por defecto
 let rubrosSeleccionadosParaPagos = new Set();
 
 // --- Elementos del DOM (variables que se inicializarán en init) ---
-let reporteFechaDesde, reporteFechaHasta, btnGenerarReporte, btnQuitarFiltro, filtroReporteRubro, datalistRubrosReporte;
-let reporteTotalVentas, reporteTotalGanancia, reporteNumVentas, reporteTicketPromedio, tablaVentasDetalleBody, tablaTopProductosBody;
+let reporteFechaDesde, reporteFechaHasta, btnGenerarReporte, btnQuitarFiltro, filtroReporteRubro, datalistRubrosReporte, filtroReporteVendedor; // <-- AÑADIMOS EL NUEVO FILTRO
+let reporteTotalVentas, reporteTotalGanancia, reporteNumVentas, reporteTicketPromedio, tablaVentasDetalleBody, tablaTopProductosBody, tablaVentasVendedorBody; // <-- 2. AÑADIMOS LA NUEVA TABLA
 let chartRubros, chartPagos, chartVentasTiempo, chartContadoPorRubro;
+
+/**
+ * Carga el porcentaje de comisión desde Firestore.
+ */
+async function loadCommissionPercentage() {
+    try {
+        const configRef = doc(getFirestore(), "app_settings", "main");
+        const docSnap = await getDoc(configRef);
+        if (docSnap.exists() && docSnap.data().commissionPercentage) {
+            commissionPercentage = docSnap.data().commissionPercentage;
+        }
+    } catch (error) {
+        console.error("No se pudo cargar el porcentaje de comisión, se usará el valor por defecto (1%).", error);
+        commissionPercentage = 1; // Usar valor por defecto en caso de error
+    }
+}
 
 // --- Funciones de la Sección de Reportes ---
 
@@ -23,12 +40,13 @@ let chartRubros, chartPagos, chartVentasTiempo, chartContadoPorRubro;
 async function loadData() {
     // Ya no cargamos todas las ventas aquí.
     // Solo preparamos los elementos necesarios para los filtros.
+    await loadCommissionPercentage();
     await renderDatalistRubros();
 }
 
 // REEMPLAZA ESTA FUNCIÓN ENTERA EN reportes.js
 
-function renderReportes(ventasParaCalcular) {
+async function renderReportes(ventasParaCalcular) {
     if (!reporteTotalVentas) return;
 
     // Usamos la lista "limpia" que nos pasaron para todos los cálculos
@@ -48,6 +66,7 @@ function renderReportes(ventasParaCalcular) {
     // Ahora solo llamamos a las funciones que dependen de la lista "limpia"
     renderTopProductos(ventasParaCalcular);
     renderCharts(ventasParaCalcular);
+    await renderReporteVendedor(ventasParaCalcular);
 }
 
 
@@ -92,6 +111,30 @@ function renderFiltroRubrosPagos(ventas) {
     });
 }
 
+/**
+ * Genera dinámicamente las opciones para el filtro de vendedores.
+ * @param {Array} ventas - La lista de ventas de donde extraer los vendedores.
+ */
+function renderFiltroVendedores(ventas) {
+    if (!filtroReporteVendedor) return;
+
+    const vendedoresUnicos = {};
+    ventas.forEach(venta => {
+        if (venta.vendedor && venta.vendedor.email) {
+            if (!vendedoresUnicos[venta.vendedor.email]) {
+                vendedoresUnicos[venta.vendedor.email] = venta.vendedor.nombre;
+            }
+        }
+    });
+
+    // Guardamos la selección actual para no perderla
+    const vendedorSeleccionado = filtroReporteVendedor.value;
+    filtroReporteVendedor.innerHTML = '<option value="">Todos los vendedores</option>'; // Opción por defecto
+    for (const email in vendedoresUnicos) {
+        filtroReporteVendedor.innerHTML += `<option value="${email}">${vendedoresUnicos[email]}</option>`;
+    }
+    filtroReporteVendedor.value = vendedorSeleccionado; // Restauramos la selección
+}
 
 /**
  * Filtra la lista de ventas global basándose en los rubros seleccionados en los checkboxes.
@@ -163,6 +206,50 @@ function actualizarGraficoPagos() {
         });
 
         renderLegend('chartPagos-legend', sortedPagos, pagosChartColores, 'Total por Método');
+    }
+}
+
+// AÑADE ESTA FUNCIÓN COMPLETA EN reportes.js
+
+/**
+ * Renderiza la tabla de resumen de ventas por vendedor.
+ * @param {Array} ventasParaCalcular - La lista de ventas activas y filtradas.
+ */
+async function renderReporteVendedor(ventasParaCalcular) {
+    if (!tablaVentasVendedorBody) return;
+
+    const ventasPorVendedor = {};
+
+    ventasParaCalcular.forEach(venta => {
+        const vendedorEmail = venta.vendedor?.email || 'desconocido';
+        const vendedorNombre = venta.vendedor?.nombre || 'Desconocido';
+
+        if (!ventasPorVendedor[vendedorEmail]) {
+            ventasPorVendedor[vendedorEmail] = {
+                nombre: vendedorNombre,
+                totalVendido: 0,
+                gananciaTotal: 0,
+                numVentas: 0,
+            };
+        }
+
+        ventasPorVendedor[vendedorEmail].totalVendido += venta.total;
+        ventasPorVendedor[vendedorEmail].gananciaTotal += venta.ganancia;
+        ventasPorVendedor[vendedorEmail].numVentas++;
+    });
+
+    tablaVentasVendedorBody.innerHTML = '';
+    for (const email in ventasPorVendedor) {
+        const data = ventasPorVendedor[email];
+        const comision = data.totalVendido * (commissionPercentage / 100);
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${data.nombre}</td>
+            <td>${data.numVentas}</td>
+            <td>${formatCurrency(data.totalVendido)}</td>
+            <td>${formatCurrency(comision)}</td>
+        `;
+        tablaVentasVendedorBody.appendChild(row);
     }
 }
 
@@ -476,6 +563,7 @@ async function filtrarReporte() {
         const desde = reporteFechaDesde.value;
         const hasta = reporteFechaHasta.value;
         const rubroFiltro = filtroReporteRubro.value.trim().toLowerCase();
+        const vendedorFiltro = filtroReporteVendedor.value; // <-- OBTENEMOS EL VENDEDOR
 
         if (!desde || !hasta) {
             await showAlertModal("Por favor, selecciona un rango de fechas válido.", "Fechas requeridas");
@@ -497,7 +585,7 @@ async function filtrarReporte() {
         ventas = ventasFetched;
         // --- FIN DE LA CORRECCIÓN ---
 
-        let ventasProcesadas;
+        let ventasProcesadas = ventasFetched;
         if (rubroFiltro) {
             ventasProcesadas = [];
             ventasFetched.forEach(venta => {
@@ -517,16 +605,21 @@ async function filtrarReporte() {
                     ventasProcesadas.push({ ...venta, productos: productosFiltrados, total: nuevoTotal, ganancia: nuevaGanancia, pagos: nuevosPagos });
                 }
             });
-        } else {
-            ventasProcesadas = ventasFetched;
+        }
+
+        // APLICAMOS EL FILTRO DE VENDEDOR
+        if (vendedorFiltro) {
+            ventasProcesadas = ventasProcesadas.filter(venta => venta.vendedor?.email === vendedorFiltro);
         }
 
          // Guardamos las ventas activas en la variable global para que los filtros puedan usarlas
         ventasFiltradasActivas = ventasProcesadas.filter(venta => venta.estado !== 'anulada');
 
+        renderFiltroVendedores(ventasFetched); // <-- LLAMAMOS A LA FUNCIÓN PARA POBLAR EL SELECT
+
         // Renderizamos la tabla y los reportes principales con todos los datos
         renderTablaDetalle(ventasProcesadas);
-        renderReportes(ventasFiltradasActivas);
+        await renderReportes(ventasFiltradasActivas);
 
         // Generamos los checkboxes de filtro para el gráfico de pagos
         renderFiltroRubrosPagos(ventasFiltradasActivas);
@@ -548,6 +641,7 @@ function limpiarFiltros(filtrar = true) {
     reporteFechaDesde.value = getTodayDate();
     reporteFechaHasta.value = getTodayDate();
     filtroReporteRubro.value = '';
+    if (filtroReporteVendedor) filtroReporteVendedor.value = ''; // <-- LIMPIAMOS EL FILTRO
 
     // Solo llamamos a filtrarReporte si el parámetro 'filtrar' es verdadero
     if (filtrar) {
@@ -576,6 +670,7 @@ export async function init() {
     btnGenerarReporte = document.getElementById('btnGenerarReporte');
     btnQuitarFiltro = document.getElementById('btnQuitarFiltro');
     filtroReporteRubro = document.getElementById('filtro-reporte-rubro');
+    filtroReporteVendedor = document.getElementById('filtro-reporte-vendedor'); // <-- OBTENEMOS EL ELEMENTO
     datalistRubrosReporte = document.getElementById('rubros-list-reporte');
 
     reporteTotalVentas = document.getElementById('reporte-total-ventas');
@@ -584,10 +679,12 @@ export async function init() {
     reporteTicketPromedio = document.getElementById('reporte-ticket-promedio');
     tablaVentasDetalleBody = document.getElementById('tabla-ventas-detalle');
     tablaTopProductosBody = document.getElementById('tablaTopProductos');
+    tablaVentasVendedorBody = document.getElementById('tabla-ventas-vendedor-body'); // <-- 4. OBTENEMOS EL ELEMENTO
 
     btnGenerarReporte.addEventListener('click', filtrarReporte);
     btnQuitarFiltro.addEventListener('click', limpiarFiltros);
     filtroReporteRubro.addEventListener('input', filtrarReporte);
+    if (filtroReporteVendedor) filtroReporteVendedor.addEventListener('change', filtrarReporte); // <-- AÑADIMOS EL LISTENER
 
     // --- INICIO DE LA MODIFICACIÓN ---
     // Event listener para los checkboxes de rubros del gráfico de pagos
@@ -642,8 +739,13 @@ export async function init() {
                         <div class="col-md-7">
                             <h6><i class="fas fa-user me-2 text-muted"></i>CLIENTE</h6>
                             <p class="mb-3 ms-4">${venta.cliente ? venta.cliente.nombre : 'Consumidor Final'}</p>
+                            
+                            <!-- INICIO DE LA MODIFICACIÓN -->
                             <h6><i class="fas fa-calendar-alt me-2 text-muted"></i>FECHA Y HORA</h6>
-                            <p class="mb-0 ms-4">${venta.timestamp || 'N/A'}</p>
+                            <p class="mb-3 ms-4">${venta.timestamp || 'N/A'}</p>
+                            <h6><i class="fas fa-user-tag me-2 text-muted"></i>VENDEDOR</h6>
+                            <p class="mb-0 ms-4">${venta.vendedor ? venta.vendedor.nombre : 'No especificado'}</p>
+                            <!-- FIN DE LA MODIFICACIÓN -->
                         </div>
                         <div class="col-md-5 text-md-end">
                             <h6 class="text-muted">TOTAL VENTA</h6>
@@ -695,5 +797,5 @@ export async function init() {
     }
 
     limpiarFiltros();
-    await loadData();
+    await loadData(); // Se mantiene la carga de datos inicial
 }

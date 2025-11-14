@@ -7,7 +7,8 @@ import {
     initProductosListener, 
     initMarcasListener, 
     initColoresListener, 
-    initRubrosListener 
+    initRubrosListener,
+    initConfigListener // <-- 1. IMPORTAMOS EL NUEVO INICIALIZADOR
 } from './secciones/dataManager.js';
 // --- Lista de correos autorizados ---
 const emailsAutorizados = [
@@ -25,6 +26,7 @@ initProductosListener();
 initMarcasListener();
 initColoresListener();
 initRubrosListener();
+initConfigListener(); // <-- 2. LO LLAMAMOS AL INICIO
 
 // --- Nueva Función para obtener el Rol ---
 async function getUserRole(user) {
@@ -90,6 +92,14 @@ onAuthStateChanged(auth, async (user) => {
             });
         }
         
+        // --- INICIO DE LA MODIFICACIÓN: Mostrar elementos solo para admin ---
+        document.querySelectorAll('.admin-only').forEach(el => {
+            if (currentUserRole === 'admin') {
+                el.style.display = 'list-item'; // O 'block', 'inline-block', etc., según el elemento
+            }
+        });
+        // --- FIN DE LA MODIFICACIÓN ---
+
         loadSection('ventas');
     } else {
         console.log("Usuario no autenticado, redirigiendo a login.html");
@@ -110,10 +120,18 @@ async function loadSection(section) {
     });
 
     try {
+        // --- INICIO DE LA MODIFICACIÓN: Carga condicional de HTML ---
+        // Cargamos el HTML de la sección.
         const response = await fetch(`secciones/${section}.html`);
+        if (!response.ok) {
+            // Si el HTML no existe, mostramos un error claro y no intentamos cargar el JS.
+            throw new Error(`El archivo ${section}.html no se encontró o no se pudo cargar.`);
+        }
         mainContent.innerHTML = await response.text();
+        // --- FIN DE LA MODIFICACIÓN ---
+
         const module = await import(`./secciones/${section}.js`);
-        if (module.init) {
+        if (module && typeof module.init === 'function') {
             setTimeout(module.init, 0);
         }
     } catch (error) {

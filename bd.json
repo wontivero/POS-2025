@@ -1,0 +1,279 @@
+{
+  "_comment": "Este archivo contiene la estructura de la base de datos del proyecto POS 2025. Incluye colecciones, documentos de ejemplo y la estructura de los índices de Firestore.",
+  "caja_sesiones": {
+    "conteoFinal": {
+      "type": "número",
+      "example": 0
+    },
+    "diferencia": {
+      "type": "número",
+      "example": 0
+    },
+    "estado": {
+      "type": "cadena",
+      "example": "abierta"
+    },
+    "fechaApertura": {
+      "type": "marca de tiempo",
+      "example": "12 de septiembre de 2025, 10:30:48 p.m. UTC-3"
+    },
+    "fechaCierre": {
+      "type": "nulo",
+      "example": null
+    },
+    "fondoInicial": {
+      "type": "número",
+      "example": 0
+    },
+    "totalCalculado": {
+      "type": "número",
+      "example": 0
+    },
+    "totalEgresos": {
+      "type": "número",
+      "example": 0
+    },
+    "totalOtrosIngresos": {
+      "type": "número",
+      "example": 0
+    },
+    "totalVentasEfectivo": {
+      "type": "número",
+      "example": 0
+    },
+    "usuarioApertura": {
+      "type": "cadena",
+      "example": "wontivero@gmail.com"
+    },
+    "usuarioCierre": {
+      "type": "nulo",
+      "example": null
+    }
+  },
+  "clientes": {
+    "cuit": {
+      "type": "cadena",
+      "example": "99-99999999-9"
+    },
+    "nombre": {
+      "type": "cadena",
+      "example": "Consumidor Final"
+    }
+  },
+  "colores": {
+    "nombre": {
+      "type": "cadena",
+      "example": "Negro"
+    }
+  },
+  "config": {
+    "ticket_counter": {
+      "lastTicketNumber": {
+        "type": "número",
+        "example": 24
+      }
+    }
+  },
+  "marcas": {
+    "nombre": {
+      "type": "cadena",
+      "example": "AMERICA"
+    }
+  },
+  "productos": {
+    "codigo": {
+      "type": "cadena",
+      "example": "7003066053590"
+    },
+    "color": {
+      "type": "cadena",
+      "example": ""
+    },
+    "costo": {
+      "type": "número",
+      "example": 9000
+    },
+    "fechaUltimoCambioPrecio": {
+      "type": "marca de tiempo",
+      "example": "22 de septiembre de 2025, 11:48:06 p.m. UTC-3"
+    },
+    "genericProfitMargin": {
+      "type": "número",
+      "example": 75
+    },
+    "isFeatured": {
+      "type": "booleano",
+      "example": false
+    },
+    "isGeneric": {
+      "type": "booleano",
+      "example": false
+    },
+    "marca": {
+      "type": "cadena",
+      "example": "kingston"
+    },
+    "nombre": {
+      "type": "cadena",
+      "example": "Pen drive"
+    },
+    "nombre_lowercase": {
+      "type": "cadena",
+      "example": "pen drive"
+    },
+    "rubro": {
+      "type": "cadena",
+      "example": "informatica"
+    },
+    "stock": {
+      "type": "número",
+      "example": 10
+    },
+    "stockMinimo": {
+      "type": "número",
+      "example": 0
+    },
+    "venta": {
+      "type": "número",
+      "example": 13950
+    }
+  },
+  "rubros": {
+    "nombre": {
+      "type": "cadena",
+      "example": "informatica"
+    }
+  },
+  "usuarios": {
+    "email": {
+      "type": "cadena",
+      "example": "wontivero@gmail.com"
+    },
+    "rol": {
+      "type": "cadena",
+      "example": "admin"
+    }
+  },
+  "ventas": {
+    "cliente": {
+      "type": "mapa",
+      "fields": {
+        "cuit": {
+          "type": "cadena",
+          "example": "99-99999999-9"
+        },
+        "id": {
+          "type": "cadena",
+          "example": "vaMJtM3uPSGBEK7juPXT"
+        },
+        "nombre": {
+          "type": "cadena",
+          "example": "Consumidor Final"
+        }
+      }
+    },
+    "estado": {
+      "type": "cadena",
+      "example": "finalizada"
+    },
+    "fecha": {
+      "type": "cadena",
+      "example": "2025-09-16"
+    },
+    "ganancia": {
+      "type": "número",
+      "example": 21250
+    },
+    "pagos": {
+      "type": "mapa",
+      "fields": {
+        "contado": {
+          "type": "número",
+          "example": 60000
+        },
+        "credito": {
+          "type": "número",
+          "example": 0
+        },
+        "debito": {
+          "type": "número",
+          "example": 0
+        },
+        "recargoCredito": {
+          "type": "número",
+          "example": 10
+        },
+        "transferencia": {
+          "type": "número",
+          "example": 0
+        }
+      }
+    },
+    "productos": {
+      "type": "array",
+      "items": {
+        "type": "mapa",
+        "fields": {
+          "cantidad": {
+            "type": "número",
+            "example": 1
+          },
+          "costo": {
+            "type": "número",
+            "example": 38750
+          },
+          "id": {
+            "type": "cadena",
+            "example": "PXAM4WAtkcQP216VFJfZ"
+          },
+          "marca": {
+            "type": "cadena",
+            "example": "netmak"
+          },
+          "nombre": {
+            "type": "cadena",
+            "example": "Reloj Smarwatch ENERGY nm-energy"
+          },
+          "precio": {
+            "type": "número",
+            "example": 60000
+          },
+          "rubro": {
+            "type": "cadena",
+            "example": "informatica"
+          }
+        }
+      }
+    },
+    "sesionCajaId": {
+      "type": "cadena",
+      "example": "7b1tbR2l0IVqkMNBHJ58"
+    },
+    "ticketId": {
+      "type": "número",
+      "example": 15
+    },
+    "timestamp": {
+      "type": "cadena",
+      "example": "16/09/2025 00:08"
+    },
+    "total": {
+      "type": "número",
+      "example": 60000
+    }
+  },
+  "indexes": {
+    "caja_sesiones": [
+      {
+        "fields": [
+          "estado",
+          "fechaCierre",
+          "__name__"
+        ],
+        "queryScope": "Colección",
+        "id": "CICAgOjXh4EK",
+        "status": "Habilitado"
+      }
+    ]
+  }
+}

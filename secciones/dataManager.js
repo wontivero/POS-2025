@@ -1,5 +1,5 @@
 // dataManager.js
-import { getFirestore, collection, query, orderBy, onSnapshot } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
+import { getFirestore, collection, query, orderBy, onSnapshot, doc, getDoc } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
 
 const db = getFirestore();
 
@@ -8,6 +8,7 @@ let productos = [];
 let marcas = [];
 let colores = [];
 let rubros = [];
+let appConfig = {}; // <-- NUEVO CACHÉ PARA LA CONFIGURACIÓN
 
 // Banderas para asegurar que cada oyente se inicie una sola vez
 let listenersInicializados = {
@@ -15,6 +16,7 @@ let listenersInicializados = {
     marcas: false,
     colores: false,
     rubros: false,
+    config: false, // <-- NUEVA BANDERA
 };
 
 // --- GETTERS (Funciones para obtener los datos del caché) ---
@@ -22,6 +24,7 @@ export const getProductos = () => productos;
 export const getMarcas = () => marcas;
 export const getColores = () => colores;
 export const getRubros = () => rubros;
+export const getAppConfig = () => appConfig; // <-- NUEVO GETTER
 
 // --- LISTENERS (Funciones para iniciar la escucha en tiempo real) ---
 
@@ -86,4 +89,25 @@ export function initColoresListener() {
 }
 export function initRubrosListener() {
     setupListener('rubros', rubros, 'rubros-updated');
+}
+
+/**
+ * Inicia un oyente para el documento de configuración de la aplicación.
+ */
+export function initConfigListener() {
+    if (listenersInicializados.config) return;
+
+    console.log("Iniciando oyente para la configuración de la aplicación...");
+    const configRef = doc(db, "app_settings", "main");
+
+    onSnapshot(configRef, (docSnap) => {
+        if (docSnap.exists()) {
+            appConfig = docSnap.data();
+            console.log("Caché de 'config' actualizado.");
+            // Disparamos un evento para que otras partes de la app sepan que la config cambió
+            document.dispatchEvent(new CustomEvent('config-updated'));
+        }
+    });
+
+    listenersInicializados.config = true;
 }

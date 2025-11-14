@@ -1,0 +1,66 @@
+<section id="seccion-configuracion">
+    <h2 class="mb-4">Configuración General</h2>
+
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card shadow-sm">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="fas fa-percent me-2"></i>Comisiones de Vendedores</h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted">Este valor se usará para calcular la comisión en el reporte de ventas por vendedor.</p>
+                    <div class="mb-3">
+                        <label for="config-commission-percentage" class="form-label">Porcentaje de Comisión (%)</label>
+                        <div class="input-group">
+                            <input type="number" class="form-control" id="config-commission-percentage" placeholder="1" step="0.1">
+                            <span class="input-group-text">%</span>
+                        </div>
+                    </div>
+                    <button class="btn btn-success" id="btn-guardar-comision"><i class="fas fa-save me-2"></i>Guardar Porcentaje</button>
+                </div>
+            </div>
+        </div>
+        <!-- INICIO DE LA MODIFICACIÓN: Formulario de Datos de la Empresa -->
+        <div class="col-md-6">
+            <div class="card shadow-sm">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0"><i class="fas fa-store me-2"></i>Datos de la Empresa (para Tickets)</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-12 mb-2">
+                            <label for="config-company-name" class="form-label">Nombre Empresa</label>
+                            <input type="text" class="form-control" id="config-company-name">
+                        </div>
+                        <div class="col-12 mb-2">
+                            <label for="config-company-address" class="form-label">Dirección</label>
+                            <input type="text" class="form-control" id="config-company-address">
+                        </div>
+                        <div class="col-md-6 mb-2">
+                            <label for="config-company-cuit" class="form-label">CUIT</label>
+                            <input type="text" class="form-control" id="config-company-cuit">
+                        </div>
+                        <div class="col-md-6 mb-2">
+                            <label for="config-company-phone" class="form-label">Teléfono</label>
+                            <input type="text" class="form-control" id="config-company-phone">
+                        </div>
+                        <div class="col-md-6 mb-2">
+                            <label for="config-company-iva" class="form-label">Condición de IVA</label>
+                            <input type="text" class="form-control" id="config-company-iva">
+                        </div>
+                        <div class="col-md-6 mb-2">
+                            <label for="config-company-email" class="form-label">Email de Contacto</label>
+                            <input type="email" class="form-control" id="config-company-email">
+                        </div>
+                        <div class="col-12 mb-2">
+                            <label for="config-company-logo" class="form-label">URL del Logo</label>
+                            <input type="text" class="form-control" id="config-company-logo">
+                        </div>
+                    </div>
+                    <button class="btn btn-success mt-3" id="btn-guardar-empresa"><i class="fas fa-save me-2"></i>Guardar Datos Empresa</button>
+                </div>
+            </div>
+        </div>
+        <!-- FIN DE LA MODIFICACIÓN -->
+    </div>
+</section>

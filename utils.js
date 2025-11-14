@@ -3,8 +3,8 @@ import { db } from './firebase.js';
 import {
     collection, addDoc, getDocs, runTransaction, doc, query, orderBy, where, updateDoc, deleteDoc, getDoc
 } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
-import { companyInfo } from './config.js';
-/**
+import { getAppConfig } from './secciones/dataManager.js'; // <-- IMPORTAMOS EL GETTER
+ /**
  * Obtiene todos los documentos de una colección de Firestore.
  * @param {string} collectionName - El nombre de la colección.
  * @returns {Promise<Array>} - Una promesa que resuelve con los documentos y sus IDs.
@@ -154,6 +154,9 @@ export function capitalizeFirstLetter(str) {
 // REEMPLAZAR en utils.js
 export async function generatePDF(ticketId, venta) {
     const { jsPDF } = window.jspdf;
+    // --- INICIO DE LA MODIFICACIÓN: Obtenemos la config dinámicamente ---
+    const appConfig = getAppConfig();
+    const companyInfo = appConfig.companyInfo || {}; // Usamos un objeto vacío como fallback
     const doc = new jsPDF();
     const margin = 10;
     const lineHeight = 5;
@@ -200,8 +203,15 @@ export async function generatePDF(ticketId, venta) {
     doc.text('C', pageWidth / 2, textCY, { align: 'center', baseline: 'middle' });
 
     const rightY = topY + (logoHeight > 0 ? logoHeight / 2 : 0) - (lineHeight / 2);
-    drawText(`Fecha: ${venta.timestamp}`, pageWidth - margin, rightY, 10, 'normal', 'right');
-    drawText(`FACTURA N°: ${ticketId}`, pageWidth - margin, rightY + lineHeight * 1.5, 12, 'bold', 'right');
+    // --- INICIO DE LA MODIFICACIÓN ---
+    let currentY = rightY;
+    drawText(`Fecha: ${venta.timestamp}`, pageWidth - margin, currentY, 10, 'normal', 'right');
+    currentY += lineHeight * 1.2;
+    if (venta.vendedor && venta.vendedor.nombre) {
+        drawText(`Vendedor: ${venta.vendedor.nombre}`, pageWidth - margin, currentY, 9, 'normal', 'right');
+    }
+    drawText(`FACTURA N°: ${ticketId}`, pageWidth - margin, currentY + lineHeight * 1.5, 12, 'bold', 'right');
+    // --- FIN DE LA MODIFICACIÓN ---
 
     y = topY + Math.max(logoHeight, lineHeight * 3) + 10;
 
