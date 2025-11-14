@@ -1,22 +1,22 @@
 // secciones/reportes.js
-// AL PRINCIPIO de reportes.js
 import { getFirestore, collection, query, where, getDocs, orderBy, runTransaction, doc, getDoc } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
 import { getCollection, getDocumentById, formatCurrency, getTodayDate, generatePDF, showConfirmationModal, showAlertModal, normalizeString } from '../utils.js';
 import { getAuth } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-auth.js";
-import { haySesionActiva, getSesionActivaId, verificarEstadoCaja } from './caja.js';
+import { haySesionActiva, getSesionActivaId } from './caja.js';
 import { getCurrentUserRole } from '../app.js';
 
 // --- Estado de la Sección de Reportes ---
 let ventas = [];
-let ventasFiltradas = [];
 let ventasFiltradasActivas = [];
 let commissionPercentage = 1; // Valor por defecto
 let rubrosSeleccionadosParaPagos = new Set();
 
 // --- Elementos del DOM (variables que se inicializarán en init) ---
-let reporteFechaDesde, reporteFechaHasta, btnGenerarReporte, btnQuitarFiltro, filtroReporteRubro, datalistRubrosReporte, filtroReporteVendedor; // <-- AÑADIMOS EL NUEVO FILTRO
-let reporteTotalVentas, reporteTotalGanancia, reporteNumVentas, reporteTicketPromedio, tablaVentasDetalleBody, tablaTopProductosBody, tablaVentasVendedorBody; // <-- 2. AÑADIMOS LA NUEVA TABLA
+let reporteFechaDesde, reporteFechaHasta, btnGenerarReporte, btnQuitarFiltro, filtroReporteRubro, datalistRubrosReporte, filtroReporteVendedor;
+let reporteTotalVentas, reporteTotalGanancia, reporteNumVentas, reporteTicketPromedio, tablaVentasDetalleBody, tablaTopProductosBody, tablaVentasVendedorBody, commissionNote;
 let chartRubros, chartPagos, chartVentasTiempo, chartContadoPorRubro;
+
+const auth = getAuth();
 
 /**
  * Carga el porcentaje de comisión desde Firestore.
@@ -34,22 +34,14 @@ async function loadCommissionPercentage() {
     }
 }
 
-// --- Funciones de la Sección de Reportes ---
-
-// REEMPLAZA ESTA FUNCIÓN EN reportes.js
 async function loadData() {
-    // Ya no cargamos todas las ventas aquí.
-    // Solo preparamos los elementos necesarios para los filtros.
     await loadCommissionPercentage();
     await renderDatalistRubros();
 }
 
-// REEMPLAZA ESTA FUNCIÓN ENTERA EN reportes.js
-
 async function renderReportes(ventasParaCalcular) {
     if (!reporteTotalVentas) return;
 
-    // Usamos la lista "limpia" que nos pasaron para todos los cálculos
     const totalVentas = ventasParaCalcular.reduce((sum, venta) => sum + venta.total, 0);
     const totalGanancia = ventasParaCalcular.reduce((sum, venta) => sum + venta.ganancia, 0);
     const numVentas = ventasParaCalcular.length;
@@ -60,27 +52,15 @@ async function renderReportes(ventasParaCalcular) {
     reporteNumVentas.textContent = numVentas;
     reporteTicketPromedio.textContent = formatCurrency(ticketPromedio);
 
-    // --- LÍNEA ELIMINADA ---
-    // renderTablaDetalle(); // <- Esta era la llamada incorrecta que causaba el error.
-
-    // Ahora solo llamamos a las funciones que dependen de la lista "limpia"
     renderTopProductos(ventasParaCalcular);
     renderCharts(ventasParaCalcular);
     await renderReporteVendedor(ventasParaCalcular);
 }
 
-
-// AÑADE ESTAS TRES FUNCIONES COMPLETAS EN reportes.js
-
-/**
- * Genera dinámicamente los checkboxes para filtrar el gráfico de pagos por rubro.
- * @param {Array} ventas - La lista de ventas activas de donde extraer los rubros.
- */
 function renderFiltroRubrosPagos(ventas) {
     const container = document.getElementById('filtro-rubros-pagos-checkboxes');
     if (!container) return;
 
-    // 1. Extraer rubros únicos y normalizados
     const rubrosUnicos = new Set();
     ventas.forEach(venta => {
         (venta.productos || []).forEach(p => {
@@ -91,10 +71,8 @@ function renderFiltroRubrosPagos(ventas) {
         });
     });
 
-    // 2. Llenar el Set de rubros seleccionados por defecto
     rubrosSeleccionadosParaPagos = new Set(rubrosUnicos);
 
-    // 3. Crear el HTML de los checkboxes
     container.innerHTML = '';
     const rubrosOrdenados = [...rubrosUnicos].sort();
     rubrosOrdenados.forEach(rubro => {
@@ -111,10 +89,6 @@ function renderFiltroRubrosPagos(ventas) {
     });
 }
 
-/**
- * Genera dinámicamente las opciones para el filtro de vendedores.
- * @param {Array} ventas - La lista de ventas de donde extraer los vendedores.
- */
 function renderFiltroVendedores(ventas) {
     if (!filtroReporteVendedor) return;
 
@@ -127,19 +101,14 @@ function renderFiltroVendedores(ventas) {
         }
     });
 
-    // Guardamos la selección actual para no perderla
     const vendedorSeleccionado = filtroReporteVendedor.value;
-    filtroReporteVendedor.innerHTML = '<option value="">Todos los vendedores</option>'; // Opción por defecto
+    filtroReporteVendedor.innerHTML = '<option value="">Todos los vendedores</option>';
     for (const email in vendedoresUnicos) {
         filtroReporteVendedor.innerHTML += `<option value="${email}">${vendedoresUnicos[email]}</option>`;
     }
-    filtroReporteVendedor.value = vendedorSeleccionado; // Restauramos la selección
+    filtroReporteVendedor.value = vendedorSeleccionado;
 }
 
-/**
- * Filtra la lista de ventas global basándose en los rubros seleccionados en los checkboxes.
- * @returns {Array} Una nueva lista de ventas que coinciden con los rubros seleccionados.
- */
 function filtrarVentasPorRubrosSeleccionados() {
     if (rubrosSeleccionadosParaPagos.size === 0) return [];
 
@@ -150,32 +119,16 @@ function filtrarVentasPorRubrosSeleccionados() {
     });
 }
 
-/**
- * Actualiza solo el gráfico de métodos de pago y su leyenda.
- */
-// REEMPLAZA ESTA FUNCIÓN ENTERA EN reportes.js
-
-// REEMPLAZA ESTA FUNCIÓN ENTERA EN reportes.js
-
 function actualizarGraficoPagos() {
     const ventasParaGrafico = filtrarVentasPorRubrosSeleccionados();
-
     const datosPagos = { contado: 0, transferencia: 0, debito: 0, credito: 0 };
 
-    // --- INICIO DE LA CORRECCIÓN ---
-    // En lugar de sumar el total de la venta, ahora calculamos la proporción
-    // que corresponde solo a los rubros seleccionados, igual que el otro gráfico.
     ventasParaGrafico.forEach(venta => {
         const totalVenta = venta.total;
         if (totalVenta > 0 && Array.isArray(venta.productos)) {
-            // Iteramos sobre cada producto dentro de la venta
             venta.productos.forEach(producto => {
-                // Verificamos si el rubro de este producto está en la lista de los seleccionados
                 if (rubrosSeleccionadosParaPagos.has(normalizeString(producto.rubro || 'desconocido'))) {
-                    // Si está, calculamos qué porción del total de la venta representa este producto
                     const proporcion = ((producto.precio || 0) * (producto.cantidad || 0)) / totalVenta;
-                    
-                    // Y sumamos solo esa porción de cada método de pago a nuestros totales
                     Object.keys(datosPagos).forEach(metodo => {
                         datosPagos[metodo] += parseFloat(venta.pagos[metodo] || 0) * proporcion;
                     });
@@ -183,9 +136,7 @@ function actualizarGraficoPagos() {
             });
         }
     });
-    // --- FIN DE LA CORRECCIÓN ---
 
-    // El resto de la función para dibujar el gráfico no cambia
     if (chartPagos) chartPagos.destroy();
     const sortedPagos = Object.entries(datosPagos).sort(([, a], [, b]) => b - a);
     const ctxPagos = document.getElementById('chartPagos');
@@ -204,22 +155,58 @@ function actualizarGraficoPagos() {
             },
             options: { maintainAspectRatio: false, plugins: { legend: { display: false } } }
         });
-
         renderLegend('chartPagos-legend', sortedPagos, pagosChartColores, 'Total por Método');
     }
 }
 
-// AÑADE ESTA FUNCIÓN COMPLETA EN reportes.js
+function renderReporteCajero(ventasParaCalcular) {
+    const cajeroReportBody = document.getElementById('cajero-report-body');
+    if (!cajeroReportBody) return;
 
-/**
- * Renderiza la tabla de resumen de ventas por vendedor.
- * @param {Array} ventasParaCalcular - La lista de ventas activas y filtradas.
- */
+    const user = auth.currentUser;
+    if (!user) return;
+
+    const misVentas = ventasParaCalcular.filter(v => v.vendedor?.email === user.email);
+    const totalVendido = misVentas.reduce((sum, v) => sum + v.total, 0);
+    const numVentas = misVentas.length;
+
+    cajeroReportBody.innerHTML = `
+        <div class="row">
+            <div class="col-md-6 mb-3 mb-md-0">
+                <div class="row no-gutters align-items-center">
+                    <div class="col-auto me-3">
+                        <i class="fas fa-dollar-sign fa-2x text-gray-300"></i>
+                    </div>
+                    <div class="col">
+                        <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">Total de Mis Ventas</div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800">${formatCurrency(totalVendido)}</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="row no-gutters align-items-center">
+                    <div class="col-auto me-3">
+                        <i class="fas fa-clipboard-list fa-2x text-gray-300"></i>
+                    </div>
+                    <div class="col">
+                        <div class="text-xs font-weight-bold text-info text-uppercase mb-1">Número de Ventas</div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800">${numVentas}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
 async function renderReporteVendedor(ventasParaCalcular) {
-    if (!tablaVentasVendedorBody) return;
+    const userRole = getCurrentUserRole();
+    if (userRole === 'cajero') {
+        return renderReporteCajero(ventasParaCalcular);
+    }
+
+    if (!tablaVentasVendedorBody || !commissionNote) return;
 
     const ventasPorVendedor = {};
-
     ventasParaCalcular.forEach(venta => {
         const vendedorEmail = venta.vendedor?.email || 'desconocido';
         const vendedorNombre = venta.vendedor?.nombre || 'Desconocido';
@@ -232,13 +219,14 @@ async function renderReporteVendedor(ventasParaCalcular) {
                 numVentas: 0,
             };
         }
-
         ventasPorVendedor[vendedorEmail].totalVendido += venta.total;
         ventasPorVendedor[vendedorEmail].gananciaTotal += venta.ganancia;
         ventasPorVendedor[vendedorEmail].numVentas++;
     });
 
+    commissionNote.textContent = `La comisión se calcula como el % del "Total Vendido" para el período seleccionado.`;
     tablaVentasVendedorBody.innerHTML = '';
+
     for (const email in ventasPorVendedor) {
         const data = ventasPorVendedor[email];
         const comision = data.totalVendido * (commissionPercentage / 100);
@@ -258,7 +246,6 @@ async function anularVenta(ventaId) {
         "¿Estás seguro de que deseas anular esta venta? El stock de los productos será devuelto al inventario. Luego, serás redirigido para crear la venta corregida.",
         "Anular Venta"
     );
-
     if (!confirmado) return;
 
     const loadingOverlay = document.getElementById('loadingOverlay');
@@ -267,51 +254,39 @@ async function anularVenta(ventaId) {
     try {
         const db = getFirestore();
         const ventaAnulada = await getDocumentById('ventas', ventaId);
-
-        if (!ventaAnulada) {
-            throw new Error("No se pudo encontrar la venta en la base de datos para anularla.");
-        }
+        if (!ventaAnulada) throw new Error("No se pudo encontrar la venta para anularla.");
 
         const montoEfectivoDevuelto = ventaAnulada.pagos.contado || 0;
         if (montoEfectivoDevuelto > 0 && !haySesionActiva()) {
             throw new Error("No puedes anular una venta con pago en efectivo si no hay una sesión de caja abierta para registrar la devolución.");
         }
 
-        // --- INICIO DE LA CORRECCIÓN ---
         await runTransaction(db, async (transaction) => {
             const ventaRef = doc(db, 'ventas', ventaId);
-            const ventaDoc = await transaction.get(ventaRef); // Lectura de la venta
-
+            const ventaDoc = await transaction.get(ventaRef);
             if (!ventaDoc.exists()) throw new Error("La venta no existe.");
             const ventaData = ventaDoc.data();
             if (ventaData.estado === 'anulada') throw new Error("Esta venta ya ha sido anulada.");
 
-            // 1. PRIMER PASO: Realizamos todas las LECTURAS de productos primero.
             const productosParaActualizar = [];
             for (const productoVendido of ventaData.productos) {
                 if (productoVendido.isGeneric) continue;
                 const productoRef = doc(db, 'productos', productoVendido.id);
-                const productoDoc = await transaction.get(productoRef); // Lectura del producto
+                const productoDoc = await transaction.get(productoRef);
                 if (productoDoc.exists()) {
                     const stockActual = productoDoc.data().stock;
                     const nuevoStock = stockActual + productoVendido.cantidad;
-                    // Guardamos la información necesaria para la escritura, pero no escribimos todavía.
                     productosParaActualizar.push({ ref: productoRef, stock: nuevoStock });
                 }
             }
 
-            // 2. SEGUNDO PASO: Ahora que terminamos de leer, realizamos todas las ESCRITURAS.
             for (const producto of productosParaActualizar) {
-                transaction.update(producto.ref, { stock: producto.stock }); // Escritura del stock
+                transaction.update(producto.ref, { stock: producto.stock });
             }
-
-            // 3. ÚLTIMA ESCRITURA: Actualizamos el estado de la venta.
             transaction.update(ventaRef, { estado: 'anulada' });
         });
-        // --- FIN DE LA CORRECCIÓN ---
 
         if (montoEfectivoDevuelto > 0) {
-            const auth = getAuth();
             const egresoData = {
                 sesionCajaId: getSesionActivaId(),
                 tipo: 'egreso',
@@ -320,7 +295,6 @@ async function anularVenta(ventaId) {
                 usuario: auth.currentUser.email,
                 fecha: new Date()
             };
-            const { saveDocument } = await import('../utils.js');
             await saveDocument('caja_movimientos', egresoData);
         }
 
@@ -337,40 +311,25 @@ async function anularVenta(ventaId) {
         loadingOverlay.style.display = 'none';
     }
 }
-// REEMPLAZA ESTA FUNCIÓN ENTERA EN reportes.js
 
 function renderTablaDetalle(ventasParaMostrar) {
     if (!tablaVentasDetalleBody) return;
     tablaVentasDetalleBody.innerHTML = '';
 
-
-    // 1. Función auxiliar para convertir el texto "DD/MM/YYYY HH:mm" a un objeto Date
     const parseTimestamp = (timestampStr) => {
         if (!timestampStr || typeof timestampStr !== 'string') return new Date(0);
-
         const [datePart, timePart] = timestampStr.split(' ');
         const [day, month, year] = datePart.split('/');
-
-        // Si no hay parte de hora, usamos medianoche
         const [hours, minutes] = timePart ? timePart.split(':') : ['00', '00'];
-
-        // El mes en el constructor de Date es 0-indexado (Enero=0)
         return new Date(year, month - 1, day, hours, minutes);
     };
 
-    // 2. Ordenamos usando la nueva función que sí considera la hora
-    const ventasOrdenadas = [...ventasParaMostrar].sort((a, b) => {
-        return parseTimestamp(a.timestamp) - parseTimestamp(b.timestamp);
-    });
+    const ventasOrdenadas = [...ventasParaMostrar].sort((a, b) => parseTimestamp(b.timestamp) - parseTimestamp(a.timestamp));
+
     ventasOrdenadas.forEach(venta => {
         const row = document.createElement('tr');
-        // --- INICIO DE CAMBIOS ---
         const isAnulada = venta.estado === 'anulada';
-
-        // Si la venta está anulada, la mostramos con un estilo diferente
-        if (isAnulada) {
-            row.classList.add('table-secondary', 'text-muted');
-        }
+        if (isAnulada) row.classList.add('table-secondary', 'text-muted');
 
         const listaProductos = venta.productos.map(p => `${p.nombre} x${p.cantidad}`).join('<br>');
         const fechaFormateada = venta.timestamp || 'Sin Fecha';
@@ -392,12 +351,9 @@ function renderTablaDetalle(ventasParaMostrar) {
                 </button>
             </td>
         `;
-        // --- FIN DE CAMBIOS ---
         tablaVentasDetalleBody.appendChild(row);
     });
 }
-
-
 
 function renderTopProductos(ventasParaCalcular) {
     if (!tablaTopProductosBody) return;
@@ -421,9 +377,6 @@ function renderTopProductos(ventasParaCalcular) {
     });
 }
 
-// REEMPLAZA LA FUNCIÓN ENTERA EN reportes.js
-// REEMPLAZA ESTA FUNCIÓN ENTERA EN reportes.js
-
 function renderLegend(containerId, sortedData, colors, title) {
     const container = document.getElementById(containerId);
     if (!container) return;
@@ -444,12 +397,7 @@ function renderLegend(containerId, sortedData, colors, title) {
     container.innerHTML = legendHtml;
 }
 
-
-
 function renderCharts(ventasParaCalcular) {
-    // --- La función renderLegend ya NO está aquí dentro ---
-
-    // --- Cálculo de datos ---
     const datosRubros = {};
     const datosPagos = { contado: 0, transferencia: 0, debito: 0, credito: 0 };
     const datosVentasTiempo = {};
@@ -464,7 +412,6 @@ function renderCharts(ventasParaCalcular) {
             });
         }
         Object.keys(datosPagos).forEach(metodo => {
-            // Aseguramos que el valor sea numérico antes de sumar
             datosPagos[metodo] += parseFloat(venta.pagos[metodo] || 0);
         });
 
@@ -477,7 +424,6 @@ function renderCharts(ventasParaCalcular) {
         const totalVenta = venta.total;
         if (totalVenta > 0 && Array.isArray(venta.productos)) {
             venta.productos.forEach(p => {
-                // CORRECCIÓN de normalización para el gráfico de barras apiladas
                 const rubro = normalizeString(p.rubro || 'Desconocido');
                 const proporcion = ((p.precio || 0) * (p.cantidad || 0)) / totalVenta;
                 if (!datosVentasPorRubroMetodo[rubro]) {
@@ -493,7 +439,6 @@ function renderCharts(ventasParaCalcular) {
     const chartColors = ['#4e73df', '#1cc88a', '#36b9cc', '#f6c23e', '#e74a3b', '#858796'];
     const pagoColors = { contado: '#1cc88a', transferencia: '#4e73df', debito: '#858796', credito: '#f6c23e' };
 
-    // Renderizado de Gráfico de Ventas por Rubro
     if (chartRubros) chartRubros.destroy();
     const sortedRubros = Object.entries(datosRubros).sort(([, a], [, b]) => b - a);
     const ctxRubros = document.getElementById('chartRubros');
@@ -509,7 +454,6 @@ function renderCharts(ventasParaCalcular) {
         renderLegend('chartRubros-legend', sortedRubros, chartColors, 'Total por Rubro');
     }
 
-    // Renderizado de Gráfico de Métodos de Pago
     if (chartPagos) chartPagos.destroy();
     const sortedPagos = Object.entries(datosPagos).sort(([, a], [, b]) => b - a);
     const ctxPagos = document.getElementById('chartPagos');
@@ -528,8 +472,7 @@ function renderCharts(ventasParaCalcular) {
         });
         renderLegend('chartPagos-legend', sortedPagos, pagosChartColores, 'Total por Método');
     }
-    
-    // Renderizado de Gráfico de Ventas en el Tiempo
+
     if (chartVentasTiempo) chartVentasTiempo.destroy();
     const fechasOrdenadas = Object.keys(datosVentasTiempo).sort((a, b) => new Date(a) - new Date(b));
     const ctxTiempo = document.getElementById('chartVentasTiempo');
@@ -537,7 +480,6 @@ function renderCharts(ventasParaCalcular) {
         chartVentasTiempo = new Chart(ctxTiempo, { type: 'line', data: { labels: fechasOrdenadas, datasets: [{ label: 'Ventas Diarias', data: fechasOrdenadas.map(f => datosVentasTiempo[f]), borderColor: '#4e73df', borderWidth: 2 }] }, options: { maintainAspectRatio: false, scales: { y: { beginAtZero: true } } } });
     }
 
-    // Renderizado de Gráfico de Barras Apiladas
     if (chartContadoPorRubro) chartContadoPorRubro.destroy();
     const ctxStacked = document.getElementById('chartContadoPorRubro');
     if (ctxStacked) {
@@ -551,10 +493,6 @@ function renderCharts(ventasParaCalcular) {
     }
 }
 
-
-
-
-// REEMPLAZA ESTA FUNCIÓN ENTERA EN reportes.js
 async function filtrarReporte() {
     const loadingOverlay = document.getElementById('loadingOverlay');
     if (loadingOverlay) loadingOverlay.style.display = 'flex';
@@ -563,7 +501,7 @@ async function filtrarReporte() {
         const desde = reporteFechaDesde.value;
         const hasta = reporteFechaHasta.value;
         const rubroFiltro = filtroReporteRubro.value.trim().toLowerCase();
-        const vendedorFiltro = filtroReporteVendedor.value; // <-- OBTENEMOS EL VENDEDOR
+        const vendedorFiltro = filtroReporteVendedor.value;
 
         if (!desde || !hasta) {
             await showAlertModal("Por favor, selecciona un rango de fechas válido.", "Fechas requeridas");
@@ -580,10 +518,7 @@ async function filtrarReporte() {
             ventasFetched.push({ id: doc.id, ...doc.data() });
         });
 
-        // --- INICIO DE LA CORRECCIÓN ---
-        // Guardamos los resultados en la variable global para que los botones los encuentren.
         ventas = ventasFetched;
-        // --- FIN DE LA CORRECCIÓN ---
 
         let ventasProcesadas = ventasFetched;
         if (rubroFiltro) {
@@ -607,26 +542,20 @@ async function filtrarReporte() {
             });
         }
 
-        // APLICAMOS EL FILTRO DE VENDEDOR
         if (vendedorFiltro) {
             ventasProcesadas = ventasProcesadas.filter(venta => venta.vendedor?.email === vendedorFiltro);
         }
 
-         // Guardamos las ventas activas en la variable global para que los filtros puedan usarlas
         ventasFiltradasActivas = ventasProcesadas.filter(venta => venta.estado !== 'anulada');
 
-        renderFiltroVendedores(ventasFetched); // <-- LLAMAMOS A LA FUNCIÓN PARA POBLAR EL SELECT
+        renderFiltroVendedores(ventasFetched);
 
-        // Renderizamos la tabla y los reportes principales con todos los datos
         renderTablaDetalle(ventasProcesadas);
         await renderReportes(ventasFiltradasActivas);
 
-        // Generamos los checkboxes de filtro para el gráfico de pagos
         renderFiltroRubrosPagos(ventasFiltradasActivas);
-        // --- FIN DE LA MODIFICACIÓN ---
 
         btnQuitarFiltro.classList.toggle('d-none', !desde && !hasta && !filtroReporteRubro.value.trim());
-
 
     } catch (error) {
         console.error("Error al generar el reporte:", error);
@@ -636,14 +565,12 @@ async function filtrarReporte() {
     }
 }
 
-
 function limpiarFiltros(filtrar = true) {
     reporteFechaDesde.value = getTodayDate();
     reporteFechaHasta.value = getTodayDate();
     filtroReporteRubro.value = '';
-    if (filtroReporteVendedor) filtroReporteVendedor.value = ''; // <-- LIMPIAMOS EL FILTRO
+    if (filtroReporteVendedor) filtroReporteVendedor.value = '';
 
-    // Solo llamamos a filtrarReporte si el parámetro 'filtrar' es verdadero
     if (filtrar) {
         filtrarReporte();
     }
@@ -653,16 +580,8 @@ async function renderDatalistRubros() {
     if (!datalistRubrosReporte) return;
     const productos = await getCollection('productos');
     const rubros = [...new Set(productos.map(p => p.rubro).filter(r => r))];
-    datalistRubrosReporte.innerHTML = rubros.map(rubro => `<option value="${rubro}">`).join('');
+    datalistRubrosReporte.innerHTML = rubros.map(rubro => `<option value="${rubro}"></option>`).join('');
 }
-
-
-
-
-// AÑADE ESTA FUNCIÓN COMPLETA EN reportes.js
-
-
-// REEMPLAZA TU FUNCIÓN init ENTERA CON ESTA VERSIÓN
 
 export async function init() {
     reporteFechaDesde = document.getElementById('reporte-fecha-desde');
@@ -670,7 +589,7 @@ export async function init() {
     btnGenerarReporte = document.getElementById('btnGenerarReporte');
     btnQuitarFiltro = document.getElementById('btnQuitarFiltro');
     filtroReporteRubro = document.getElementById('filtro-reporte-rubro');
-    filtroReporteVendedor = document.getElementById('filtro-reporte-vendedor'); // <-- OBTENEMOS EL ELEMENTO
+    filtroReporteVendedor = document.getElementById('filtro-reporte-vendedor');
     datalistRubrosReporte = document.getElementById('rubros-list-reporte');
 
     reporteTotalVentas = document.getElementById('reporte-total-ventas');
@@ -679,15 +598,14 @@ export async function init() {
     reporteTicketPromedio = document.getElementById('reporte-ticket-promedio');
     tablaVentasDetalleBody = document.getElementById('tabla-ventas-detalle');
     tablaTopProductosBody = document.getElementById('tablaTopProductos');
-    tablaVentasVendedorBody = document.getElementById('tabla-ventas-vendedor-body'); // <-- 4. OBTENEMOS EL ELEMENTO
+    tablaVentasVendedorBody = document.getElementById('tabla-ventas-vendedor-body');
+    commissionNote = document.getElementById('commission-note');
 
     btnGenerarReporte.addEventListener('click', filtrarReporte);
     btnQuitarFiltro.addEventListener('click', limpiarFiltros);
     filtroReporteRubro.addEventListener('input', filtrarReporte);
-    if (filtroReporteVendedor) filtroReporteVendedor.addEventListener('change', filtrarReporte); // <-- AÑADIMOS EL LISTENER
+    if (filtroReporteVendedor) filtroReporteVendedor.addEventListener('change', filtrarReporte);
 
-    // --- INICIO DE LA MODIFICACIÓN ---
-    // Event listener para los checkboxes de rubros del gráfico de pagos
     const filtroPagosContainer = document.getElementById('filtro-rubros-pagos-container');
     if (filtroPagosContainer) {
         filtroPagosContainer.addEventListener('change', (e) => {
@@ -698,11 +616,10 @@ export async function init() {
                 } else {
                     rubrosSeleccionadosParaPagos.delete(rubro);
                 }
-                actualizarGraficoPagos(); // Llama a la función que actualiza solo este gráfico
+                actualizarGraficoPagos();
             }
         });
     }
-    // --- FIN DE LA MODIFICACIÓN ---
 
     tablaVentasDetalleBody.addEventListener('click', async (e) => {
         const detalleBtn = e.target.closest('.btn-ver-detalle');
@@ -713,10 +630,8 @@ export async function init() {
             const ventaId = detalleBtn.dataset.id;
             const venta = ventas.find(v => v.id === ventaId);
             if (venta) {
-                // ... (código del modal de detalle sin cambios)
                 const modalBody = document.getElementById('ticketModalBody');
                 const modalTitle = document.getElementById('ticketModalTitulo');
-
                 modalTitle.textContent = `Detalle de Venta #${venta.ticketId}`;
 
                 const isAnulada = venta.estado === 'anulada';
@@ -739,13 +654,10 @@ export async function init() {
                         <div class="col-md-7">
                             <h6><i class="fas fa-user me-2 text-muted"></i>CLIENTE</h6>
                             <p class="mb-3 ms-4">${venta.cliente ? venta.cliente.nombre : 'Consumidor Final'}</p>
-                            
-                            <!-- INICIO DE LA MODIFICACIÓN -->
                             <h6><i class="fas fa-calendar-alt me-2 text-muted"></i>FECHA Y HORA</h6>
                             <p class="mb-3 ms-4">${venta.timestamp || 'N/A'}</p>
                             <h6><i class="fas fa-user-tag me-2 text-muted"></i>VENDEDOR</h6>
                             <p class="mb-0 ms-4">${venta.vendedor ? venta.vendedor.nombre : 'No especificado'}</p>
-                            <!-- FIN DE LA MODIFICACIÓN -->
                         </div>
                         <div class="col-md-5 text-md-end">
                             <h6 class="text-muted">TOTAL VENTA</h6>
@@ -770,18 +682,13 @@ export async function init() {
                         <div class="col-6 text-end fw-bold">${formatCurrency(venta.pagos.credito)}</div>
                     </div>
                 `;
-
                 new bootstrap.Modal(document.getElementById('ticketModal')).show();
             }
-        }
-        else if (pdfBtn) {
+        } else if (pdfBtn) {
             const ventaId = pdfBtn.dataset.id;
             const venta = ventas.find(v => v.id === ventaId);
-            if (venta) {
-                generatePDF(venta.ticketId, venta);
-            }
-        }
-        else if (anularBtn) {
+            if (venta) generatePDF(venta.ticketId, venta);
+        } else if (anularBtn) {
             const ventaId = anularBtn.dataset.id;
             anularVenta(ventaId);
         }
@@ -789,13 +696,22 @@ export async function init() {
 
     const userRole = getCurrentUserRole();
     const reportesAvanzados = document.getElementById('reportes-avanzados');
+    const adminReportView = document.getElementById('admin-report-view');
+    const cajeroReportView = document.getElementById('cajero-report-view');
 
     if (userRole !== 'admin') {
-        if (reportesAvanzados) {
-            reportesAvanzados.style.display = 'none';
+        if (reportesAvanzados) reportesAvanzados.style.display = 'none';
+        if (adminReportView) adminReportView.style.display = 'none';
+        if (cajeroReportView) cajeroReportView.style.display = 'block';
+        if (filtroReporteVendedor) {
+            filtroReporteVendedor.style.display = 'none';
+            document.querySelector('label[for="filtro-reporte-vendedor"]').style.display = 'none';
         }
+    } else {
+        if (adminReportView) adminReportView.style.display = 'block';
+        if (cajeroReportView) cajeroReportView.style.display = 'none';
     }
 
     limpiarFiltros();
-    await loadData(); // Se mantiene la carga de datos inicial
+    await loadData();
 }

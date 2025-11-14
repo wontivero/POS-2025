@@ -195,28 +195,41 @@
             </div>
         </div>
     </div>
-    <!-- INICIO DE LA MODIFICACIÓN: Tabla de Reporte por Vendedor -->
-    <div class="card shadow mb-4">
-        <div class="card-header py-3">
-            <h6 class="m-0 fw-bold text-primary">Reporte por Vendedor</h6>
-        </div>
-        <div class="card-body">
-            <div class="table-responsive">
-                <table class="table table-bordered" id="tabla-ventas-vendedor" width="100%" cellspacing="0">
-                    <thead>
-                        <tr>
-                            <th>Vendedor</th>
-                            <th>N° de Ventas</th>
-                            <th>Total Vendido</th>
-                            <th>Comisión (1%)</th>
-                        </tr>
-                    </thead>
-                    <tbody id="tabla-ventas-vendedor-body">
-                        <!-- Las filas se generarán dinámicamente -->
-                    </tbody>
-                </table>
+    <!-- INICIO DE LA MODIFICACIÓN: Vistas de Reporte por Rol -->
+    <!-- Vista para Administradores -->
+    <div id="admin-report-view" style="display: none;">
+        <div class="card shadow mb-4">
+            <div class="card-header py-3">
+                <h6 class="m-0 fw-bold text-primary">Reporte por Vendedor</h6>
             </div>
-            <small class="text-muted">La comisión se calcula como el 1% del "Total Vendido" para el período seleccionado.</small>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-bordered" id="tabla-ventas-vendedor" width="100%" cellspacing="0">
+                        <thead>
+                            <tr>
+                                <th>Vendedor</th>
+                                <th>N° de Ventas</th>
+                                <th>Total Vendido</th>
+                                <th>Comisión</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabla-ventas-vendedor-body"></tbody>
+                    </table>
+                </div>
+                <small class="text-muted" id="commission-note">La comisión se calcula como el X% del "Total Vendido" para el período seleccionado.</small>
+            </div>
+        </div>
+    </div>
+
+    <!-- Vista para Cajeros -->
+    <div id="cajero-report-view" style="display: none;">
+        <div class="card shadow mb-4">
+            <div class="card-header py-3 bg-light">
+                <h6 class="m-0 fw-bold text-secondary">Mi Rendimiento de Ventas</h6>
+            </div>
+            <div class="card-body" id="cajero-report-body">
+                <!-- El resumen del cajero se insertará aquí -->
+            </div>
         </div>
     </div>
     <!-- FIN DE LA MODIFICACIÓN -->

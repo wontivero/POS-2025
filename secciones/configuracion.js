@@ -1,6 +1,6 @@
 // secciones/configuracion.js
-import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
-import { showAlertModal } from '../utils.js';
+import { getFirestore, doc, getDoc, setDoc, collection, getDocs, addDoc, deleteDoc, updateDoc, query, where } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
+import { showAlertModal, showConfirmationModal } from '../utils.js';
 
 const db = getFirestore();
 
@@ -11,7 +11,7 @@ let commissionInput;
 let saveCommissionButton;
 
 // --- INICIO DE LA MODIFICACIÓN: Nuevos elementos del DOM ---
-let companyNameInput, companyAddressInput, companyCuitInput, companyPhoneInput, companyIvaInput, companyEmailInput, companyLogoInput;
+let companyNameInput, companyAddressInput, companyCuitInput, companyPhoneInput, companyIvaInput, companyEmailInput, companyLogoInput, userEmailInput, userRoleSelect, btnAddUser, usersTableBody;
 let saveCompanyButton;
 // --- FIN DE LA MODIFICACIÓN ---
 
@@ -111,6 +111,102 @@ async function saveCompanyInfo() {
     }
 }
 
+/**
+ * Carga y renderiza la lista de usuarios desde Firestore.
+ */
+async function loadAndRenderUsers() {
+    const usersCollection = collection(db, 'usuarios');
+    const usersSnapshot = await getDocs(usersCollection);
+    const usersList = [];
+    usersSnapshot.forEach(doc => usersList.push({ id: doc.id, ...doc.data() }));
+
+    usersTableBody.innerHTML = '';
+    usersList.forEach(user => {
+        const row = document.createElement('tr');
+        row.dataset.userId = user.id;
+        row.innerHTML = `
+            <td>${user.email}</td>
+            <td>
+                <select class="form-select form-select-sm user-role-select" data-user-id="${user.id}">
+                    <option value="cajero" ${user.rol === 'cajero' ? 'selected' : ''}>Cajero</option>
+                    <option value="admin" ${user.rol === 'admin' ? 'selected' : ''}>Administrador</option>
+                </select>
+            </td>
+            <td>
+                <button class="btn btn-sm btn-danger btn-delete-user" data-user-id="${user.id}" data-user-email="${user.email}">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </td>
+        `;
+        usersTableBody.appendChild(row);
+    });
+}
+
+/**
+ * Maneja la adición de un nuevo usuario.
+ */
+async function handleAddUser() {
+    const email = userEmailInput.value.trim().toLowerCase();
+    const rol = userRoleSelect.value;
+
+    if (!email || !email.includes('@')) {
+        showAlertModal("Por favor, ingresa un email válido.", "Error");
+        return;
+    }
+
+    // Verificar si el usuario ya existe
+    const q = query(collection(db, "usuarios"), where("email", "==", email));
+    const querySnapshot = await getDocs(q);
+    if (!querySnapshot.empty) {
+        showAlertModal(`El email "${email}" ya está registrado.`, "Usuario Existente");
+        return;
+    }
+
+    try {
+        await addDoc(collection(db, 'usuarios'), { email, rol });
+        showAlertModal("Usuario agregado correctamente.", "Éxito");
+        userEmailInput.value = '';
+        await loadAndRenderUsers(); // Recargar la tabla
+    } catch (error) {
+        console.error("Error al agregar usuario:", error);
+        showAlertModal("No se pudo agregar el usuario.", "Error");
+    }
+}
+
+/**
+ * Maneja el cambio de rol de un usuario.
+ * @param {string} userId El ID del documento del usuario.
+ * @param {string} newRole El nuevo rol a asignar.
+ */
+async function handleRoleChange(userId, newRole) {
+    const userRef = doc(db, 'usuarios', userId);
+    try {
+        await updateDoc(userRef, { rol: newRole });
+        // Podríamos mostrar una pequeña notificación de éxito aquí si quisiéramos
+    } catch (error) {
+        console.error("Error al cambiar el rol:", error);
+        showAlertModal("No se pudo actualizar el rol del usuario.", "Error");
+    }
+}
+
+/**
+ * Maneja la eliminación de un usuario.
+ * @param {string} userId El ID del documento del usuario.
+ * @param {string} userEmail El email para mostrar en la confirmación.
+ */
+async function handleDeleteUser(userId, userEmail) {
+    const confirmado = await showConfirmationModal(`¿Estás seguro de que deseas eliminar al usuario <strong>${userEmail}</strong>? Perderá todo acceso al sistema.`, "Confirmar Eliminación");
+    if (!confirmado) return;
+
+    try {
+        await deleteDoc(doc(db, 'usuarios', userId));
+        await loadAndRenderUsers(); // Recargar la tabla
+    } catch (error) {
+        console.error("Error al eliminar usuario:", error);
+        showAlertModal("No se pudo eliminar el usuario.", "Error");
+    }
+}
+
 export async function init() {
     commissionInput = document.getElementById('config-commission-percentage');
     saveCommissionButton = document.getElementById('btn-guardar-comision');
@@ -124,12 +220,33 @@ export async function init() {
     companyEmailInput = document.getElementById('config-company-email');
     companyLogoInput = document.getElementById('config-company-logo');
     saveCompanyButton = document.getElementById('btn-guardar-empresa');
+    userEmailInput = document.getElementById('user-email');
+    userRoleSelect = document.getElementById('user-role');
+    btnAddUser = document.getElementById('btn-add-user');
+    usersTableBody = document.getElementById('users-table-body');
 
     saveCommissionButton.addEventListener('click', saveCommissionPercentage);
     if (saveCompanyButton) {
         saveCompanyButton.addEventListener('click', saveCompanyInfo);
     }
+    if (btnAddUser) {
+        btnAddUser.addEventListener('click', handleAddUser);
+    }
+    if (usersTableBody) {
+        usersTableBody.addEventListener('change', (e) => {
+            if (e.target.classList.contains('user-role-select')) {
+                handleRoleChange(e.target.dataset.userId, e.target.value);
+            }
+        });
+        usersTableBody.addEventListener('click', (e) => {
+            const deleteButton = e.target.closest('.btn-delete-user');
+            if (deleteButton) {
+                handleDeleteUser(deleteButton.dataset.userId, deleteButton.dataset.userEmail);
+            }
+        });
+    }
     // --- FIN DE LA MODIFICACIÓN ---
 
     await loadConfiguration();
+    await loadAndRenderUsers();
 }

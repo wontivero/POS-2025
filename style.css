@@ -1,3 +1,8 @@
+/* Estilo base para el body con transición */
+body {
+    transition: background-color 0.3s ease-in-out;
+}
+
 /* Agrega esto al final de tu archivo style.css */
 
 .btn-pago-rapido {
@@ -106,7 +111,8 @@ td.precio-venta {
 
 /* Estilos para el nuevo Navbar Oscuro */
 .navbar {
-    box-shadow: 0 2px 4px rgba(0, 0, 0, .4);
+    /* El color de fondo ahora se controla por JS, pero dejamos un fallback */
+    background-color: #212529;
     /* Sombra un poco más notoria para el fondo oscuro */
 }
 
@@ -313,4 +319,22 @@ body.generic-modal-is-open .modal-backdrop.show {
 .codigo-cell .form-control {
   width: auto;           /* Anula el 'width: 100%' de Bootstrap */
   flex-grow: 1;          /* Permite que el campo de texto ocupe todo el espacio sobrante */
+}
+
+/* Estilo para el selector de colores del tema */
+.color-swatch:hover {
+    transform: scale(1.2);
+    transition: transform 0.1s ease-in-out;
+}
+
+/* Estilo para la "píldora" del usuario en la barra de navegación */
+.user-pill {
+    background-color: rgba(255, 255, 255, 0.1);
+    padding: 5px 10px 5px 5px; /* Relleno: 5px arriba, 10px derecha, 5px abajo, 5px izquierda */
+    border-radius: 50px; /* Bordes completamente redondeados */
+    transition: background-color 0.2s ease-in-out;
+}
+
+.user-pill:hover {
+    background-color: rgba(255, 255, 255, 0.2);
 }

@@ -13,7 +13,7 @@
 
 <body>
 
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark sticky-top">
+    <nav class="navbar navbar-expand-lg navbar-dark sticky-top">
         <div class="container-fluid">
             <a class="navbar-brand d-flex align-items-center" href="#" data-section="ventas">
                 <img src="./img/logo-redondo.png" alt="Logo" width="40" height="40" class="rounded-circle">
@@ -60,13 +60,12 @@
                 <i class="fas fa-question-circle"></i>
             </a>
 
-
             <div class="dropdown">
-                <a href="#" class="d-flex align-items-center link-dark text-decoration-none dropdown-toggle"
+                <a href="#" class="d-flex align-items-center text-white text-decoration-none dropdown-toggle user-pill"
                     id="dropdownUser" data-bs-toggle="dropdown" aria-expanded="false">
                     <img id="user-avatar-img" src="https://i.pravatar.cc/40" alt="Avatar de usuario" width="40"
                         height="40" class="rounded-circle">
-                    <span class="ms-2 d-none d-lg-block" id="user-display-name"></span>
+                    <span class="ms-2 d-none d-lg-block fw-bold" id="user-display-name"></span>
                 </a>
                 <ul class="dropdown-menu dropdown-menu-end text-small shadow" aria-labelledby="dropdownUser">
                     <li>
@@ -75,6 +74,28 @@
                     <li>
                         <hr class="dropdown-divider">
                     </li>
+                    <!-- Selector de Tema de la Barra -->
+                    <li>
+                        <div class="px-3 py-2">
+                            <h6 class="dropdown-header px-0 fs-6">Tema de la Barra</h6>
+                            <div id="theme-color-palette" class="d-flex flex-wrap justify-content-start" style="gap: 8px;">
+                                <!-- Los colores se generarán aquí por JS -->
+                            </div>
+                            <button class="dropdown-item dropdown-item-sm text-center mt-2 p-1" id="btn-reset-theme">Restaurar por defecto</button>
+                        </div>
+                    </li>
+                    <li><hr class="dropdown-divider"></li>
+                    <!-- Selector de Tema de Fondo -->
+                    <li>
+                        <div class="px-3 py-2">
+                            <h6 class="dropdown-header px-0 fs-6">Tema de Fondo</h6>
+                            <div id="body-theme-color-palette" class="d-flex flex-wrap justify-content-start" style="gap: 8px;">
+                                <!-- Colores generados por JS -->
+                            </div>
+                            <button class="dropdown-item dropdown-item-sm text-center mt-2 p-1" id="btn-reset-body-theme">Restaurar por defecto</button>
+                        </div>
+                    </li>
+                    <li><hr class="dropdown-divider"></li>
                     <li><a class="dropdown-item" href="#" id="btn-logout-dropdown"><i
                                 class="fas fa-sign-out-alt me-2"></i>Cerrar Sesión</a></li>
                 </ul>
@@ -314,11 +335,22 @@
         </div>
     </div>
 
-
-
-
-
-
+    <div class="modal fade" id="accesoDenegadoModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1"
+        aria-labelledby="accesoDenegadoModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow">
+                <div class="modal-body text-center p-5">
+                    <i class="fas fa-user-secret fa-7x text-warning mb-4"></i>
+                    <h1 class="display-5" id="accesoDenegadoModalLabel">¡Acceso Denegado!</h1>
+                    <p class="lead text-muted">Parece que intentas colarte en la fiesta sin invitación.</p>
+                    <p>Contacta al administrador para que te agregue a la lista VIP.</p>
+                    <button id="logout-unauthorized" class="btn btn-danger mt-3">
+                        <i class="fas fa-sign-out-alt me-2"></i>Cerrar Sesión
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.0/dist/chart.min.js"></script>

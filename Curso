@@ -63,22 +63,9 @@ function applyUserTheme(color) {
  * @param {string} userId - El ID del documento del usuario en Firestore.
  */
 function initThemeSelector(userId) {
-    const paletteContainer = document.getElementById('theme-color-palette');
+    const paletteContainer = document.getElementById('theme-color-palette').querySelector('div');
     const btnReset = document.getElementById('btn-reset-theme');
-    // --- INICIO DE LA MODIFICACIÓN: Nueva paleta de colores ---
-    const colors = [
-        '#212529', // Default Dark
-        '#0b5ed7', // Darker Blue
-        '#146c43', // Darker Green
-        '#6f42c1', // Indigo
-        '#b8269fff', // Darker Red
-        '#495057', // Slate Gray
-        '#800000', // Maroon
-        '#004d40', // Dark Teal
-        '#4a148c', // Deep Purple
-        '#37474f'  // Blue Grey
-    ];
-    // --- FIN DE LA MODIFICACIÓN ---
+    const colors = ['#212529', '#0d6efd', '#198754', '#6f42c1', '#d63384', '#dc3545', '#fd7e14'];
 
     paletteContainer.innerHTML = colors.map(color => 
         `<div class="color-swatch" data-color="${color}" style="width: 24px; height: 24px; background-color: ${color}; border-radius: 50%; cursor: pointer; border: 2px solid white;"></div>`
@@ -88,55 +75,6 @@ function initThemeSelector(userId) {
         applyUserTheme(color);
         const userRef = doc(db, 'usuarios', userId);
         await updateDoc(userRef, { themeColor: color || null });
-    };
-
-    paletteContainer.addEventListener('click', (e) => {
-        if (e.target.classList.contains('color-swatch')) {
-            handleColorSelection(e.target.dataset.color);
-        }
-    });
-
-    btnReset.addEventListener('click', () => handleColorSelection(null));
-}
-
-/**
- * Aplica el color de tema de fondo seleccionado por el usuario.
- * @param {string} color - El color en formato hexadecimal. Si es nulo, usa el color por defecto.
- */
-function applyBodyTheme(color) {
-    const defaultColor = '#f8f9fa'; // Gris claro por defecto de Bootstrap
-    document.body.style.backgroundColor = color || defaultColor;
-}
-
-/**
- * Inicializa el selector de colores para el fondo de la página.
- * @param {string} userId - El ID del documento del usuario en Firestore.
- */
-function initBodyThemeSelector(userId) {
-    const paletteContainer = document.getElementById('body-theme-color-palette');
-    const btnReset = document.getElementById('btn-reset-body-theme');
-    
-    const colors = [
-        '#f8f9fa', // Default Light
-        '#e9ecef', // Light Gray
-        '#daf8e3ff', // Pastel Green
-        '#d9f0f7ff', // Pastel Blue
-        '#ffb7ffe3', // Pastel Yellow
-        '#fde6ecff', // Pastel Pink
-        '#e0d1fdff', // Pastel Purple
-        '#f8f0d5ff', // Light Amber
-        '#c8f9ffff', // Light Cyan
-        '#c8ccceff'  // Blue Grey Light
-    ];
-
-    paletteContainer.innerHTML = colors.map(color => 
-        `<div class="color-swatch" data-color="${color}" style="width: 24px; height: 24px; background-color: ${color}; border-radius: 50%; cursor: pointer; border: 2px solid #ccc;"></div>`
-    ).join('');
-
-    const handleColorSelection = async (color) => {
-        applyBodyTheme(color);
-        const userRef = doc(db, 'usuarios', userId);
-        await updateDoc(userRef, { bodyThemeColor: color || null });
     };
 
     paletteContainer.addEventListener('click', (e) => {
@@ -194,9 +132,7 @@ onAuthStateChanged(auth, async (user) => {
         // Guardamos el rol y aplicamos el tema
         currentUserRole = userProfile.rol;
         applyUserTheme(userProfile.themeColor);
-        applyBodyTheme(userProfile.bodyThemeColor); // Aplicamos el tema de fondo
         initThemeSelector(userProfile.id);
-        initBodyThemeSelector(userProfile.id); // Inicializamos el nuevo selector
 
         console.log(`Usuario autenticado: ${user.email}, Rol: ${currentUserRole}`);
 
