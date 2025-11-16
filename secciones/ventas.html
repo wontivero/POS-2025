@@ -63,41 +63,37 @@
                     <div class="row g-2 mb-3">
                         <div class="col-6">
                             <button id="btnPagoRapidoContado" class="btn btn-success btn-lg w-100 btn-pago-rapido"
-                                data-metodo="contado">
-                                <div class="d-flex flex-column justify-content-center align-items-center h-100">
-                                    <i class="fas fa-hand-holding-usd fa-2x mb-2"></i>
-                                    <span class="btn-pago-texto">Contado <kbd>F1</kbd></span>
-                                    <span id="montoContadoRapido" class="btn-pago-monto mt-1">$0</span>
+                                data-metodo="contado" style="--btn-bg-color: #198754;">
+                                <div class="d-flex justify-content-between align-items-center w-100">
+                                    <span><i class="fas fa-hand-holding-usd me-2"></i>Contado <kbd>F1</kbd></span>
+                                    <span id="montoContadoRapido" class="badge bg-light text-dark ms-2">$0</span>
                                 </div>
                             </button>
                         </div>
                         <div class="col-6">
                             <button id="btnPagoRapidoTransferencia" class="btn btn-primary btn-lg w-100 btn-pago-rapido"
-                                data-metodo="transferencia">
-                                <div class="d-flex flex-column justify-content-center align-items-center h-100">
-                                    <i class="fas fa-exchange-alt fa-2x mb-2"></i>
-                                    <span class="btn-pago-texto">Transfer. <kbd>F2</kbd></span>
-                                    <span id="montoTransferenciaRapido" class="btn-pago-monto mt-1">$0</span>
+                                data-metodo="transferencia" style="--btn-bg-color: #0d6efd;">
+                                <div class="d-flex justify-content-between align-items-center w-100">
+                                    <span><i class="fas fa-exchange-alt me-2"></i>Transfer. <kbd>F2</kbd></span>
+                                    <span id="montoTransferenciaRapido" class="badge bg-light text-dark ms-2">$0</span>
                                 </div>
                             </button>
                         </div>
                         <div class="col-6">
                             <button id="btnPagoRapidoDebito" class="btn btn-secondary btn-lg w-100 btn-pago-rapido"
-                                data-metodo="debito">
-                                <div class="d-flex flex-column justify-content-center align-items-center h-100">
-                                    <i class="fas fa-credit-card fa-2x mb-2"></i>
-                                    <span class="btn-pago-texto">Débito <kbd>F3</kbd></span>
-                                    <span id="montoDebitoRapido" class="btn-pago-monto mt-1">$0</span>
+                                data-metodo="debito" style="--btn-bg-color: #6c757d;">
+                                <div class="d-flex justify-content-between align-items-center w-100">
+                                    <span><i class="fas fa-credit-card me-2"></i>Débito <kbd>F3</kbd></span>
+                                    <span id="montoDebitoRapido" class="badge bg-light text-dark ms-2">$0</span>
                                 </div>
                             </button>
                         </div>
                         <div class="col-6">
                             <button id="btnPagoRapidoCredito" class="btn btn-warning btn-lg w-100 btn-pago-rapido"
-                                data-metodo="credito">
-                                <div class="d-flex flex-column justify-content-center align-items-center h-100">
-                                    <i class="far fa-credit-card fa-2x mb-2"></i>
-                                    <span class="btn-pago-texto">Crédito <kbd>F4</kbd></span>
-                                    <span id="montoCreditoRapido" class="btn-pago-monto mt-1">$0</span>
+                                data-metodo="credito" style="--btn-bg-color: #ffc107;">
+                                <div class="d-flex justify-content-between align-items-center w-100">
+                                    <span><i class="far fa-credit-card me-2"></i>Crédito <kbd>F4</kbd></span>
+                                    <span id="montoCreditoRapido" class="badge bg-light text-dark ms-2">$0</span>
                                 </div>
                             </button>
                         </div>

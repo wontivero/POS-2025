@@ -1,20 +1,21 @@
 // secciones/productos.js
 import { getCollection, saveDocument, deleteDocument, formatCurrency, getTodayDate, updateDocument, capitalizeFirstLetter, showAlertModal, showConfirmationModal, roundUpToNearest50 } from '../utils.js';
-
 import { getFirestore, collection, onSnapshot, query, orderBy, getDocs, writeBatch, Timestamp, doc, where, addDoc } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
-
 import { getProductos, getMarcas, getColores, getRubros } from './dataManager.js';
-// Inicializar Firestore fuera de las funciones si se usa en todo el módulo
+
 const db = getFirestore();
 
 // --- Estado de la Sección de Productos ---
 let listaCompletaProductos = [];
 let productosFiltradosActuales = [];
-let listaMarcas = [];
-let listaColores = [];
-let listaRubros = [];
 let currentSortColumn = 'nombre';
 let currentSortDirection = 'asc';
+
+// --- Estado para Carga Perezosa ---
+let currentlyDisplayedCount = 0;
+const PRODUCTS_PER_PAGE = 50;
+let isLoading = false;
+let tableContainer;
 
 // --- Elementos del DOM ---
 let tablaProductosBody, tablaProductosHead, btnNuevoProducto, productoModalEl, productoModal, formProducto, modalProductoLabel, btnExportarProductos;
@@ -24,66 +25,9 @@ let filtroFechaActDesde, filtroFechaActHasta;
 let datalistMarcasFiltro, datalistColoresFiltro, datalistRubrosFiltro;
 let datalistMarcasModal, datalistColoresModal, datalistRubrosModal;
 let productoId, productoNombre, productoCodigo, productoMarca, productoColor, productoRubro, productoCosto, productoVenta, productoPorcentaje, productoStock, productoStockMinimo, productoDestacado;
-let btnImportarProductos, importarArchivoInput; // Nuevos elementos para la importación
+let btnImportarProductos, importarArchivoInput;
 
 // --- Funciones de la Sección de Productos ---
-
-function setupFirebaseListeners() {
-    // Esta función ya no necesita hacer nada.
-    // dataManager.js se encarga de todo de forma centralizada.
-
-
-    // onSnapshot(query(collection(db, 'marcas'), orderBy('nombre')), (snapshot) => {
-    //     listaMarcas = [];
-    //     if (datalistMarcasFiltro) datalistMarcasFiltro.innerHTML = '';
-    //     if (datalistMarcasModal) datalistMarcasModal.innerHTML = '';
-    //     snapshot.forEach(doc => {
-    //         const marca = doc.data().nombre;
-    //         listaMarcas.push(marca);
-    //         const option = document.createElement('option');
-    //         option.value = marca;
-    //         if (datalistMarcasFiltro) datalistMarcasFiltro.appendChild(option.cloneNode(true));
-    //         if (datalistMarcasModal) datalistMarcasModal.appendChild(option);
-    //     });
-    // });
-
-    // onSnapshot(query(collection(db, 'colores'), orderBy('nombre')), (snapshot) => {
-    //     listaColores = [];
-    //     if (datalistColoresFiltro) datalistColoresFiltro.innerHTML = '';
-    //     if (datalistColoresModal) datalistColoresModal.innerHTML = '';
-    //     snapshot.forEach(doc => {
-    //         const color = doc.data().nombre;
-    //         listaColores.push(color);
-    //         const option = document.createElement('option');
-    //         option.value = color;
-    //         if (datalistColoresFiltro) datalistColoresFiltro.appendChild(option.cloneNode(true));
-    //         if (datalistColoresModal) datalistColoresModal.appendChild(option);
-    //     });
-    // });
-
-    // onSnapshot(query(collection(db, 'rubros'), orderBy('nombre')), (snapshot) => {
-    //     listaRubros = [];
-    //     if (datalistRubrosFiltro) datalistRubrosFiltro.innerHTML = '';
-    //     if (datalistRubrosModal) datalistRubrosModal.innerHTML = '';
-    //     snapshot.forEach(doc => {
-    //         const rubro = doc.data().nombre;
-    //         listaRubros.push(rubro);
-    //         const option = document.createElement('option');
-    //         option.value = rubro;
-    //         if (datalistRubrosFiltro) datalistRubrosFiltro.appendChild(option.cloneNode(true));
-    //         if (datalistRubrosModal) datalistRubrosModal.appendChild(option);
-    //     });
-    // });
-
-    // onSnapshot(query(collection(db, 'productos'), orderBy('nombre_lowercase')), (snapshot) => {
-    //     listaCompletaProductos = [];
-    //     snapshot.forEach(doc => {
-    //         const productData = { id: doc.id, ...doc.data() };
-    //         listaCompletaProductos.push(productData);
-    //     });
-    //     aplicarFiltrosYRenderizar();
-    // });
-}
 
 function sortProducts(products, column, direction) {
     return [...products].sort((a, b) => {
@@ -97,13 +41,13 @@ function sortProducts(products, column, direction) {
             valA = valA.toLowerCase();
             valB = valB.toLowerCase();
         } else if (column === 'porcentajeGanancia') {
-            valA = String(valA).replace('%', '').replace('+', '');
-            valB = String(valB).replace('%', '').replace('+', '');
-            if (valA === 'N/A' && valB === 'N/A') return 0;
-            if (valA === 'N/A') return direction === 'asc' ? 1 : -1;
-            if (valB === 'N/A') return direction === 'asc' ? -1 : 1;
-            valA = parseFloat(valA);
-            valB = parseFloat(valB);
+            const calcPercent = (p) => {
+                if (p.costo > 0) return ((p.venta - p.costo) / p.costo) * 100;
+                if (p.costo === 0 && p.venta > 0) return Infinity;
+                return 0;
+            };
+            valA = calcPercent(a);
+            valB = calcPercent(b);
         }
 
         if (valA < valB) return direction === 'asc' ? -1 : 1;
@@ -112,103 +56,11 @@ function sortProducts(products, column, direction) {
     });
 }
 
-function aplicarFiltrosYRenderizar() {
+function renderProductRows(productos) {
     if (!tablaProductosBody) return;
 
-    let productosFiltrados = [...listaCompletaProductos];
-
-    // --- INICIO DE LA NUEVA LÓGICA DE BÚSQUEDA RÁPIDA ---
-    if (filtroProductos && filtroProductos.value.trim() !== '') {
-        const userInput = filtroProductos.value.toLowerCase().trim();
-        // Dividimos la búsqueda en palabras clave individuales
-        const searchTerms = userInput.split(' ').filter(term => term.length > 0);
-
-        if (searchTerms.length > 0) {
-            productosFiltrados = productosFiltrados.filter(p => {
-                // Combinamos todos los campos relevantes en un solo texto para la búsqueda
-                const searchableString = [
-                    p.nombre_lowercase,
-                    p.codigo,
-                    p.marca,
-                    p.color,
-                    p.rubro
-                ].join(' ').toLowerCase();
-
-                // Verificamos que TODAS las palabras clave estén presentes en el texto
-                return searchTerms.every(term => searchableString.includes(term));
-            });
-        }
-    }
-    // --- FIN DE LA NUEVA LÓGICA DE BÚSQUEDA RÁPIDA ---
-
-    // El resto de los filtros avanzados se aplican sobre los resultados de la búsqueda rápida
-    if (filtroMarca && filtroMarca.value.trim() !== '') {
-        const marca = filtroMarca.value.toLowerCase().trim();
-        productosFiltrados = productosFiltrados.filter(p => (p.marca || '').toLowerCase().includes(marca));
-    }
-
-    if (filtroColor && filtroColor.value.trim() !== '') {
-        const color = filtroColor.value.toLowerCase().trim();
-        productosFiltrados = productosFiltrados.filter(p => (p.color || '').toLowerCase().includes(color));
-    }
-
-    if (filtroRubro && filtroRubro.value.trim() !== '') {
-        const rubro = filtroRubro.value.toLowerCase().trim();
-        productosFiltrados = productosFiltrados.filter(p => (p.rubro || '').toLowerCase().includes(rubro));
-    }
-
-    if (filtroStockMin && !isNaN(parseFloat(filtroStockMin.value))) {
-        const stockMin = parseFloat(filtroStockMin.value);
-        productosFiltrados = productosFiltrados.filter(p => p.stock >= stockMin);
-    }
-
-    if (filtroStockMax && !isNaN(parseFloat(filtroStockMax.value))) {
-        const stockMax = parseFloat(filtroStockMax.value);
-        productosFiltrados = productosFiltrados.filter(p => p.stock <= stockMax);
-    }
-
-    if (filtroVentaMin && !isNaN(parseFloat(filtroVentaMin.value))) {
-        const ventaMin = parseFloat(filtroVentaMin.value);
-        productosFiltrados = productosFiltrados.filter(p => p.venta >= ventaMin);
-    }
-
-    if (filtroVentaMax && !isNaN(parseFloat(filtroVentaMax.value))) {
-        const ventaMax = parseFloat(filtroVentaMax.value);
-        productosFiltrados = productosFiltrados.filter(p => p.venta <= ventaMax);
-    }
-    const fechaDesdeStr = filtroFechaActDesde.value;
-    const fechaHastaStr = filtroFechaActHasta.value;
-
-    if (fechaDesdeStr) {
-        const fechaDesde = new Date(fechaDesdeStr + 'T00:00:00'); // Inicio del día
-        productosFiltrados = productosFiltrados.filter(p => {
-            return p.fechaUltimoCambioPrecio && p.fechaUltimoCambioPrecio.toDate() >= fechaDesde;
-        });
-    }
-
-    if (fechaHastaStr) {
-        const fechaHasta = new Date(fechaHastaStr + 'T23:59:59'); // Final del día
-        productosFiltrados = productosFiltrados.filter(p => {
-            return p.fechaUltimoCambioPrecio && p.fechaUltimoCambioPrecio.toDate() <= fechaHasta;
-        });
-    }
-
-    productosFiltradosActuales = productosFiltrados;
-    renderizarTablaProductos(productosFiltradosActuales);
-}
-
-function renderizarTablaProductos(productos) {
-    if (!tablaProductosBody) return;
-
-    const productosOrdenados = sortProducts(productos, currentSortColumn, currentSortDirection);
-
-    tablaProductosBody.innerHTML = '';
-    if (productosOrdenados.length === 0) {
-        tablaProductosBody.innerHTML = '<tr><td colspan="11" class="text-center">No se encontraron productos.</td></tr>';
-        return;
-    }
-
-    productosOrdenados.forEach(p => {
+    let rowsHtml = '';
+    productos.forEach(p => {
         let c = p.stock <= 0 ? 'table-danger' : (p.stock <= p.stockMinimo ? 'table-warning' : '');
         const ultimaActualizacion = p.fechaUltimoCambioPrecio ? p.fechaUltimoCambioPrecio.toDate().toLocaleDateString('es-AR') : 'N/A';
 
@@ -219,9 +71,7 @@ function renderizarTablaProductos(productos) {
             porcentajeGanancia = '100%+';
         }
 
-        const row = document.createElement('tr');
-        row.className = c;
-        row.innerHTML = `
+        rowsHtml += `<tr class="${c}" data-id="${p.id}">
             <td>${p.nombre || 'N/A'}</td>
             <td><code>${p.codigo || 'N/A'}</code></td>
             <td>${capitalizeFirstLetter(p.marca) || 'N/A'}</td>
@@ -237,10 +87,102 @@ function renderizarTablaProductos(productos) {
                 <button class="btn btn-info btn-sm btn-duplicar-producto" data-id="${p.id}" title="Duplicar"><i class="fas fa-copy"></i></button>
                 <button class="btn btn-danger btn-sm btn-eliminar-producto" data-id="${p.id}" title="Eliminar"><i class="fas fa-trash-alt"></i></button>
             </td>
-        `;
-        tablaProductosBody.appendChild(row);
+        </tr>`;
     });
+    tablaProductosBody.innerHTML += rowsHtml;
+    isLoading = false;
+}
 
+function loadMoreProducts() {
+    if (isLoading || !tablaProductosBody) return;
+
+    const nextProducts = productosFiltradosActuales.slice(currentlyDisplayedCount, currentlyDisplayedCount + PRODUCTS_PER_PAGE);
+
+    if (nextProducts.length > 0) {
+        isLoading = true;
+        renderProductRows(nextProducts);
+        currentlyDisplayedCount += nextProducts.length;
+    }
+}
+
+function handleScroll() {
+    if (!tableContainer) return;
+    if (tableContainer.scrollTop + tableContainer.clientHeight >= tableContainer.scrollHeight * 0.8) {
+        loadMoreProducts();
+    }
+}
+
+function aplicarFiltrosYRenderizar() {
+    if (!tablaProductosBody) return;
+
+    let productosFiltrados = [...listaCompletaProductos];
+
+    if (filtroProductos && filtroProductos.value.trim() !== '') {
+        const userInput = filtroProductos.value.toLowerCase().trim();
+        const searchTerms = userInput.split(' ').filter(term => term.length > 0);
+        if (searchTerms.length > 0) {
+            productosFiltrados = productosFiltrados.filter(p => {
+                const searchableString = [p.nombre_lowercase, p.codigo, p.marca, p.color, p.rubro].join(' ').toLowerCase();
+                return searchTerms.every(term => searchableString.includes(term));
+            });
+        }
+    }
+
+    if (filtroMarca && filtroMarca.value.trim() !== '') {
+        const marca = filtroMarca.value.toLowerCase().trim();
+        productosFiltrados = productosFiltrados.filter(p => (p.marca || '').toLowerCase().includes(marca));
+    }
+    if (filtroColor && filtroColor.value.trim() !== '') {
+        const color = filtroColor.value.toLowerCase().trim();
+        productosFiltrados = productosFiltrados.filter(p => (p.color || '').toLowerCase().includes(color));
+    }
+    if (filtroRubro && filtroRubro.value.trim() !== '') {
+        const rubro = filtroRubro.value.toLowerCase().trim();
+        productosFiltrados = productosFiltrados.filter(p => (p.rubro || '').toLowerCase().includes(rubro));
+    }
+    if (filtroStockMin && !isNaN(parseFloat(filtroStockMin.value))) {
+        const stockMin = parseFloat(filtroStockMin.value);
+        productosFiltrados = productosFiltrados.filter(p => p.stock >= stockMin);
+    }
+    if (filtroStockMax && !isNaN(parseFloat(filtroStockMax.value))) {
+        const stockMax = parseFloat(filtroStockMax.value);
+        productosFiltrados = productosFiltrados.filter(p => p.stock <= stockMax);
+    }
+    if (filtroVentaMin && !isNaN(parseFloat(filtroVentaMin.value))) {
+        const ventaMin = parseFloat(filtroVentaMin.value);
+        productosFiltrados = productosFiltrados.filter(p => p.venta >= ventaMin);
+    }
+    if (filtroVentaMax && !isNaN(parseFloat(filtroVentaMax.value))) {
+        const ventaMax = parseFloat(filtroVentaMax.value);
+        productosFiltrados = productosFiltrados.filter(p => p.venta <= ventaMax);
+    }
+    const fechaDesdeStr = filtroFechaActDesde.value;
+    if (fechaDesdeStr) {
+        const fechaDesde = new Date(fechaDesdeStr + 'T00:00:00');
+        productosFiltrados = productosFiltrados.filter(p => p.fechaUltimoCambioPrecio && p.fechaUltimoCambioPrecio.toDate() >= fechaDesde);
+    }
+    const fechaHastaStr = filtroFechaActHasta.value;
+    if (fechaHastaStr) {
+        const fechaHasta = new Date(fechaHastaStr + 'T23:59:59');
+        productosFiltrados = productosFiltrados.filter(p => p.fechaUltimoCambioPrecio && p.fechaUltimoCambioPrecio.toDate() <= fechaHasta);
+    }
+
+    productosFiltradosActuales = sortProducts(productosFiltrados, currentSortColumn, currentSortDirection);
+
+    currentlyDisplayedCount = 0;
+    tablaProductosBody.innerHTML = '';
+    if (tableContainer) tableContainer.scrollTop = 0;
+    
+    if (productosFiltradosActuales.length === 0) {
+        tablaProductosBody.innerHTML = '<tr><td colspan="11" class="text-center">No se encontraron productos con los filtros aplicados.</td></tr>';
+    } else {
+        loadMoreProducts();
+    }
+    
+    updateSortIcons();
+}
+
+function updateSortIcons() {
     if (tablaProductosHead) {
         tablaProductosHead.querySelectorAll('.sortable-header').forEach(header => {
             const sortIcon = header.querySelector('.sort-icon');
@@ -256,32 +198,13 @@ function renderizarTablaProductos(productos) {
     }
 }
 
-// AÑADE ESTA FUNCIÓN NUEVA EN productos.js
-function handleDuplicate(e) {
-    const id = e.target.closest('.btn-duplicar-producto').dataset.id;
-    const producto = listaCompletaProductos.find(p => p.id === id);
-    if (producto) {
-        // Preparamos el modal en modo "duplicar"
-        abrirProductoModal('duplicar', producto);
-    }
-}
-
-
 async function handleFormSubmit(e) {
     e.preventDefault();
-
     const saveButton = document.getElementById('btnGuardarProducto');
-    if (!formProducto || !saveButton) {
-        await showAlertModal("Error: El formulario o el botón de guardar no están disponibles.");
-        return;
-    }
+    if (!formProducto || !saveButton) return;
 
     const id = productoId.value;
     const isNew = !id;
-    const productoGenericoSwitch = document.getElementById('producto-generico');
-    const productoMargenGenerico = document.getElementById('producto-margen-generico');
-    const productoDestacado = document.getElementById('producto-destacado');
-
     const productoData = {
         nombre: productoNombre.value.trim(),
         nombre_lowercase: productoNombre.value.trim().toLowerCase(),
@@ -304,37 +227,23 @@ async function handleFormSubmit(e) {
         return;
     }
 
-
     const originalButtonContent = saveButton.innerHTML;
     saveButton.disabled = true;
     saveButton.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Guardando...`;
 
     try {
-        // 2. Intentamos guardar el documento en Firebase
         await saveDocument('productos', productoData, isNew ? null : id);
-
-        // Si es un producto nuevo, también guardamos sus categorías
         if (isNew) {
             await addUniqueItem('marcas', productoData.marca);
             await addUniqueItem('colores', productoData.color);
             await addUniqueItem('rubros', productoData.rubro);
         }
-
-        // 3. Si todo sale bien, cerramos el modal principal
-        if (productoModal) {
-            productoModal.hide();
-        }
-
-        // Y mostramos el mensaje de éxito
+        if (productoModal) productoModal.hide();
         await showAlertModal(`Producto ${isNew ? 'creado' : 'actualizado'} correctamente.`);
-
     } catch (e) {
-        // 4. Si ocurre un error, mostramos un alerta de error
         console.error('Error al guardar el producto:', e);
-        await showAlertModal('Ocurrió un error al guardar el producto. Revisa la consola para más detalles.');
+        await showAlertModal('Ocurrió un error al guardar el producto.');
     } finally {
-        // 5. Se ejecuta siempre (después del éxito o del error)
-        // para restaurar el botón a su estado original.
         saveButton.disabled = false;
         saveButton.innerHTML = originalButtonContent;
     }
@@ -357,7 +266,7 @@ async function handleDelete(e) {
     if (confirmado) {
         try {
             await deleteDocument('productos', id);
-            await showAlertModal('Producto eliminado de Firebase.');
+            await showAlertModal('Producto eliminado.');
         } catch (e) {
             console.error('Error al eliminar el producto:', e);
             await showAlertModal('Ocurrió un error al eliminar el producto.');
@@ -365,13 +274,8 @@ async function handleDelete(e) {
     }
 }
 
-
-
-
-
 function updatePorcentajeField() {
     if (!productoCosto || !productoVenta || !productoPorcentaje) return;
-
     const costo = parseFloat(productoCosto.value) || 0;
     const venta = parseFloat(productoVenta.value) || 0;
     let porcentaje = '0.00';
@@ -385,19 +289,14 @@ function updatePorcentajeField() {
 
 function updateVentaField() {
     if (!productoCosto || !productoVenta || !productoPorcentaje) return;
-
     const costo = parseFloat(productoCosto.value) || 0;
     let porcentajeStr = productoPorcentaje.value.replace('%', '').replace('+', '');
     const porcentaje = parseFloat(porcentajeStr) || 0;
-
     if (!isNaN(costo) && !isNaN(porcentaje) && costo >= 0) {
         const venta = costo * (1 + porcentaje / 100);
-        // Aplicamos el redondeo
         const ventaRedondeada = roundUpToNearest50(venta);
         productoVenta.value = ventaRedondeada.toFixed(2);
     }
-    // Volvemos a calcular el porcentaje real después de redondear
-    // updatePorcentajeField();
 }
 
 function handleSort(e) {
@@ -405,19 +304,14 @@ function handleSort(e) {
     if (!header) return;
     const sortBy = header.dataset.sortBy;
     const sortDirection = currentSortColumn === sortBy && currentSortDirection === 'asc' ? 'desc' : 'asc';
-
     currentSortColumn = sortBy;
     currentSortDirection = sortDirection;
     aplicarFiltrosYRenderizar();
 }
 
-// Reemplazar la función entera en productos.js
-
-
 async function handleActualizacionMasiva() {
-    if (!updateField || !updateAmount || !updateTypePercentage || !updateTypeFixed) return;
-
-    const field = updateField.value; // Puede ser 'venta' o 'costo'
+    if (!updateField || !updateAmount || !updateTypePercentage) return;
+    const field = updateField.value;
     const type = updateTypePercentage.checked ? 'percentage' : 'fixed';
     const amount = parseFloat(updateAmount.value);
     const fieldNameText = field === 'venta' ? 'Precio de Venta' : 'Precio de Costo';
@@ -426,127 +320,76 @@ async function handleActualizacionMasiva() {
         await showAlertModal('Por favor, ingresá un monto válido para la actualización.');
         return;
     }
-
     if (productosFiltradosActuales.length === 0) {
         await showAlertModal('No hay productos filtrados para actualizar.');
         return;
     }
 
-    if (confirm(`¿Estás seguro de que quieres actualizar el "${fieldNameText}" de ${productosFiltradosActuales.length} productos? Esta acción también ajustará los precios de venta si se modifica el costo.`)) {
-        const batch = writeBatch(db);
+    const confirmado = await showConfirmationModal(`¿Estás seguro de que quieres actualizar el "${fieldNameText}" de ${productosFiltradosActuales.length} productos? Esta acción también ajustará los precios de venta si se modifica el costo.`);
+    if (!confirmado) return;
 
-        productosFiltradosActuales.forEach(p => {
-            const docRef = doc(db, 'productos', p.id);
-            let updateData = {};
-
-            if (field === 'costo') {
-                // --- LÓGICA PARA ACTUALIZAR COSTO Y RECALCULAR VENTA ---
-                const oldCost = p.costo || 0;
-                let newCost;
-
-                // 1. Calcular el nuevo costo
-                if (type === 'percentage') {
-                    newCost = oldCost + (oldCost * amount / 100);
-                } else { // 'fixed'
-                    newCost = oldCost + amount;
-                }
-                newCost = newCost < 0 ? 0 : newCost; // No permitir costos negativos
-
-                updateData.costo = newCost;
-
-                // 2. Si el costo original era mayor a 0, recalcular el precio de venta
-                if (oldCost > 0) {
-                    const profitPercentage = (p.venta - oldCost) / oldCost;
-                    const newSalePrice = newCost * (1 + profitPercentage);
-                    updateData.venta = roundUpToNearest50(newSalePrice);
-                }
-
-            } else {
-                // --- LÓGICA ORIGINAL PARA ACTUALIZAR SOLO LA VENTA ---
-                const oldSalePrice = p.venta || 0;
-                let newSalePrice;
-
-                if (type === 'percentage') {
-                    newSalePrice = oldSalePrice + (oldSalePrice * amount / 100);
-                } else { // 'fixed'
-                    newSalePrice = oldSalePrice + amount;
-                }
-                newSalePrice = newSalePrice < 0 ? 0 : newSalePrice; // No permitir ventas negativas
-
+    const batch = writeBatch(db);
+    productosFiltradosActuales.forEach(p => {
+        const docRef = doc(db, 'productos', p.id);
+        let updateData = {};
+        if (field === 'costo') {
+            const oldCost = p.costo || 0;
+            let newCost = type === 'percentage' ? oldCost * (1 + amount / 100) : oldCost + amount;
+            newCost = newCost < 0 ? 0 : newCost;
+            updateData.costo = newCost;
+            if (oldCost > 0) {
+                const profitPercentage = (p.venta - oldCost) / oldCost;
+                const newSalePrice = newCost * (1 + profitPercentage);
                 updateData.venta = roundUpToNearest50(newSalePrice);
             }
-
-            updateData.fechaUltimoCambioPrecio = Timestamp.now();
-            batch.update(docRef, updateData);
-        });
-
-        try {
-            await batch.commit();
-            await showAlertModal('¡Actualización masiva completada con éxito!');
-        } catch (e) {
-            console.error('Error al realizar la actualización masiva:', e);
-            await showAlertModal('Ocurrió un error al realizar la actualización masiva.');
+        } else {
+            const oldSalePrice = p.venta || 0;
+            let newSalePrice = type === 'percentage' ? oldSalePrice * (1 + amount / 100) : oldSalePrice + amount;
+            newSalePrice = newSalePrice < 0 ? 0 : newSalePrice;
+            updateData.venta = roundUpToNearest50(newSalePrice);
         }
+        updateData.fechaUltimoCambioPrecio = Timestamp.now();
+        batch.update(docRef, updateData);
+    });
+
+    try {
+        await batch.commit();
+        await showAlertModal('¡Actualización masiva completada con éxito!');
+    } catch (e) {
+        console.error('Error al realizar la actualización masiva:', e);
+        await showAlertModal('Ocurrió un error al realizar la actualización masiva.');
     }
 }
 
-// REEMPLAZA ESTA FUNCIÓN ENTERA EN productos.js
-
 async function exportarProductosAExcel() {
-    // --- INICIO DE LA MODIFICACIÓN ---
-    // Ahora usamos la lista de productos ya filtrados que se muestra en la tabla.
     const productosAExportar = productosFiltradosActuales;
-
     if (productosAExportar.length === 0) {
         await showAlertModal('No hay productos en la lista actual para exportar.');
         return;
     }
-    // --- FIN DE LA MODIFICACIÓN ---
-
-    const capitalize = (s) => {
-        if (typeof s !== 'string' || s.length === 0) return '';
-        return s.charAt(0).toUpperCase() + s.slice(1);
-    };
-
-    const data = productosAExportar.map(p => { // <-- Usamos la lista filtrada
+    const capitalize = (s) => s && typeof s === 'string' ? s.charAt(0).toUpperCase() + s.slice(1) : '';
+    const data = productosAExportar.map(p => {
         let porcentajeGanancia = '0';
         if (p.costo > 0) {
             porcentajeGanancia = (((p.venta - p.costo) / p.costo) * 100).toFixed(2);
         } else if (p.costo === 0 && p.venta > 0) {
             porcentajeGanancia = '100';
         }
-
-        const ultimaActualizacion = p.fechaUltimoCambioPrecio && p.fechaUltimoCambioPrecio.toDate
-            ? p.fechaUltimoCambioPrecio.toDate().toLocaleDateString('es-AR')
-            : 'N/A';
-
+        const ultimaActualizacion = p.fechaUltimoCambioPrecio?.toDate()?.toLocaleDateString('es-AR') || 'N/A';
         return [
-            p.codigo || 'N/A',
-            p.nombre || 'N/A',
-            capitalize(p.marca) || 'N/A',
-            capitalize(p.color) || 'N/A',
-            capitalize(p.rubro) || 'N/A',
-            p.costo ? p.costo.toFixed(2) : '0.00',
-            p.venta ? p.venta.toFixed(2) : '0.00',
-            porcentajeGanancia,
-            p.stock || 0,
-            p.stockMinimo || 0,
-            ultimaActualizacion
+            p.codigo || 'N/A', p.nombre || 'N/A', capitalize(p.marca), capitalize(p.color), capitalize(p.rubro),
+            p.costo?.toFixed(2) || '0.00', p.venta?.toFixed(2) || '0.00', porcentajeGanancia,
+            p.stock || 0, p.stockMinimo || 0, ultimaActualizacion
         ];
     });
-
     const headers = ["Codigo", "Nombre", "Marca", "Color", "Rubro", "Costo", "Venta", "Porcentaje", "Stock", "Stock Minimo", "Fecha Ultimo Cambio Precio"];
     const csvContent = [
         headers.join(';'),
         ...data.map(row => row.map(item => {
             const stringItem = String(item);
-            if (stringItem.includes(';') || stringItem.includes('"') || stringItem.includes('\n')) {
-                return `"${stringItem.replace(/"/g, '""')}"`;
-            }
-            return stringItem;
+            return stringItem.includes(';') || stringItem.includes('"') || stringItem.includes('\n') ? `"${stringItem.replace(/"/g, '""')}"` : stringItem;
         }).join(';'))
     ].join('\n');
-
     const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -558,18 +401,14 @@ async function exportarProductosAExcel() {
     URL.revokeObjectURL(url);
 }
 
-// --- NUEVA FUNCIÓN PARA IMPORTAR (CON SPINNER) ---
-
 async function handleFileUpload(event) {
     const file = event.target.files[0];
-    if (!file) {
-        return;
-    }
+    if (!file) return;
 
     const loader = document.getElementById('loader-overlay');
     const importButton = document.getElementById('btnImportarProductos');
-
     const reader = new FileReader();
+
     reader.onload = async (e) => {
         const csvContent = e.target.result;
         const rows = csvContent.trim().split('\n');
@@ -581,39 +420,29 @@ async function handleFileUpload(event) {
             return;
         }
 
-        // --- FIX 1: Usamos el modal de confirmación personalizado ---
         const confirmado = await showConfirmationModal(`Se encontraron ${rows.length} productos en el archivo. ¿Deseas continuar?`, "Confirmar Importación");
         if (!confirmado) {
             event.target.value = '';
             return;
         }
-        // --- FIN FIX 1 ---
 
         if (loader) loader.classList.remove('d-none');
         if (importButton) importButton.disabled = true;
 
-        let productosAgregados = 0;
-        let productosActualizados = 0;
-
+        let productosAgregados = 0, productosActualizados = 0;
         try {
             const batch = writeBatch(db);
-            const productosCollection = collection(db, 'productos');
-            const snapshotProductos = await getDocs(productosCollection);
+            const snapshotProductos = await getDocs(collection(db, 'productos'));
             const productosExistentes = {};
             snapshotProductos.forEach(doc => {
                 const data = doc.data();
                 if (data.codigo) productosExistentes[data.codigo] = { id: doc.id, ...data };
             });
 
-            // --- FIX 2: Recolectamos nuevas categorías sin guardarlas aún ---
-            const nuevasMarcas = new Set();
-            const nuevosColores = new Set();
-            const nuevosRubros = new Set();
-            // --- FIN FIX 2 ---
+            const nuevasCategorias = { marcas: new Set(), colores: new Set(), rubros: new Set() };
 
             for (const row of rows) {
                 if (row.trim() === '') continue;
-
                 const values = row.split(';');
                 const productoCSV = headers.reduce((obj, header, index) => {
                     const keyMap = {
@@ -626,82 +455,47 @@ async function handleFileUpload(event) {
                     return obj;
                 }, {});
 
-                if (!productoCSV.codigo || !productoCSV.nombre) {
-                    console.warn("Omitiendo fila por falta de código o nombre:", row);
-                    continue;
-                }
+                if (!productoCSV.codigo || !productoCSV.nombre) continue;
 
                 const costo = parseFloat((productoCSV.costo || '0').replace('$', '').trim()) || 0;
                 const ventaCSV = parseFloat((productoCSV.venta || '0').replace('$', '').trim());
                 const porcentajeCSV = parseFloat((productoCSV.porcentajeGanancia || '0').replace('%', '').trim());
-
                 let ventaFinal = (ventaCSV > 0) ? ventaCSV : (costo * (1 + (porcentajeCSV / 100)));
-                // Aplicamos el redondeo
                 const ventaRedondeada = roundUpToNearest50(ventaFinal);
 
                 const productoData = {
-                    nombre: productoCSV.nombre,
-                    nombre_lowercase: productoCSV.nombre.toLowerCase(),
-                    codigo: productoCSV.codigo,
-                    marca: productoCSV.marca || '',
-                    color: productoCSV.color || '',
-                    rubro: productoCSV.rubro || '',
-                    costo: costo,
-                    venta: ventaRedondeada,
-                    stock: parseInt(productoCSV.stock, 10) || 0,
-                    stockMinimo: parseInt(productoCSV.stockMinimo, 10) || 0,
+                    nombre: productoCSV.nombre, nombre_lowercase: productoCSV.nombre.toLowerCase(),
+                    codigo: productoCSV.codigo, marca: productoCSV.marca || '', color: productoCSV.color || '',
+                    rubro: productoCSV.rubro || '', costo: costo, venta: ventaRedondeada,
+                    stock: parseInt(productoCSV.stock, 10) || 0, stockMinimo: parseInt(productoCSV.stockMinimo, 10) || 0,
                     fechaUltimoCambioPrecio: Timestamp.now()
                 };
 
                 const productoExistente = productosExistentes[productoData.codigo];
                 if (productoExistente) {
-                    const needsUpdate = (
-                        productoData.nombre !== productoExistente.nombre ||
-                        productoData.marca !== productoExistente.marca ||
-                        productoData.color !== productoExistente.color ||
-                        productoData.rubro !== productoExistente.rubro ||
-                        productoData.costo !== productoExistente.costo ||
-                        productoData.venta !== productoExistente.venta ||
-                        productoData.stock !== productoExistente.stock ||
-                        productoData.stockMinimo !== productoExistente.stockMinimo
-                    );
-                    if (needsUpdate) {
-                        const docRef = doc(db, 'productos', productoExistente.id);
-                        batch.update(docRef, productoData);
-                        productosActualizados++;
-                    }
+                    const docRef = doc(db, 'productos', productoExistente.id);
+                    batch.update(docRef, productoData);
+                    productosActualizados++;
                 } else {
                     const newDocRef = doc(collection(db, 'productos'));
                     batch.set(newDocRef, productoData);
                     productosAgregados++;
                 }
-
-                // FIX 2 (cont.): Agregamos las categorías a la lista para guardarlas después
-                if (productoData.marca) nuevasMarcas.add(productoData.marca);
-                if (productoData.color) nuevosColores.add(productoData.color);
-                if (productoData.rubro) nuevosRubros.add(productoData.rubro);
+                if (productoData.marca) nuevasCategorias.marcas.add(productoData.marca);
+                if (productoData.color) nuevasCategorias.colores.add(productoData.color);
+                if (productoData.rubro) nuevasCategorias.rubros.add(productoData.rubro);
             }
-
             await batch.commit();
+            for (const marca of nuevasCategorias.marcas) await addUniqueItem('marcas', marca);
+            for (const color of nuevasCategorias.colores) await addUniqueItem('colores', color);
+            for (const rubro of nuevasCategorias.rubros) await addUniqueItem('rubros', rubro);
 
-            // FIX 2 (cont.): Guardamos las nuevas categorías DESPUÉS de la importación principal
-            for (const marca of nuevasMarcas) await addUniqueItem('marcas', marca);
-            for (const color of nuevosColores) await addUniqueItem('colores', color);
-            for (const rubro of nuevosRubros) await addUniqueItem('rubros', rubro);
-
-            if (loader) loader.classList.add('d-none');
-            await showAlertModal(
-                `¡Importación completada!<br><br>
-                 - Productos nuevos: <strong>${productosAgregados}</strong><br>
-                 - Productos actualizados: <strong>${productosActualizados}</strong><br>
-                 - Productos sin cambios: <strong>${rows.length - (productosAgregados + productosActualizados)}</strong>`
-            );
-
+            await showAlertModal(`¡Importación completada!<br>- Nuevos: <strong>${productosAgregados}</strong><br>- Actualizados: <strong>${productosActualizados}</strong>`);
         } catch (error) {
             console.error("Error durante la importación masiva:", error);
-            if (loader) loader.classList.add('d-none');
-            await showAlertModal("Ocurrió un error durante la importación. Revisa la consola para más detalles.");
+            await showAlertModal("Ocurrió un error durante la importación.");
         } finally {
+            if (loader) loader.classList.add('d-none');
             if (importButton) importButton.disabled = false;
             event.target.value = '';
         }
@@ -709,29 +503,27 @@ async function handleFileUpload(event) {
     reader.readAsText(file, 'UTF-8');
 }
 
-// AÑADE ESTA NUEVA FUNCIÓN CENTRAL EN productos.js
 function abrirProductoModal(modo, producto = null) {
-    // IMPORTANTE: Se elimina la llamada a resetProductoModal() de aquí.
     if (productoCodigo) productoCodigo.classList.remove('is-invalid');
     const modalTitle = document.getElementById('productoModalLabel');
     const saveButton = document.getElementById('btnGuardarProducto');
+
+    resetProductoModal();
 
     if (modo === 'editar' && producto) {
         modalTitle.textContent = 'Editar Producto';
         saveButton.textContent = 'Guardar Cambios';
         productoId.value = producto.id ?? '';
         productoCodigo.value = producto.codigo ?? '';
-        productoNombre.value = producto.nombre ?? '';
     } else if (modo === 'duplicar' && producto) {
         modalTitle.textContent = 'Duplicar Producto';
         saveButton.textContent = 'Crear Producto';
         productoId.value = '';
         productoCodigo.value = '';
-        productoNombre.value = producto.nombre ?? '';
     }
-    // El modo 'nuevo' ahora se gestiona en handleNewProduct.
 
     if (modo === 'editar' || modo === 'duplicar') {
+        productoNombre.value = producto.nombre ?? '';
         productoMarca.value = producto.marca ?? '';
         productoColor.value = producto.color ?? '';
         productoRubro.value = producto.rubro ?? '';
@@ -739,199 +531,80 @@ function abrirProductoModal(modo, producto = null) {
         productoVenta.value = producto.venta ?? 0;
         productoStock.value = producto.stock ?? 0;
         productoStockMinimo.value = producto.stockMinimo ?? 0;
-
-        const productoGenericoSwitch = document.getElementById('producto-generico');
-        const genericProfitFields = document.getElementById('generic-profit-fields');
-        const productoMargenGenerico = document.getElementById('producto-margen-generico');
-        const productoDestacado = document.getElementById('producto-destacado');
-
-        if (productoGenericoSwitch) productoGenericoSwitch.checked = producto.isGeneric ?? false;
-        if (productoMargenGenerico) productoMargenGenerico.value = producto.genericProfitMargin ?? 70;
-        if (productoDestacado) productoDestacado.checked = producto.isFeatured ?? false;
-        if (genericProfitFields) genericProfitFields.style.display = producto.isGeneric ? 'block' : 'none';
-
+        document.getElementById('producto-generico').checked = producto.isGeneric ?? false;
+        document.getElementById('producto-margen-generico').value = producto.genericProfitMargin ?? 70;
+        document.getElementById('producto-destacado').checked = producto.isFeatured ?? false;
+        document.getElementById('generic-profit-fields').style.display = producto.isGeneric ? 'block' : 'none';
         updatePorcentajeField();
     }
-
     if (productoModal) productoModal.show();
 }
 
-// REEMPLAZA TUS FUNCIONES handleEdit Y handleNewProduct CON ESTAS VERSIONES SIMPLIFICADAS
 function handleEdit(e) {
     const id = e.target.closest('.btn-editar-producto').dataset.id;
     const producto = listaCompletaProductos.find(p => p.id === id);
-    if (producto) {
-        abrirProductoModal('editar', producto);
-    }
+    if (producto) abrirProductoModal('editar', producto);
+}
+
+function handleDuplicate(e) {
+    const id = e.target.closest('.btn-duplicar-producto').dataset.id;
+    const producto = listaCompletaProductos.find(p => p.id === id);
+    if (producto) abrirProductoModal('duplicar', producto);
 }
 
 function handleNewProduct() {
-    // 1. Limpiamos el formulario llamando a nuestra función de reseteo.
     resetProductoModal();
-    // 2. Mostramos el modal, que ahora está garantizado que está vacío.
     if (productoModal) productoModal.show();
 }
 
-
-/**
- * Se ejecuta al salir del campo 'código' en el modal de producto.
- * Verifica si el código ya existe en la base de datos y guía al usuario.
- */
 async function handleCodigoBlur() {
-    // 1. Limpiamos cualquier estilo de error previo.
     productoCodigo.classList.remove('is-invalid');
-
     const codigo = productoCodigo.value.trim();
-    const idProductoActual = productoId.value; // ID del producto que estamos editando (si aplica)
-
-    // Si el campo está vacío, no hacemos nada.
+    const idProductoActual = productoId.value;
     if (codigo === '') return;
 
-    // 2. Buscamos en Firebase si existe otro producto con ese código.
     const q = query(collection(db, 'productos'), where('codigo', '==', codigo));
     const querySnapshot = await getDocs(q);
 
     if (!querySnapshot.empty) {
-        // Encontramos al menos un producto con ese código.
         const productoExistente = { id: querySnapshot.docs[0].id, ...querySnapshot.docs[0].data() };
+        if (productoExistente.id === idProductoActual) return;
 
-        // 3. Si el producto encontrado es el mismo que estamos editando, no es un duplicado.
-        if (productoExistente.id === idProductoActual) {
-            return; // No hacemos nada.
-        }
-
-        // 4. Si es un producto DIFERENTE, entonces es un duplicado.
-        productoCodigo.classList.add('is-invalid'); // Marcamos el campo en rojo.
-
+        productoCodigo.classList.add('is-invalid');
         const confirmado = await showConfirmationModal(
-            `El código <strong>${codigo}</strong> ya está en uso para el producto:<br><br>
-            <strong class="text-primary">"${productoExistente.nombre}"</strong>.<br><br>
-            ¿Qué deseas hacer?`,
-            "Código Duplicado Encontrado",
-            {
-                confirmText: 'Editar Producto Existente',
-                cancelText: 'Crear uno Nuevo',
-                customClass: 'modal-warning-custom' // <-- La nueva clase de estilo
-            }
+            `El código <strong>${codigo}</strong> ya está en uso para:<br><strong class="text-primary">"${productoExistente.nombre}"</strong>.<br>¿Deseas editar ese producto?`,
+            "Código Duplicado", { confirmText: 'Sí, editar', cancelText: 'No, cambiar código' }
         );
-
         if (confirmado) {
-            // Si el usuario confirma, cargamos el producto existente en el modal.
             abrirProductoModal('editar', productoExistente);
         } else {
-            // Si el usuario cancela, dejamos el campo en rojo como señal
-            // de que debe cambiar el código para poder guardar.
             productoCodigo.focus();
             productoCodigo.select();
         }
     }
 }
 
-
-
-
-/**
- * Resetea todos los campos del formulario del modal de producto a su estado inicial.
- */
 function resetProductoModal() {
     if (!formProducto) return;
-
-    // Resetea el formulario a los valores por defecto del HTML
     formProducto.reset();
-
-    // Limpia explícitamente los campos y el estado
     productoId.value = '';
     modalProductoLabel.textContent = 'Nuevo Producto';
     const saveButton = document.getElementById('btnGuardarProducto');
-    if (saveButton) {
-        saveButton.textContent = 'Crear Producto';
-    }
-
-    // Oculta campos condicionales
+    if (saveButton) saveButton.textContent = 'Crear Producto';
     const genericProfitFields = document.getElementById('generic-profit-fields');
-    if (genericProfitFields) {
-        genericProfitFields.style.display = 'none';
-    }
-
-    // Limpia cualquier estilo de validación de error
-    if (productoCodigo) {
-        productoCodigo.classList.remove('is-invalid');
-    }
+    if (genericProfitFields) genericProfitFields.style.display = 'none';
+    if (productoCodigo) productoCodigo.classList.remove('is-invalid');
 }
-// ------------------------------------------------------------
-// AÑADE ESTA FUNCIÓN NUEVA EN productos.js
 
-// async function normalizarDatosAntiguos() {
-//     const confirmado = await showConfirmationModal(
-//         "Este es un proceso de mantenimiento de un solo uso. Se convertirán todos los campos de Marca, Color y Rubro a minúsculas en la base de datos para asegurar la consistencia. ¿Deseas continuar?",
-//         "Confirmar Normalización"
-//     );
-//     if (!confirmado) return;
-
-//     const loader = document.getElementById('loader-overlay');
-//     if (loader) loader.classList.remove('d-none');
-
-//     try {
-//         // La función 'writeBatch' ya está importada en este archivo, por lo que funcionará.
-//         const batch = writeBatch(db);
-//         let updatesCounter = 0;
-
-//         for (const producto of listaCompletaProductos) {
-//             const updateData = {};
-//             let needsUpdate = false;
-
-//             if (producto.marca && producto.marca !== producto.marca.toLowerCase()) {
-//                 updateData.marca = producto.marca.toLowerCase();
-//                 needsUpdate = true;
-//             }
-//             if (producto.color && producto.color !== producto.color.toLowerCase()) {
-//                 updateData.color = producto.color.toLowerCase();
-//                 needsUpdate = true;
-//             }
-//             if (producto.rubro && producto.rubro !== producto.rubro.toLowerCase()) {
-//                 updateData.rubro = producto.rubro.toLowerCase();
-//                 needsUpdate = true;
-//             }
-
-//             if (needsUpdate) {
-//                 const productoRef = doc(db, 'productos', producto.id);
-//                 batch.update(productoRef, updateData);
-//                 updatesCounter++;
-//             }
-//         }
-
-//         if (updatesCounter > 0) {
-//             await batch.commit();
-//             await showAlertModal(`¡Normalización completada! Se actualizaron ${updatesCounter} productos.`);
-//         } else {
-//             await showAlertModal("No se encontraron datos para normalizar. ¡Todo está en orden!");
-//         }
-
-//     } catch (error) {
-//         console.error("Error al normalizar datos:", error);
-//         await showAlertModal("Ocurrió un error durante la normalización. Revisa la consola.", "Error");
-//     } finally {
-//         if (loader) loader.classList.add('d-none');
-//     }
-// }
-
-//------------------------------------------------------------
-
-// --- FUNCIÓN DE INICIALIZACIÓN ---
 export function init() {
-    console.log("Inicializando la sección de productos...");
-
     tablaProductosBody = document.getElementById('tabla-productos');
     tablaProductosHead = document.getElementById('tablaProductosHead');
     btnNuevoProducto = document.getElementById('btnNuevoProducto');
     productoModalEl = document.getElementById('productoModal');
-    if (productoModalEl) {
-        productoModal = new bootstrap.Modal(productoModalEl);
-    }
+    if (productoModalEl) productoModal = new bootstrap.Modal(productoModalEl);
     formProducto = document.getElementById('formProducto');
     modalProductoLabel = document.getElementById('productoModalLabel');
     btnExportarProductos = document.getElementById('btnExportarProductos');
-
     filtroProductos = document.getElementById('filtro-productos');
     filtroMarca = document.getElementById('filtro-marca');
     filtroColor = document.getElementById('filtro-color');
@@ -940,25 +613,21 @@ export function init() {
     filtroStockMax = document.getElementById('filtro-stock-max');
     filtroVentaMin = document.getElementById('filtro-venta-min');
     filtroVentaMax = document.getElementById('filtro-venta-max');
-    filtroFechaActDesde = document.getElementById('filtro-fecha-act-desde'); // <-- AÑADE ESTA LÍNEA
+    filtroFechaActDesde = document.getElementById('filtro-fecha-act-desde');
     filtroFechaActHasta = document.getElementById('filtro-fecha-act-hasta');
     btnAplicarFiltros = document.getElementById('btnAplicarFiltros');
     btnLimpiarFiltros = document.getElementById('btnLimpiarFiltros');
-
     updateField = document.getElementById('update-field');
     updateTypePercentage = document.getElementById('updateTypePercentage');
     updateTypeFixed = document.getElementById('updateTypeFixed');
     updateAmount = document.getElementById('update-amount');
     btnAplicarActualizacionMasiva = document.getElementById('btnAplicarActualizacionMasiva');
-
     datalistMarcasFiltro = document.getElementById('marcas-list-filtro');
     datalistColoresFiltro = document.getElementById('colores-list-filtro');
     datalistRubrosFiltro = document.getElementById('rubros-list-filtro');
-
     datalistMarcasModal = document.getElementById('marcas-list');
     datalistColoresModal = document.getElementById('colores-list');
     datalistRubrosModal = document.getElementById('rubros-list');
-
     productoId = document.getElementById('producto-id');
     productoNombre = document.getElementById('producto-nombre');
     productoCodigo = document.getElementById('producto-codigo');
@@ -973,23 +642,11 @@ export function init() {
     productoDestacado = document.getElementById('producto-destacado');
     const productoGenericoSwitch = document.getElementById('producto-generico');
     const genericProfitFields = document.getElementById('generic-profit-fields');
-
-
-
-    // --- AÑADE ESTE BLOQUE ---
-    // const btnNormalizar = document.getElementById('btnNormalizarDatos');
-    // if (btnNormalizar) {
-    //     btnNormalizar.addEventListener('click', normalizarDatosAntiguos);
-    // }
-    // --- FIN DEL BLOQUE ---
-    // --- INICIO DE LA NUEVA LÓGICA DE DATOS ---
+    btnImportarProductos = document.getElementById('btnImportarProductos');
+    importarArchivoInput = document.getElementById('importarArchivoInput');
 
     const actualizarDatalists = () => {
-        const poblar = (elemento, lista) => {
-            if (elemento) {
-                elemento.innerHTML = lista.map(item => `<option value="${item}"></option>`).join('');
-            }
-        };
+        const poblar = (el, lista) => { if (el) el.innerHTML = lista.map(item => `<option value="${item}"></option>`).join(''); };
         poblar(datalistMarcasFiltro, getMarcas());
         poblar(datalistMarcasModal, getMarcas());
         poblar(datalistColoresFiltro, getColores());
@@ -997,60 +654,28 @@ export function init() {
         poblar(datalistRubrosFiltro, getRubros());
         poblar(datalistRubrosModal, getRubros());
     };
-
     const actualizarTablaProductos = () => {
         listaCompletaProductos = getProductos();
         aplicarFiltrosYRenderizar();
     };
 
-    // Suscripción a los eventos de actualización
     document.addEventListener('productos-updated', actualizarTablaProductos);
     document.addEventListener('marcas-updated', actualizarDatalists);
     document.addEventListener('colores-updated', actualizarDatalists);
     document.addEventListener('rubros-updated', actualizarDatalists);
-
-    // Carga inicial de datos desde el caché
     actualizarTablaProductos();
     actualizarDatalists();
 
-    // --- FIN DE LA NUEVA LÓGICA DE DATOS ---
-
-
     if (productoCodigo) {
-        // Ejecuta la verificación cuando el usuario sale del campo.
         productoCodigo.addEventListener('blur', handleCodigoBlur);
-
-        // Limpia el borde rojo de error en cuanto el usuario empieza a escribir de nuevo.
-        productoCodigo.addEventListener('input', () => {
-            productoCodigo.classList.remove('is-invalid');
-        });
+        productoCodigo.addEventListener('input', () => productoCodigo.classList.remove('is-invalid'));
     }
-
-
-
-    // --- INICIALIZACIÓN DE IMPORTACIÓN ---
-    btnImportarProductos = document.getElementById('btnImportarProductos');
-    importarArchivoInput = document.getElementById('importarArchivoInput');
-
-    if (btnImportarProductos) {
-        btnImportarProductos.addEventListener('click', () => {
-            if (importarArchivoInput) importarArchivoInput.click();
-        });
-    }
-    if (importarArchivoInput) {
-        importarArchivoInput.addEventListener('change', handleFileUpload);
-    }
-    // --- FIN INICIALIZACIÓN DE IMPORTACIÓN ---
-
+    if (btnImportarProductos) btnImportarProductos.addEventListener('click', () => importarArchivoInput?.click());
+    if (importarArchivoInput) importarArchivoInput.addEventListener('change', handleFileUpload);
     if (btnNuevoProducto) btnNuevoProducto.addEventListener('click', handleNewProduct);
-
-    if (productoModalEl) {
-        productoModalEl.addEventListener('hidden.bs.modal', resetProductoModal);
-    }
-
+    if (productoModalEl) productoModalEl.addEventListener('hidden.bs.modal', resetProductoModal);
     if (formProducto) formProducto.addEventListener('submit', handleFormSubmit);
     if (btnExportarProductos) btnExportarProductos.addEventListener('click', exportarProductosAExcel);
-
     if (tablaProductosBody) {
         tablaProductosBody.addEventListener('click', (e) => {
             if (e.target.closest('.btn-eliminar-producto')) handleDelete(e);
@@ -1059,12 +684,10 @@ export function init() {
         });
     }
     if (tablaProductosHead) tablaProductosHead.addEventListener('click', handleSort);
-
     if (filtroProductos) filtroProductos.addEventListener('input', aplicarFiltrosYRenderizar);
     if (filtroMarca) filtroMarca.addEventListener('input', aplicarFiltrosYRenderizar);
     if (filtroColor) filtroColor.addEventListener('input', aplicarFiltrosYRenderizar);
     if (filtroRubro) filtroRubro.addEventListener('input', aplicarFiltrosYRenderizar);
-
     if (btnAplicarFiltros) btnAplicarFiltros.addEventListener('click', aplicarFiltrosYRenderizar);
     if (btnLimpiarFiltros) {
         btnLimpiarFiltros.addEventListener('click', () => {
@@ -1076,40 +699,30 @@ export function init() {
             if (filtroStockMax) filtroStockMax.value = '';
             if (filtroVentaMin) filtroVentaMin.value = '';
             if (filtroVentaMax) filtroVentaMax.value = '';
-            if (filtroFechaActDesde) filtroFechaActDesde.value = ''; // <-- AÑADE ESTA LÍNEA
+            if (filtroFechaActDesde) filtroFechaActDesde.value = '';
             if (filtroFechaActHasta) filtroFechaActHasta.value = '';
             aplicarFiltrosYRenderizar();
         });
     }
     if (btnAplicarActualizacionMasiva) btnAplicarActualizacionMasiva.addEventListener('click', handleActualizacionMasiva);
-
     if (productoCosto) productoCosto.addEventListener('input', updateVentaField);
     if (productoVenta) productoVenta.addEventListener('input', updatePorcentajeField);
     if (productoPorcentaje) productoPorcentaje.addEventListener('input', updateVentaField);
-
     if (productoGenericoSwitch && genericProfitFields) {
         productoGenericoSwitch.addEventListener('change', () => {
             genericProfitFields.style.display = productoGenericoSwitch.checked ? 'block' : 'none';
         });
     }
 
-
-    setupFirebaseListeners();
     const collapseFiltrosEl = document.getElementById('collapseFiltros');
     const filtroChevronIcon = document.getElementById('filtro-chevron-icon');
-
     if (collapseFiltrosEl && filtroChevronIcon) {
-        collapseFiltrosEl.addEventListener('show.bs.collapse', () => {
-            filtroChevronIcon.classList.remove('fa-chevron-down');
-            filtroChevronIcon.classList.add('fa-chevron-up');
-        });
-
-        collapseFiltrosEl.addEventListener('hide.bs.collapse', () => {
-            filtroChevronIcon.classList.remove('fa-chevron-up');
-            filtroChevronIcon.classList.add('fa-chevron-down');
-        });
+        collapseFiltrosEl.addEventListener('show.bs.collapse', () => filtroChevronIcon.classList.replace('fa-chevron-down', 'fa-chevron-up'));
+        collapseFiltrosEl.addEventListener('hide.bs.collapse', () => filtroChevronIcon.classList.replace('fa-chevron-up', 'fa-chevron-down'));
     }
+
+    tableContainer = document.querySelector('.table-responsive-scroll');
+    if (tableContainer) tableContainer.addEventListener('scroll', handleScroll);
+
     return productoModal;
 }
-
-export async function loadData() { }

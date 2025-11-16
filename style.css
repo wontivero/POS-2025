@@ -6,27 +6,23 @@ body {
 /* Agrega esto al final de tu archivo style.css */
 
 .btn-pago-rapido {
-    min-height: 110px;
-    padding: 0.5rem;
+    min-height: auto; /* Quitamos la altura mínima fija */
+    padding: 0.75rem 1rem; /* Ajustamos el padding para el nuevo layout */
     font-weight: 500;
     transition: transform 0.1s ease-in-out;
+    font-size: 1.1rem; /* Tamaño de fuente base para el botón */
 }
 
 .btn-pago-rapido:active {
     transform: scale(0.97);
 }
 
-.btn-pago-texto {
-    font-size: 1.2rem;
-    /* Aumentamos el tamaño (antes era 1rem) */
-    font-weight: 600;
-    /* Hacemos el texto un poco más grueso */
-}
-
-.btn-pago-monto {
-    font-size: 0.9em;
-    font-weight: bold;
-    opacity: 0.85;
+/* Estilo para el monto dentro del botón, ahora es un badge */
+.btn-pago-rapido .badge {
+    font-size: 0.9em; /* Hacemos el badge un poco más pequeño que el texto principal */
+    padding: 0.4em 0.6em;
+    min-width: 50px; /* Ancho mínimo para que se vea bien incluso con $0 */
+    text-align: center;
 }
 
 /* Agrega esto a style.css para controlar la altura del ticket */
@@ -65,7 +61,7 @@ td.precio-venta {
 }
 
 .product-card-mini .card-body {
-    padding: 0.8rem;
+    padding: 0.4rem;
 }
 
 .product-card-mini .card-title {
@@ -144,13 +140,14 @@ td.precio-venta {
 
 /* Estilos para mejorar la legibilidad del ticket de venta */
 .ticket-item {
-    padding-top: 1rem !important;
-    padding-bottom: 1rem !important;
+    padding-top: 0.2rem !important;
+    padding-bottom: 0.2rem !important;
     border-bottom: 1px solid #eee;
 }
 
 .ticket-item-nombre {
     font-size: 1.1rem;
+    font-weight: bold;
 }
 
 .ticket-item .quantity-input {
@@ -180,8 +177,8 @@ td.precio-venta {
 .ticket-item {
     background-color: transparent;
     /* Hacemos los items transparentes para que se vea el fondo */
-    padding-top: 1rem !important;
-    padding-bottom: 1rem !important;
+    padding-top: 0.2rem !important;
+    padding-bottom: 0.2rem !important;
     border-bottom: 1px solid #e9ecef !important;
 }
 
@@ -337,4 +334,11 @@ body.generic-modal-is-open .modal-backdrop.show {
 
 .user-pill:hover {
     background-color: rgba(255, 255, 255, 0.2);
+}
+
+/* Contenedor para la tabla de productos con scroll infinito */
+.table-responsive-scroll {
+    max-height: 65vh; /* Altura máxima del 65% de la ventana */
+    overflow-y: auto; /* Scroll vertical */
+    border: 1px solid #dee2e6;
 }
