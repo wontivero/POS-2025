@@ -335,6 +335,64 @@
         </div>
     </div>
 
+    <!-- Modal para Editar Precio de Producto en Ticket -->
+    <div class="modal fade" id="editPriceModal" tabindex="-1" aria-labelledby="editPriceModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="editPriceModalLabel">Editar Precio</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Editando precio para: <br><strong id="editPriceProductName" class="fs-5"></strong></p>
+                    
+                    <!-- Precio para la venta actual -->
+                    <div class="mb-3">
+                        <label for="editPriceInput" class="form-label fw-bold text-info">Precio SOLO para esta venta:</label>
+                        <div class="input-group">
+                            <span class="input-group-text">$</span>
+                            <input type="number" class="form-control" id="editPriceInput" step="0.01">
+                        </div>
+                    </div>
+
+                    <hr>
+
+                    <!-- Checkbox para cambio permanente -->
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" role="switch" id="editPricePermanentCheck">
+                        <label class="form-check-label" for="editPricePermanentCheck">Actualizar precio de forma permanente</label>
+                    </div>
+
+                    <!-- Campos para cambio permanente (ocultos por defecto) -->
+                    <div id="permanentPriceFields" style="display: none;">
+                        <p class="text-muted small">Se actualizará el precio del producto en la base de datos para futuras ventas.</p>
+                        <div class="row">
+                            <div class="col-md-4 mb-3">
+                                <label for="editPriceCosto" class="form-label">Costo:</label>
+                                <input type="number" class="form-control" id="editPriceCosto" step="0.01">
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label for="editPricePorcentaje" class="form-label">Ganancia %:</label>
+                                <input type="number" class="form-control" id="editPricePorcentaje" step="0.01">
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label for="editPriceVenta" class="form-label">Venta:</label>
+                                <input type="number" class="form-control" id="editPriceVenta" step="0.01">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-primary" id="btnConfirmEditPrice">Guardar Cambios</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+
+
     <div class="modal fade" id="accesoDenegadoModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1"
         aria-labelledby="accesoDenegadoModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
