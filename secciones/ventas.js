@@ -1,7 +1,7 @@
 // secciones/ventas.js
 import { init as initProductosModal } from './productos.js';
 import { haySesionActiva, getSesionActivaId, verificarEstadoCaja } from './caja.js';
-import { getFirestore, collection, onSnapshot, query, orderBy, runTransaction, doc } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
+import { getFirestore, collection, onSnapshot, query, orderBy, runTransaction, doc, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
 import { getCollection, saveDocument, formatCurrency, getTodayDate, getNextTicketNumber, updateDocument, deleteDocument, getFormattedDateTime, generatePDF, showAlertModal, showConfirmationModal } from '../utils.js';
 import { getProductos } from './dataManager.js';
 
@@ -149,20 +149,30 @@ function renderTicket() {
             delete item.justChanged;
         }
         // --- Fin de la lógica para el efecto visual ---
-
+ 
         const genericIndicator = item.isGeneric ? '<i class="fas fa-pencil-alt fa-xs text-info ms-2" title="Precio manual"></i>' : '';
         const marcaTexto = item.marca ? `<span class="text-muted fw-normal"> - ${item.marca}</span>` : '';
-
+ 
+        // --- INICIO: Lógica para el ícono de edición de precio ---
+        // No mostramos el lápiz para productos genéricos, ya que su precio se define al agregar.
+        const editPriceIcon = !item.isGeneric ? `
+            <a href="#" class="edit-price-btn ms-2 text-decoration-none"
+               data-product-id="${item.id}"
+               data-bs-toggle="modal"
+               data-bs-target="#editPriceModal"
+               title="Editar precio">
+                <i class="fas fa-pen-to-square text-primary"></i>
+            </a>` : '';
+        // --- FIN: Lógica para el ícono de edición de precio ---
+ 
         itemDiv.innerHTML = `
             <div>
                 <h6 class="mb-1 ticket-item-nombre">${item.nombre}${marcaTexto}${genericIndicator}</h6>
-                <small class="text-muted" id="desc-${index}">${item.cantidad} x ${formatCurrency(item.precio)}</small>
+                <small class="text-muted" id="desc-${index}">${item.cantidad} x ${formatCurrency(item.precio)}</small>${editPriceIcon}
             </div>
             <div class="d-flex align-items-center">
                 <div class="input-group me-2" style="width: 140px;">
-                    <button class="btn btn-outline-secondary btn-sm change-quantity" data-index="${index}" data-action="decrement" ${item.isGeneric ? 'disabled' : ''}><i class="fas fa-minus"></i></button>
                     <input type="number" class="form-control text-center quantity-input" value="${item.cantidad}" data-index="${index}" min="1" ${item.isGeneric ? 'disabled' : ''}>
-                    <button class="btn btn-outline-secondary btn-sm change-quantity" data-index="${index}" data-action="increment" ${item.isGeneric ? 'disabled' : ''}><i class="fas fa-plus"></i></button>
                 </div>
                 <div class="fw-bold text-end" style="width: 100px;" id="subtotal-${index}">${formatCurrency(item.total)}</div>
                 <button class="btn btn-sm btn-link text-danger remove-item ms-2" data-index="${index}"><i class="fas fa-trash-alt"></i></button>
@@ -171,6 +181,147 @@ function renderTicket() {
         ticketItems.appendChild(itemDiv);
     });
     checkFinalizarVenta();
+}
+
+// =========================================================================
+// INICIO: LÓGICA PARA EDITAR PRECIO DE PRODUCTO EN TICKET
+// =========================================================================
+function initEditPriceModalListeners() {
+    const editPriceModalEl = document.getElementById('editPriceModal');
+    if (!editPriceModalEl) return; // Si el modal no existe, no hacemos nada
+
+    const editPriceModal = new bootstrap.Modal(editPriceModalEl);
+    const editPriceProductName = document.getElementById('editPriceProductName');
+    const editPriceInput = document.getElementById('editPriceInput');
+    const permanentCheck = document.getElementById('editPricePermanentCheck');
+    const permanentFields = document.getElementById('permanentPriceFields');
+    const editCosto = document.getElementById('editPriceCosto');
+    const editPorcentaje = document.getElementById('editPricePorcentaje');
+    const editVenta = document.getElementById('editPriceVenta');
+    const btnConfirmEditPrice = document.getElementById('btnConfirmEditPrice');
+
+    let currentEditingProductId = null;
+
+    // --- INICIO DE LA LÓGICA MEJORADA ---
+
+    // Función para calcular el precio de VENTA basado en el COSTO y el PORCENTAJE
+    const calculateSalePrice = () => {
+        const costo = parseFloat(editCosto.value) || 0;
+        const porcentaje = parseFloat(editPorcentaje.value) || 0;
+        if (costo > 0 && porcentaje > 0) {
+            const venta = costo * (1 + porcentaje / 100);
+            editVenta.value = venta.toFixed(2);
+            if (permanentCheck.checked) editPriceInput.value = editVenta.value;
+        }
+    };
+
+    // Función para calcular el PORCENTAJE basado en el COSTO y la VENTA
+    const calculateProfitMargin = () => {
+        const costo = parseFloat(editCosto.value) || 0;
+        const venta = parseFloat(editVenta.value) || 0;
+        if (costo > 0 && venta > costo) {
+            const porcentaje = ((venta - costo) / costo) * 100;
+            editPorcentaje.value = porcentaje.toFixed(2);
+        } else {
+            editPorcentaje.value = '';
+        }
+        if (permanentCheck.checked) editPriceInput.value = editVenta.value;
+    };
+
+    // Cuando el switch de "cambio permanente" se activa/desactiva
+    permanentCheck.addEventListener('change', () => {
+        const isPermanent = permanentCheck.checked;
+        permanentFields.style.display = isPermanent ? 'block' : 'none';
+        editPriceInput.disabled = isPermanent; // Deshabilita el precio temporal
+        if (isPermanent) {
+            calculateSalePrice(); // Calcula y sincroniza el precio al activar
+        }
+    });
+
+    // Asignamos los listeners para el cálculo bidireccional
+    editCosto.addEventListener('input', calculateSalePrice);
+    editPorcentaje.addEventListener('input', calculateSalePrice);
+    editVenta.addEventListener('input', calculateProfitMargin);
+
+    // --- FIN DE LA LÓGICA MEJORADA ---
+
+    editPriceModalEl.addEventListener('show.bs.modal', (event) => {
+        const button = event.relatedTarget;
+        currentEditingProductId = button.getAttribute('data-product-id');
+        const productoEnTicket = ticket.find(p => p.id === currentEditingProductId);
+        if (!productoEnTicket) return;
+ 
+        // --- INICIO DE LA MODIFICACIÓN ---
+        // Rellenamos los campos del modal con los datos del producto en el ticket.
+        editPriceProductName.textContent = productoEnTicket.nombre;
+        editPriceInput.value = productoEnTicket.precio.toFixed(2);
+        editCosto.value = productoEnTicket.costo.toFixed(2);
+ 
+        // Calculamos y rellenamos el margen de ganancia y el precio de venta originales.
+        if (productoEnTicket.costo > 0) {
+            const originalProfitMargin = ((productoEnTicket.precio - productoEnTicket.costo) / productoEnTicket.costo) * 100;
+            editPorcentaje.value = originalProfitMargin.toFixed(2);
+        }
+        editVenta.value = productoEnTicket.precio.toFixed(2);
+        // --- FIN DE LA MODIFICACIÓN ---
+
+        permanentCheck.checked = false;
+        permanentFields.style.display = 'none';
+        editPriceInput.disabled = false; // Asegurarse de que esté habilitado al abrir
+        setTimeout(() => editPriceInput.focus(), 500);
+    });
+
+    btnConfirmEditPrice.addEventListener('click', async () => {
+        const originalButtonText = btnConfirmEditPrice.innerHTML;
+        btnConfirmEditPrice.disabled = true;
+        btnConfirmEditPrice.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Guardando...`;
+
+        try {
+            let newPriceForTicket;
+
+            if (permanentCheck.checked) {
+                const newCosto = parseFloat(editCosto.value);
+                const newVenta = parseFloat(editVenta.value);
+                if (isNaN(newCosto) || isNaN(newVenta) || newCosto < 0 || newVenta <= newCosto) {
+                    showAlertModal('Para guardar el cambio permanente, el costo y la venta deben ser valores válidos.');
+                    return; // Salimos de la función, el bloque finally se ejecutará.
+                }
+
+                newPriceForTicket = newVenta;
+
+                try {
+                    const productRef = doc(db, "productos", currentEditingProductId);
+                    await updateDoc(productRef, { costo: newCosto, venta: newVenta, fechaUltimoCambioPrecio: serverTimestamp() });
+                    console.log("Producto actualizado en la base de datos.");
+                } catch (error) {
+                    console.error("Error al actualizar el producto en la base de datos: ", error);
+                    showAlertModal("Hubo un error al guardar el cambio permanente.");
+                    return; // Salimos si hay error en la BD.
+                }
+            } else {
+                newPriceForTicket = parseFloat(editPriceInput.value);
+                if (isNaN(newPriceForTicket) || newPriceForTicket < 0) {
+                    showAlertModal('Por favor, ingresa un precio válido para esta venta.');
+                    return;
+                }
+            }
+
+            const productIndex = ticket.findIndex(p => p.id === currentEditingProductId);
+            if (productIndex > -1) {
+                ticket[productIndex].precio = newPriceForTicket;
+                ticket[productIndex].total = newPriceForTicket * ticket[productIndex].cantidad;
+                ticket[productIndex].justChanged = true;
+            }
+
+            renderTicket();
+            editPriceModal.hide();
+
+        } finally {
+            // Este bloque se ejecuta siempre, haya habido éxito o error.
+            btnConfirmEditPrice.disabled = false;
+            btnConfirmEditPrice.innerHTML = originalButtonText;
+        }
+    });
 }
 
 // AÑADE ESTA NUEVA FUNCIÓN EN ventas.js
@@ -837,6 +988,9 @@ export async function init() {
 
     // 2. INICIALIZAR MODAL (Sin cambios)
     productoModal = initProductosModal();
+
+    // INICIALIZAR LÓGICA DE EDICIÓN DE PRECIOS
+    initEditPriceModalListeners();
 
     // ========================================================================
     // --- INICIO DE LA CORRECCIÓN ---
