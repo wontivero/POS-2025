@@ -172,7 +172,9 @@ function renderTicket() {
             </div>
             <div class="d-flex align-items-center">
                 <div class="input-group me-2" style="width: 140px;">
+                    <button class="btn btn-outline-secondary btn-sm change-quantity" type="button" data-action="decrement" data-index="${index}" ${item.isGeneric ? 'disabled' : ''}><i class="fas fa-minus"></i></button>
                     <input type="number" class="form-control text-center quantity-input" value="${item.cantidad}" data-index="${index}" min="1" ${item.isGeneric ? 'disabled' : ''}>
+                    <button class="btn btn-outline-secondary btn-sm change-quantity" type="button" data-action="increment" data-index="${index}" ${item.isGeneric ? 'disabled' : ''}><i class="fas fa-plus"></i></button>
                 </div>
                 <div class="fw-bold text-end" style="width: 100px;" id="subtotal-${index}">${formatCurrency(item.total)}</div>
                 <button class="btn btn-sm btn-link text-danger remove-item ms-2" data-index="${index}"><i class="fas fa-trash-alt"></i></button>
