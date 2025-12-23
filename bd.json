@@ -58,6 +58,14 @@
     "nombre": {
       "type": "cadena",
       "example": "Consumidor Final"
+    },
+    "puntos": {
+      "type": "número",
+      "example": 0
+    },
+    "lastLoyaltyActivity": {
+      "type": "marca de tiempo",
+      "example": "2025-09-16 10:00:00"
     }
   },
   "colores": {
@@ -71,6 +79,24 @@
       "lastTicketNumber": {
         "type": "número",
         "example": 24
+      }
+    },
+    "loyalty": {
+      "percentage": {
+        "type": "número",
+        "example": 1
+      },
+      "expirationEnabled": {
+        "type": "booleano",
+        "example": false
+      },
+      "expirationDays": {
+        "type": "número",
+        "example": 365
+      },
+      "printOnTicket": {
+        "type": "booleano",
+        "example": true
       }
     }
   },
@@ -273,6 +299,17 @@
         "queryScope": "Colección",
         "id": "CICAgOjXh4EK",
         "status": "Habilitado"
+      }
+    ],
+    "ventas": [
+      {
+        "fields": [
+          "cliente.id",
+          "ticketId",
+          "__name__"
+        ],
+        "queryScope": "Colección",
+        "status": "Requerido para historial"
       }
     ]
   }

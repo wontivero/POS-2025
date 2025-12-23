@@ -13,6 +13,7 @@ let saveCommissionButton;
 // --- INICIO DE LA MODIFICACIÓN: Nuevos elementos del DOM ---
 let companyNameInput, companyAddressInput, companyCuitInput, companyPhoneInput, companyIvaInput, companyEmailInput, companyLogoInput, userEmailInput, userRoleSelect, btnAddUser, usersTableBody;
 let saveCompanyButton;
+let loyaltyPercentageInput, loyaltyPrintCheck, loyaltyExpirationCheck, loyaltyExpirationDaysInput, btnSaveLoyalty; // <-- NUEVO
 // --- FIN DE LA MODIFICACIÓN ---
 
 /**
@@ -25,6 +26,17 @@ async function loadConfiguration() {
             const configData = docSnap.data();
             // Cargar configuración de comisión
             commissionInput.value = configData.commissionPercentage || 1;
+            
+            // Cargar configuración de Loyalty
+            if (loyaltyPercentageInput) {
+                loyaltyPercentageInput.value = configData.loyalty?.percentage || 1;
+                if (loyaltyPrintCheck) loyaltyPrintCheck.checked = configData.loyalty?.printOnTicket ?? true;
+                if (loyaltyExpirationCheck) {
+                    loyaltyExpirationCheck.checked = configData.loyalty?.expirationEnabled ?? false;
+                    toggleExpirationInput();
+                }
+                if (loyaltyExpirationDaysInput) loyaltyExpirationDaysInput.value = configData.loyalty?.expirationDays || 365;
+            }
 
             // Cargar configuración de la empresa
             if (configData.companyInfo) {
@@ -50,7 +62,13 @@ async function loadConfiguration() {
             };
             await setDoc(configRef, { 
                 commissionPercentage: 1,
-                companyInfo: defaultCompanyInfo
+                companyInfo: defaultCompanyInfo,
+                loyalty: { 
+                    percentage: 1,
+                    printOnTicket: true,
+                    expirationEnabled: false,
+                    expirationDays: 365
+                }
             });
             commissionInput.value = 1;
             // Y poblamos el formulario con estos datos por defecto
@@ -84,6 +102,29 @@ async function saveCommissionPercentage() {
     } catch (error) {
         console.error("Error al guardar la configuración de comisión:", error);
         showAlertModal("No se pudo guardar la configuración.", "Error");
+    }
+}
+
+/**
+ * Guarda la configuración de Loyalty.
+ */
+async function saveLoyaltyConfig() {
+    const percentage = parseFloat(loyaltyPercentageInput.value) || 0;
+    const printOnTicket = loyaltyPrintCheck.checked;
+    const expirationEnabled = loyaltyExpirationCheck.checked;
+    const expirationDays = parseInt(loyaltyExpirationDaysInput.value) || 365;
+
+    try {
+        await setDoc(configRef, { loyalty: { 
+            percentage,
+            printOnTicket,
+            expirationEnabled,
+            expirationDays
+        } }, { merge: true });
+        showAlertModal("Configuración de puntos guardada.", "Éxito");
+    } catch (error) {
+        console.error(error);
+        showAlertModal("Error al guardar configuración de puntos.", "Error");
     }
 }
 
@@ -224,6 +265,16 @@ export async function init() {
     userRoleSelect = document.getElementById('user-role');
     btnAddUser = document.getElementById('btn-add-user');
     usersTableBody = document.getElementById('users-table-body');
+    
+    // Loyalty Elements (Asumiendo que agregarás el HTML correspondiente en configuracion.html)
+    loyaltyPercentageInput = document.getElementById('config-loyalty-percentage');
+    loyaltyPrintCheck = document.getElementById('config-loyalty-print');
+    loyaltyExpirationCheck = document.getElementById('config-loyalty-expiration-check');
+    loyaltyExpirationDaysInput = document.getElementById('config-loyalty-expiration-days');
+    btnSaveLoyalty = document.getElementById('btn-guardar-loyalty');
+    
+    if (btnSaveLoyalty) btnSaveLoyalty.addEventListener('click', saveLoyaltyConfig);
+    if (loyaltyExpirationCheck) loyaltyExpirationCheck.addEventListener('change', toggleExpirationInput);
 
     saveCommissionButton.addEventListener('click', saveCommissionPercentage);
     if (saveCompanyButton) {
@@ -249,4 +300,11 @@ export async function init() {
 
     await loadConfiguration();
     await loadAndRenderUsers();
+}
+
+function toggleExpirationInput() {
+    const container = document.getElementById('loyalty-expiration-days-container');
+    if (container && loyaltyExpirationCheck) {
+        container.style.display = loyaltyExpirationCheck.checked ? 'block' : 'none';
+    }
 }

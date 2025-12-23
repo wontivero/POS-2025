@@ -1,0 +1,215 @@
+<section id="seccion-clientes">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="mb-1"><i class="fas fa-users me-2"></i>Gestión de Clientes</h2>
+            <p class="text-muted mb-0">Administra perfiles y puntos de fidelidad.</p>
+        </div>
+        <button class="btn btn-primary" id="btnNuevoClienteSeccion">
+            <i class="fas fa-plus me-2"></i>Nuevo Cliente
+        </button>
+    </div>
+
+    <!-- Tarjetas de Resumen -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card border-left-primary shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">Total Clientes</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800" id="total-clientes-count">0</div>
+                        </div>
+                        <div class="col-auto"><i class="fas fa-user fa-2x text-gray-300"></i></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card border-left-warning shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">Puntos Circulantes</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800" id="total-puntos-circulantes">0</div>
+                        </div>
+                        <div class="col-auto"><i class="fas fa-star fa-2x text-gray-300"></i></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtros y Tabla -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3 bg-white d-flex justify-content-between align-items-center">
+            <h6 class="m-0 font-weight-bold text-primary">Directorio</h6>
+            <div class="input-group" style="width: 300px;">
+                <span class="input-group-text bg-light border-0"><i class="fas fa-search text-gray-400"></i></span>
+                <input type="text" class="form-control bg-light border-0 small" placeholder="Buscar cliente..." id="filtro-clientes-input">
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0" id="tabla-clientes">
+                    <thead class="bg-light">
+                        <tr>
+                            <th class="ps-4">Cliente</th>
+                            <th>Contacto</th>
+                            <th>Puntos</th>
+                            <th>Estado</th>
+                            <th class="text-end pe-4">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabla-clientes-body">
+                        <!-- JS renderizará aquí -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Detalle Cliente & Loyalty -->
+    <div class="modal fade" id="clienteLoyaltyModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title"><i class="fas fa-id-card me-2"></i>Perfil del Cliente</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <!-- Columna Izquierda: Datos Personales -->
+                        <div class="col-md-5 border-end">
+                            <div class="text-center mb-3">
+                                <div class="avatar-circle bg-primary text-white d-inline-flex align-items-center justify-content-center rounded-circle" style="width: 80px; height: 80px; font-size: 2rem;">
+                                    <span id="loyalty-avatar-initials">JP</span>
+                                </div>
+                                <h5 class="mt-2 mb-0 fw-bold" id="loyalty-cliente-nombre">Juan Perez</h5>
+                                <small class="text-muted" id="loyalty-cliente-cuit">20-30405060-9</small>
+                            </div>
+                            <form id="form-editar-cliente-loyalty">
+                                <input type="hidden" id="loyalty-cliente-id">
+                                <div class="mb-2"><label class="small text-muted">Email</label><input type="email" class="form-control form-control-sm" id="loyalty-email"></div>
+                                <div class="mb-2"><label class="small text-muted">Teléfono</label><input type="text" class="form-control form-control-sm" id="loyalty-telefono"></div>
+                                <div class="mb-3"><label class="small text-muted">Domicilio</label><input type="text" class="form-control form-control-sm" id="loyalty-domicilio"></div>
+                                <button type="submit" class="btn btn-sm btn-outline-primary w-100">Guardar Datos</button>
+                            </form>
+                        </div>
+                        <!-- Columna Derecha: Loyalty -->
+                        <div class="col-md-7 ps-md-4">
+                            <div class="card bg-light border-0 mb-3">
+                                <div class="card-body d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <small class="text-uppercase text-muted fw-bold">Puntos Disponibles</small>
+                                        <h2 class="mb-0 text-primary fw-bold" id="loyalty-puntos-display">0</h2>
+                                    </div>
+                                    <button class="btn btn-sm btn-outline-secondary" id="btn-ajuste-manual-puntos"><i class="fas fa-sliders-h me-1"></i>Ajustar</button>
+                                </div>
+                            </div>
+                            <h6 class="fw-bold text-muted mb-3">Historial de Movimientos</h6>
+                            <div class="list-group list-group-flush small" id="loyalty-historial-list" style="max-height: 250px; overflow-y: auto;">
+                                <!-- Historial renderizado por JS -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Detalle de Ticket (Reutilizado de Reportes) -->
+    <div class="modal fade" id="ticketModal" tabindex="-1" aria-labelledby="ticketModalTitulo" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="ticketModalTitulo">Detalle de Venta</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="ticketModalBody">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Ajuste Manual de Puntos -->
+    <div class="modal fade" id="modalAjustePuntos" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-sm">
+            <div class="modal-content">
+                <div class="modal-header bg-light">
+                    <h5 class="modal-title fs-6 fw-bold">Ajustar Puntos</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3 text-center">
+                        <span class="text-muted small text-uppercase fw-bold">Puntos Actuales</span>
+                        <h2 class="fw-bold text-primary mb-0" id="ajuste-puntos-actuales">0</h2>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Tipo de Movimiento</label>
+                        <div class="btn-group w-100" role="group">
+                            <input type="radio" class="btn-check" name="tipoAjuste" id="ajuste-sumar" value="sumar" checked>
+                            <label class="btn btn-outline-success" for="ajuste-sumar"><i class="fas fa-plus me-1"></i>Sumar</label>
+                            <input type="radio" class="btn-check" name="tipoAjuste" id="ajuste-restar" value="restar">
+                            <label class="btn btn-outline-danger" for="ajuste-restar"><i class="fas fa-minus me-1"></i>Restar</label>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Cantidad</label>
+                        <input type="number" class="form-control text-center fw-bold fs-5" id="ajuste-cantidad" placeholder="0" min="1">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Motivo / Concepto</label>
+                        <textarea class="form-control form-control-sm" id="ajuste-concepto" rows="2" placeholder="Ej: Regalo cumpleaños, Corrección error..."></textarea>
+                    </div>
+                    <button type="button" class="btn btn-primary w-100" id="btn-confirmar-ajuste">Aplicar Ajuste</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal ABM Cliente (Nuevo / Editar) -->
+    <div class="modal fade" id="modalClienteABM" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title" id="modalClienteABMLabel">Nuevo Cliente</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="formClienteABM">
+                        <input type="hidden" id="abm-cliente-id">
+                        <div class="mb-3">
+                            <label for="abm-cliente-nombre" class="form-label small fw-bold">Nombre Completo <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="abm-cliente-nombre" placeholder="Ej: Maria Gonzalez" required>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="abm-cliente-cuit" class="form-label small fw-bold">DNI / CUIT</label>
+                                <input type="text" class="form-control" id="abm-cliente-cuit" placeholder="Sin guiones">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="abm-cliente-telefono" class="form-label small fw-bold">Teléfono</label>
+                                <input type="text" class="form-control" id="abm-cliente-telefono">
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="abm-cliente-email" class="form-label small fw-bold">Correo Electrónico</label>
+                            <input type="email" class="form-control" id="abm-cliente-email" placeholder="cliente@email.com">
+                        </div>
+                        <div class="mb-3">
+                            <label for="abm-cliente-domicilio" class="form-label small fw-bold">Domicilio</label>
+                            <input type="text" class="form-control" id="abm-cliente-domicilio">
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-primary" id="btnGuardarClienteABM">Guardar Cliente</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>

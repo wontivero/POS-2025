@@ -12,7 +12,7 @@ let commissionPercentage = 1; // Valor por defecto
 let rubrosSeleccionadosParaPagos = new Set();
 
 // --- Elementos del DOM (variables que se inicializarán en init) ---
-let reporteFechaDesde, reporteFechaHasta, btnGenerarReporte, btnQuitarFiltro, filtroReporteRubro, datalistRubrosReporte, filtroReporteVendedor;
+let reporteFechaDesde, reporteFechaHasta, btnGenerarReporte, btnQuitarFiltro, filtroReporteRubro, datalistRubrosReporte, filtroReporteVendedor, filtroReporteCliente, datalistClientesReporte;
 let reporteTotalVentas, reporteTotalGanancia, reporteNumVentas, reporteTicketPromedio, tablaVentasDetalleBody, tablaTopProductosBody, tablaVentasVendedorBody, commissionNote;
 let chartRubros, chartPagos, chartVentasTiempo, chartContadoPorRubro;
 
@@ -37,6 +37,7 @@ async function loadCommissionPercentage() {
 async function loadData() {
     await loadCommissionPercentage();
     await renderDatalistRubros();
+    await renderDatalistClientes();
 }
 
 async function renderReportes(ventasParaCalcular) {
@@ -501,6 +502,7 @@ async function filtrarReporte() {
         const desde = reporteFechaDesde.value;
         const hasta = reporteFechaHasta.value;
         const rubroFiltro = filtroReporteRubro.value.trim().toLowerCase();
+        const clienteFiltro = filtroReporteCliente.value.trim().toLowerCase();
         const vendedorFiltro = filtroReporteVendedor.value;
 
         if (!desde || !hasta) {
@@ -542,6 +544,12 @@ async function filtrarReporte() {
             });
         }
 
+        if (clienteFiltro) {
+            ventasProcesadas = ventasProcesadas.filter(venta => 
+                (venta.cliente?.nombre || '').toLowerCase().includes(clienteFiltro)
+            );
+        }
+
         if (vendedorFiltro) {
             ventasProcesadas = ventasProcesadas.filter(venta => venta.vendedor?.email === vendedorFiltro);
         }
@@ -555,7 +563,7 @@ async function filtrarReporte() {
 
         renderFiltroRubrosPagos(ventasFiltradasActivas);
 
-        btnQuitarFiltro.classList.toggle('d-none', !desde && !hasta && !filtroReporteRubro.value.trim());
+        btnQuitarFiltro.classList.toggle('d-none', !desde && !hasta && !filtroReporteRubro.value.trim() && !filtroReporteCliente.value.trim());
 
     } catch (error) {
         console.error("Error al generar el reporte:", error);
@@ -569,6 +577,7 @@ function limpiarFiltros(filtrar = true) {
     reporteFechaDesde.value = getTodayDate();
     reporteFechaHasta.value = getTodayDate();
     filtroReporteRubro.value = '';
+    filtroReporteCliente.value = '';
     if (filtroReporteVendedor) filtroReporteVendedor.value = '';
 
     if (filtrar) {
@@ -583,14 +592,22 @@ async function renderDatalistRubros() {
     datalistRubrosReporte.innerHTML = rubros.map(rubro => `<option value="${rubro}"></option>`).join('');
 }
 
+async function renderDatalistClientes() {
+    if (!datalistClientesReporte) return;
+    const clientes = await getCollection('clientes');
+    datalistClientesReporte.innerHTML = clientes.map(c => `<option value="${c.nombre}"></option>`).join('');
+}
+
 export async function init() {
     reporteFechaDesde = document.getElementById('reporte-fecha-desde');
     reporteFechaHasta = document.getElementById('reporte-fecha-hasta');
     btnGenerarReporte = document.getElementById('btnGenerarReporte');
     btnQuitarFiltro = document.getElementById('btnQuitarFiltro');
     filtroReporteRubro = document.getElementById('filtro-reporte-rubro');
+    filtroReporteCliente = document.getElementById('filtro-reporte-cliente');
     filtroReporteVendedor = document.getElementById('filtro-reporte-vendedor');
     datalistRubrosReporte = document.getElementById('rubros-list-reporte');
+    datalistClientesReporte = document.getElementById('clientes-list-reporte');
 
     reporteTotalVentas = document.getElementById('reporte-total-ventas');
     reporteTotalGanancia = document.getElementById('reporte-total-ganancia');
@@ -604,6 +621,7 @@ export async function init() {
     btnGenerarReporte.addEventListener('click', filtrarReporte);
     btnQuitarFiltro.addEventListener('click', limpiarFiltros);
     filtroReporteRubro.addEventListener('input', filtrarReporte);
+    filtroReporteCliente.addEventListener('input', filtrarReporte);
     if (filtroReporteVendedor) filtroReporteVendedor.addEventListener('change', filtrarReporte);
 
     const filtroPagosContainer = document.getElementById('filtro-rubros-pagos-container');

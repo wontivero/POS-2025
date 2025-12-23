@@ -300,7 +300,26 @@ export async function generatePDF(ticketId, venta) {
     y += lineHeight * 2;
     drawText('¡Gracias por su compra!', pageWidth / 2, y, 12, 'normal', 'center');
     y += lineHeight;
+
+    // --- SECCIÓN LOYALTY (PUNTOS) ---
+    // Verificamos si la configuración global permite imprimir y si la venta tiene datos de loyalty
+    const loyaltyConfig = appConfig.loyalty || {};
+    if (loyaltyConfig.printOnTicket && venta.loyalty) {
+        doc.line(margin, y, pageWidth - margin, y);
+        y += lineHeight;
+        drawText(`Sumaste: ${venta.loyalty.puntosGanados} pts. Tu saldo actual es: ${venta.loyalty.puntosTotalSnapshot} pts`, pageWidth / 2, y, 10, 'bold', 'center');
+        y += lineHeight;
+    }
+    // --------------------------------
     doc.line(margin, y, pageWidth - margin, y);
+    
+    y += lineHeight;
+    const disclaimer = "CONDICIONES DE GARANTÍA Y CAMBIOS: Plazo para cambios directos: 48 hs desde la compra. Para validar cualquier reclamo es OBLIGATORIO presentar este comprobante. El producto debe encontrarse en perfectas condiciones, con su empaque original sano y la totalidad de sus accesorios (cables, manuales, drivers). Sin el empaque original completo NO se aceptarán cambios. Electrónica: La garantía cubre únicamente fallas de fabricación. No se reconocen garantías por daños físicos, humedad, cables cortados, pines rotos, golpes o sobretensión. La empresa se reserva el derecho de revisión técnica (48/72hs) antes de realizar cualquier cambio o devolución.";
+    
+    doc.setFont(font, 'normal');
+    doc.setFontSize(7); // Letra pequeña para el legal
+    const splitText = doc.splitTextToSize(disclaimer, pageWidth - (margin * 2));
+    doc.text(splitText, margin, y);
 
     doc.save(`factura-${venta.fecha}-${ticketId}.pdf`);
 }

@@ -1,7 +1,7 @@
 // secciones/ventas.js
 import { init as initProductosModal } from './productos.js';
 import { haySesionActiva, getSesionActivaId, verificarEstadoCaja } from './caja.js';
-import { getFirestore, collection, onSnapshot, query, orderBy, runTransaction, doc, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
+import { getFirestore, collection, onSnapshot, query, orderBy, runTransaction, doc, updateDoc, serverTimestamp, getDoc, increment } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
 import { getCollection, saveDocument, formatCurrency, getTodayDate, getNextTicketNumber, updateDocument, deleteDocument, getFormattedDateTime, generatePDF, showAlertModal, showConfirmationModal } from '../utils.js';
 import { getProductos } from './dataManager.js';
 
@@ -102,6 +102,9 @@ function renderClientesList() {
     clientes.forEach(cliente => {
         const option = document.createElement('option');
         option.value = cliente.nombre;
+        if (cliente.cuit) {
+            option.textContent = `DNI/CUIT ${cliente.cuit} - ${cliente.nombre}`;
+        }
         clientesList.appendChild(option);
     });
 }
@@ -663,6 +666,17 @@ async function finalizarVenta() {
         const { getAuth } = await import("https://www.gstatic.com/firebasejs/9.6.1/firebase-auth.js");
         const auth = getAuth();
         const ticketNumber = await getNextTicketNumber();
+        
+        // Obtener configuración de Loyalty
+        let loyaltyPercentage = 1;
+        let loyaltyConfig = { percentage: 1, expirationEnabled: false, expirationDays: 365 };
+        try {
+            const configSnap = await getDoc(doc(db, "app_settings", "main"));
+            if (configSnap.exists() && configSnap.data().loyalty) {
+                loyaltyConfig = { ...loyaltyConfig, ...configSnap.data().loyalty };
+                loyaltyPercentage = loyaltyConfig.percentage;
+            }
+        } catch (e) { console.warn("Usando loyalty default 1%"); }
 
         await runTransaction(db, async (transaction) => {
             const productsToUpdate = [];
@@ -681,6 +695,15 @@ async function finalizarVenta() {
                 productsToUpdate.push({ ref: productRef, newStock: currentStock - item.cantidad });
             }
 
+            // --- CORRECCIÓN: Leer cliente ANTES de escribir (actualizar stock) ---
+            let clienteDoc = null;
+            let clienteRef = null;
+            if (clienteSeleccionado && clienteSeleccionado.id) {
+                clienteRef = doc(db, 'clientes', clienteSeleccionado.id);
+                clienteDoc = await transaction.get(clienteRef);
+            }
+            // ---------------------------------------------------------------------
+
             productsToUpdate.forEach(p => transaction.update(p.ref, { stock: p.newStock }));
 
             const productosParaGuardar = ticket.map(item => {
@@ -696,6 +719,9 @@ async function finalizarVenta() {
             const recargo = (parseFloat(txtRecargoCredito.value) || 0) / 100;
             const montoCreditoConRecargo = Math.round(montoCredito * (1 + recargo));
             const totalConRecargo = totalVentaBase + Math.round(montoCredito * recargo);
+
+            let puntosGanados = 0;
+            let puntosTotalSnapshot = 0;
 
             // --- INICIO DE LA MODIFICACIÓN ---
             const currentUser = auth.currentUser;
@@ -727,6 +753,43 @@ async function finalizarVenta() {
                 total: totalConRecargo,
                 ganancia: gananciaTotal
             };
+            
+            // Lógica de Loyalty: Sumar puntos al cliente
+            if (clienteSeleccionado && clienteSeleccionado.id && clienteRef) {
+                puntosGanados = Math.floor(totalConRecargo * (loyaltyPercentage / 100));
+                
+                let currentPuntos = 0;
+                let lastActivity = null;
+
+                if (clienteDoc && clienteDoc.exists()) {
+                    const cData = clienteDoc.data();
+                    currentPuntos = cData.puntos || 0;
+                    lastActivity = cData.lastLoyaltyActivity;
+                }
+
+                // Verificar vencimiento
+                if (loyaltyConfig.expirationEnabled && lastActivity) {
+                    const lastDate = lastActivity.toDate();
+                    const diffTime = Math.abs(new Date() - lastDate);
+                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+                    if (diffDays > loyaltyConfig.expirationDays) {
+                        currentPuntos = 0; // Vencieron los puntos
+                    }
+                }
+
+                puntosTotalSnapshot = currentPuntos + puntosGanados;
+
+                transaction.update(clienteRef, { 
+                    puntos: puntosTotalSnapshot,
+                    lastLoyaltyActivity: serverTimestamp()
+                });
+                
+                // Guardamos info de loyalty en la venta para el ticket
+                nuevaVenta.loyalty = {
+                    puntosGanados: puntosGanados,
+                    puntosTotalSnapshot: puntosTotalSnapshot
+                };
+            }
 
             const newVentaRef = doc(collection(db, 'ventas'));
             transaction.set(newVentaRef, nuevaVenta);
@@ -796,13 +859,43 @@ function resetVentas() {
 
 function handleClienteSearchInput(e) {
     const value = e.target.value.trim();
-    clienteSeleccionado = clientes.find(c => c.nombre.toLowerCase() === value.toLowerCase());
+    clienteSeleccionado = clientes.find(c => 
+        c.nombre.toLowerCase() === value.toLowerCase() || 
+        (c.cuit && c.cuit === value)
+    );
     if (clienteSeleccionado) {
         btnAgregarCliente.style.display = 'none';
         btnEditarCliente.style.display = 'block';
     } else {
         btnAgregarCliente.style.display = 'block';
         btnEditarCliente.style.display = 'none';
+    }
+}
+
+function handleClienteSearchKeydown(e) {
+    if (e.key === 'Enter') {
+        const value = e.target.value.trim().toLowerCase();
+        if (!value) return;
+
+        // Filtramos buscando coincidencias parciales (nombre o CUIT)
+        const matches = clientes.filter(c => 
+            c.nombre.toLowerCase().includes(value) || 
+            (c.cuit && c.cuit.includes(value))
+        );
+
+        // Si queda un solo resultado, lo seleccionamos automáticamente
+        if (matches.length === 1) {
+            e.preventDefault();
+            const cliente = matches[0];
+            
+            clienteSeleccionado = cliente;
+            e.target.value = cliente.nombre; // Autocompletar visualmente
+            
+            btnAgregarCliente.style.display = 'none';
+            btnEditarCliente.style.display = 'block';
+            
+            e.target.blur(); // Cerrar el datalist/quitar foco
+        }
     }
 }
 
@@ -1045,6 +1138,7 @@ export async function init() {
     });
 
     clienteSearch.addEventListener('input', handleClienteSearchInput);
+    clienteSearch.addEventListener('keydown', handleClienteSearchKeydown);
     btnAgregarCliente.addEventListener('click', handleAgregarCliente);
     btnEditarCliente.addEventListener('click', handleEditarCliente);
     btnGuardarCliente.addEventListener('click', handleGuardarCliente);

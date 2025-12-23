@@ -63,6 +63,44 @@
         </div>
         <!-- FIN DE LA MODIFICACIÓN -->
     </div>
+    
+    <!-- Configuración de Fidelización (Loyalty) -->
+    <div class="card shadow-sm mt-4">
+        <div class="card-header bg-warning text-dark">
+            <h5 class="mb-0"><i class="fas fa-star me-2"></i>Fidelización (Loyalty)</h5>
+        </div>
+        <div class="card-body">
+            <div class="row align-items-end">
+                <div class="col-md-6">
+                    <label for="config-loyalty-percentage" class="form-label">Porcentaje de Puntos por Compra (%)</label>
+                    <div class="input-group">
+                        <input type="number" class="form-control" id="config-loyalty-percentage" placeholder="1" step="0.1">
+                        <span class="input-group-text">%</span>
+                    </div>
+                    <div class="form-text">Ejemplo: Si pones 5%, por cada $100 gastados, el cliente recibe 5 puntos.</div>
+                </div>
+                <div class="col-md-6">
+                    <div class="form-check form-switch mb-2">
+                        <input class="form-check-input" type="checkbox" id="config-loyalty-print">
+                        <label class="form-check-label" for="config-loyalty-print">Imprimir saldo de puntos en el Ticket</label>
+                    </div>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="config-loyalty-expiration-check">
+                        <label class="form-check-label" for="config-loyalty-expiration-check">Habilitar vencimiento de puntos</label>
+                    </div>
+                    <div class="mt-2" id="loyalty-expiration-days-container" style="display: none;">
+                        <label for="config-loyalty-expiration-days" class="form-label small">Vencen tras inactividad de (días):</label>
+                        <input type="number" class="form-control form-control-sm" id="config-loyalty-expiration-days" placeholder="365">
+                    </div>
+                </div>
+            </div>
+            <div class="row mt-3">
+                <div class="col-md-6">
+                    <button class="btn btn-primary" id="btn-guardar-loyalty"><i class="fas fa-save me-2"></i>Guardar Configuración de Puntos</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- INICIO DE LA MODIFICACIÓN: Gestión de Usuarios -->
     <div class="card shadow-sm mt-4">
