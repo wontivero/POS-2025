@@ -2,8 +2,9 @@
 import { init as initProductosModal } from './productos.js';
 import { haySesionActiva, getSesionActivaId, verificarEstadoCaja } from './caja.js';
 import { getFirestore, collection, onSnapshot, query, orderBy, runTransaction, doc, updateDoc, serverTimestamp, getDoc, increment } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
-import { getCollection, saveDocument, formatCurrency, getTodayDate, getNextTicketNumber, updateDocument, deleteDocument, getFormattedDateTime, generatePDF, showAlertModal, showConfirmationModal } from '../utils.js';
-import { getProductos } from './dataManager.js';
+import { getCollection, saveDocument, formatCurrency, getTodayDate, updateDocument, deleteDocument, getFormattedDateTime, generatePDF, showAlertModal, showConfirmationModal } from '../utils.js';
+import { getProductos, getAppConfig } from './dataManager.js'; // <-- Importamos getAppConfig
+import { getAuth } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-auth.js"; // <-- Importamos getAuth estáticamente
 
 const db = getFirestore();
 
@@ -478,7 +479,7 @@ function handleSearch(e) {
             const detallesTexto = detalles.join(' - ');
             // --- FIN DE LA NUEVA LÓGICA DE VISUALIZACIÓN ---
 
-            resultItem.textContent = `${producto.nombre} (${producto.codigo || 'S/C'}) [${detallesTexto}] - ${formatCurrency(producto.venta)}`;
+            resultItem.innerHTML = `<span class="fw-bold">${producto.nombre}</span> (${producto.codigo || 'S/C'}) [${detallesTexto}] - <span class="fw-bold text-primary">${formatCurrency(producto.venta)}</span> - Stock: ${producto.stock || 0}`;
             resultItem.dataset.id = producto.id;
             searchResults.appendChild(resultItem);
         });
@@ -660,49 +661,83 @@ async function finalizarVenta() {
         return;
     }
 
+    // --- NUEVO BLOQUE DE SEGURIDAD OFFLINE ---
+    if (!navigator.onLine) {
+        await showAlertModal('<b>Modo Offline Activo:</b><br>No se pueden finalizar ventas sin conexión a internet para garantizar la integridad del stock y la caja.<br><br>Por favor, espera a que vuelva la señal.', 'Sin Conexión');
+        return;
+    }
+    // -----------------------------------------
+
     showLoading();
 
     try {
-        const { getAuth } = await import("https://www.gstatic.com/firebasejs/9.6.1/firebase-auth.js");
-        const auth = getAuth();
-        const ticketNumber = await getNextTicketNumber();
+        const auth = getAuth(); // <-- Usamos la importación estática (más rápido)
         
-        // Obtener configuración de Loyalty
+        // Obtener configuración de Loyalty desde CACHÉ (Instantáneo, sin red)
         let loyaltyPercentage = 1;
         let loyaltyConfig = { percentage: 1, expirationEnabled: false, expirationDays: 365 };
-        try {
-            const configSnap = await getDoc(doc(db, "app_settings", "main"));
-            if (configSnap.exists() && configSnap.data().loyalty) {
-                loyaltyConfig = { ...loyaltyConfig, ...configSnap.data().loyalty };
-                loyaltyPercentage = loyaltyConfig.percentage;
-            }
-        } catch (e) { console.warn("Usando loyalty default 1%"); }
+        
+        const appConfig = getAppConfig();
+        if (appConfig && appConfig.loyalty) {
+            loyaltyConfig = { ...loyaltyConfig, ...appConfig.loyalty };
+            loyaltyPercentage = loyaltyConfig.percentage;
+        }
 
         await runTransaction(db, async (transaction) => {
-            const productsToUpdate = [];
-
-            for (const item of ticket) {
-                if (item.isGeneric) continue;
-                const productRef = doc(db, 'productos', item.id);
-                const productDoc = await transaction.get(productRef);
-                if (!productDoc.exists()) throw new Error(`El producto "${item.nombre}" ya no existe.`);
-
-                // Obtenemos el stock actual, que puede ser 0 o incluso ya negativo.
-                const currentStock = productDoc.data().stock || 0;
-
-                // Se elimina el bloque 'if' que comprueba el stock.
-                // Ahora simplemente calculamos el nuevo stock, que podrá ser negativo.
-                productsToUpdate.push({ ref: productRef, newStock: currentStock - item.cantidad });
-            }
-
-            // --- CORRECCIÓN: Leer cliente ANTES de escribir (actualizar stock) ---
-            let clienteDoc = null;
+            
+            // 1. PREPARAR TODAS LAS REFERENCIAS
+            const counterRef = doc(db, 'config', 'ticket_counter');
+            
+            // Filtramos los productos que requieren verificación de stock
+            const itemsNoGenericos = ticket.filter(item => !item.isGeneric);
+            const productRefs = itemsNoGenericos.map(item => doc(db, 'productos', item.id));
+            
             let clienteRef = null;
             if (clienteSeleccionado && clienteSeleccionado.id) {
                 clienteRef = doc(db, 'clientes', clienteSeleccionado.id);
-                clienteDoc = await transaction.get(clienteRef);
             }
-            // ---------------------------------------------------------------------
+
+            // 2. EJECUTAR TODAS LAS LECTURAS EN PARALELO (Una sola ida al servidor)
+            const reads = [
+                transaction.get(counterRef),                    // Index 0: Contador
+                ...productRefs.map(ref => transaction.get(ref)) // Index 1..N: Productos
+            ];
+            // Si hay cliente, lo agregamos al final
+            if (clienteRef) {
+                reads.push(transaction.get(clienteRef));
+            }
+
+            const results = await Promise.all(reads);
+
+            // 3. PROCESAR RESULTADOS
+            
+            // A) Procesar Número de Ticket (Instantáneo)
+            const counterDoc = results[0];
+            let ticketNumber = 1;
+            if (counterDoc.exists()) {
+                ticketNumber = counterDoc.data().lastTicketNumber + 1;
+                transaction.update(counterRef, { lastTicketNumber: ticketNumber });
+            } else {
+                transaction.set(counterRef, { lastTicketNumber: 1 });
+            }
+
+            // B) Procesar Productos
+            const productsToUpdate = [];
+            const productDocs = results.slice(1, 1 + productRefs.length);
+            
+            itemsNoGenericos.forEach((item, index) => {
+                const productDoc = productDocs[index];
+                if (!productDoc.exists()) throw new Error(`El producto "${item.nombre}" ya no existe.`);
+
+                const currentStock = productDoc.data().stock || 0;
+                productsToUpdate.push({ ref: productRefs[index], newStock: currentStock - item.cantidad });
+            });
+
+            // C) Procesar Cliente
+            let clienteDoc = null;
+            if (clienteRef) {
+                clienteDoc = results[results.length - 1];
+            }
 
             productsToUpdate.forEach(p => transaction.update(p.ref, { stock: p.newStock }));
 
@@ -755,17 +790,13 @@ async function finalizarVenta() {
             };
             
             // Lógica de Loyalty: Sumar puntos al cliente
-            if (clienteSeleccionado && clienteSeleccionado.id && clienteRef) {
+            if (clienteRef && clienteDoc && clienteDoc.exists()) {
                 puntosGanados = Math.floor(totalConRecargo * (loyaltyPercentage / 100));
                 
                 let currentPuntos = 0;
-                let lastActivity = null;
-
-                if (clienteDoc && clienteDoc.exists()) {
-                    const cData = clienteDoc.data();
-                    currentPuntos = cData.puntos || 0;
-                    lastActivity = cData.lastLoyaltyActivity;
-                }
+                const cData = clienteDoc.data();
+                currentPuntos = cData.puntos || 0;
+                let lastActivity = cData.lastLoyaltyActivity;
 
                 // Verificar vencimiento
                 if (loyaltyConfig.expirationEnabled && lastActivity) {
@@ -790,9 +821,11 @@ async function finalizarVenta() {
                     puntosTotalSnapshot: puntosTotalSnapshot
                 };
             }
-
+            
+            // Guardar la venta
             const newVentaRef = doc(collection(db, 'ventas'));
             transaction.set(newVentaRef, nuevaVenta);
+            
             ventaData = { id: ticketNumber, data: nuevaVenta };
         });
 
@@ -990,7 +1023,7 @@ function renderQuickAccessProducts() {
 
         const cardHtml = `
             <div class="col-6 col-lg-4 col-xl-3">
-                <div class="card product-card-mini ${stockClass}" data-id="${p.id}">
+                <div class="card product-card-mini " data-id="${p.id}">
                     <div class="card-body">
                         <h6 class="card-title mb-1">${p.nombre}</h6>
                         <p class="card-text small text-muted mb-1">

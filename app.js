@@ -306,3 +306,37 @@ if (confirmacionVentaModalEl) {
 // =========================================================================
 // FIN: LÓGICA PARA MANEJAR MODALES GLOBALES
 // =========================================================================
+
+// =========================================================================
+// DETECCIÓN DE ESTADO DE CONEXIÓN (ONLINE/OFFLINE)
+// =========================================================================
+function updateConnectionStatus() {
+    const offlineBannerId = 'offline-banner-warning';
+    let banner = document.getElementById(offlineBannerId);
+
+    if (!navigator.onLine) {
+        // Si NO hay conexión y no existe el banner, lo creamos
+        if (!banner) {
+            banner = document.createElement('div');
+            banner.id = offlineBannerId;
+            banner.className = 'alert alert-danger text-center m-0 fw-bold fixed-top shadow';
+            banner.style.zIndex = '2000'; // Por encima de todo
+            banner.innerHTML = '<i class="fas fa-wifi-slash me-2"></i> MODO OFFLINE: Sin conexión a internet. Las ventas no se podrán finalizar hasta recuperar INTERNET.';
+            document.body.prepend(banner);
+            document.body.style.paddingTop = '60px'; // Bajamos el contenido para que no lo tape el banner
+        }
+    } else {
+        // Si HAY conexión y existe el banner, lo quitamos
+        if (banner) {
+            banner.remove();
+            document.body.style.paddingTop = '0';
+        }
+    }
+}
+
+// Escuchamos los cambios de red
+window.addEventListener('online', updateConnectionStatus);
+window.addEventListener('offline', updateConnectionStatus);
+
+// Verificamos el estado al cargar la app
+updateConnectionStatus();

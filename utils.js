@@ -5,6 +5,16 @@ import {
 } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
 import { getAppConfig } from './secciones/dataManager.js'; // <-- IMPORTAMOS EL GETTER
  /**
+ * Variable global para cachear el logo y evitar recargas de red en cada ticket.
+ */
+let logoCache = {
+    url: null,
+    base64: null,
+    width: 0,
+    height: 0
+};
+
+/**
  * Obtiene todos los documentos de una colección de Firestore.
  * @param {string} collectionName - El nombre de la colección.
  * @returns {Promise<Array>} - Una promesa que resuelve con los documentos y sus IDs.
@@ -178,18 +188,56 @@ export async function generatePDF(ticketId, venta) {
     let logoHeight = 0;
     if (companyInfo.logoUrl) {
         try {
-            const img = new Image();
-            img.src = companyInfo.logoUrl;
-            await new Promise((resolve) => {
-                img.onload = () => {
-                    const imgWidth = 60;
-                    logoHeight = (img.height * imgWidth) / img.width;
-                    // doc.addImage(img, 'PNG', margin, topY, imgWidth, logoHeight);
-                    doc.addImage(img, 'PNG', margin, topY, imgWidth, logoHeight, null, 'FAST');
-                    resolve();
-                };
-                img.onerror = () => { resolve(); };
-            });
+            // 1. Verificamos si ya tenemos este logo en caché para usarlo instantáneamente
+            if (logoCache.url === companyInfo.logoUrl && logoCache.base64) {
+                const imgWidth = 60;
+                logoHeight = (logoCache.height * imgWidth) / logoCache.width;
+                doc.addImage(logoCache.base64, 'PNG', margin, topY, imgWidth, logoHeight, null, 'FAST');
+            } else {
+                // 2. Si no está en caché, lo cargamos
+                await new Promise((resolve) => {
+                    const img = new Image();
+                    // Intentamos habilitar CORS para poder convertir a Base64 y cachear
+                    img.crossOrigin = "Anonymous"; 
+                    img.src = companyInfo.logoUrl;
+
+                    img.onload = () => {
+                        const imgWidth = 60;
+                        logoHeight = (img.height * imgWidth) / img.width;
+                        
+                        try {
+                            // Creamos un canvas para convertir la imagen a Base64
+                            const canvas = document.createElement('canvas');
+                            canvas.width = img.width;
+                            canvas.height = img.height;
+                            const ctx = canvas.getContext('2d');
+                            ctx.drawImage(img, 0, 0);
+                            const dataURL = canvas.toDataURL('image/png');
+                            
+                            // Guardamos en caché para la próxima vez
+                            logoCache = { url: companyInfo.logoUrl, base64: dataURL, width: img.width, height: img.height };
+                            doc.addImage(dataURL, 'PNG', margin, topY, imgWidth, logoHeight, null, 'FAST');
+                        } catch (e) {
+                            // Si falla la conversión (ej. servidor no permite CORS), usamos la imagen normal sin cachear
+                            doc.addImage(img, 'PNG', margin, topY, imgWidth, logoHeight, null, 'FAST');
+                        }
+                        resolve();
+                    };
+
+                    img.onerror = () => {
+                        // Fallback: Si falla la carga con CORS, intentamos cargarla sin CORS (sin caché)
+                        const imgFallback = new Image();
+                        imgFallback.src = companyInfo.logoUrl;
+                        imgFallback.onload = () => {
+                            const imgWidth = 60;
+                            logoHeight = (imgFallback.height * imgWidth) / imgFallback.width;
+                            doc.addImage(imgFallback, 'PNG', margin, topY, imgWidth, logoHeight, null, 'FAST');
+                            resolve();
+                        };
+                        imgFallback.onerror = () => resolve(); // Si falla todo, seguimos sin logo
+                    };
+                });
+            }
         } catch (e) { console.error("No se pudo cargar el logo:", e); }
     }
 

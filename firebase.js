@@ -1,6 +1,6 @@
 // firebase.js
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js";
-import { getFirestore } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
+import { getFirestore, enableIndexedDbPersistence } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
 import { getAuth } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-auth.js";
 
 
@@ -37,4 +37,15 @@ export const app = initializeApp(firebaseConfig);
 
 // Exporta las instancias de los servicios que usas en toda la aplicación
 export const db = getFirestore(app);
+
+// --- ACTIVAR PERSISTENCIA OFFLINE ---
+// Esto permite que la app funcione sin internet y ahorra lecturas al recargar.
+enableIndexedDbPersistence(db).catch((err) => {
+    if (err.code == 'failed-precondition') {
+        console.warn("La persistencia falló: Probablemente hay múltiples pestañas abiertas.");
+    } else if (err.code == 'unimplemented') {
+        console.warn("El navegador actual no soporta persistencia offline.");
+    }
+});
+
 export const auth = getAuth(app);
