@@ -1,6 +1,6 @@
 // app.js (Versión completa y corregida)
 
-import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-auth.js";
+import { signOut } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-auth.js";
 import { auth, db } from './firebase.js';
 import { getDocs, collection, query, where, doc, updateDoc } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
 import { 
@@ -10,8 +10,25 @@ import {
     initRubrosListener,
     initConfigListener // <-- 1. IMPORTAMOS EL NUEVO INICIALIZADOR
 } from './secciones/dataManager.js';
+import { sessionManager, setActiveUserProfile } from './userSession.js';
+import { showAlertModal, showConfirmationModal } from './utils.js';
 
 let currentUserRole = null; // Variable global para guardar el rol del usuario
+let activeUser = null; // Para almacenar el objeto del usuario activo
+let activeUserProfile = null; // Para almacenar el perfil de Firestore combinado
+let currentSection = 'ventas'; // Para rastrear la sección actual
+
+// --- Variables para los modales de PIN ---
+let pinModalEl, pinModal, setPinModalEl, setPinModal;
+let targetUserForSwitch = null;
+
+
+export function getActiveUserProfile() { return activeUserProfile; }
+
+export function getCurrentUserRole() {
+    return currentUserRole;
+}
+
 // --- Elementos del DOM Globales ---
 const mainContent = document.getElementById('main-content');
 
@@ -38,11 +55,6 @@ async function getUserProfile(user) {
     }
 }
 
-// Función exportada para que otros módulos puedan saber el rol actual
-export function getCurrentUserRole() {
-    return currentUserRole;
-}
-
 // --- INICIO DE LA NUEVA LÓGICA DE TEMAS ---
 
 /**
@@ -63,8 +75,19 @@ function applyUserTheme(color) {
  * @param {string} userId - El ID del documento del usuario en Firestore.
  */
 function initThemeSelector(userId) {
-    const paletteContainer = document.getElementById('theme-color-palette');
-    const btnReset = document.getElementById('btn-reset-theme');
+    let paletteContainer = document.getElementById('theme-color-palette');
+    let btnReset = document.getElementById('btn-reset-theme');
+
+    // --- INICIO DE LA CORRECCIÓN: Clonar elementos para limpiar listeners ---
+    // Clonamos los contenedores para eliminar cualquier event listener previo.
+    const newPalette = paletteContainer.cloneNode(false); // false, porque lo vamos a rellenar
+    paletteContainer.parentNode.replaceChild(newPalette, paletteContainer);
+    paletteContainer = newPalette;
+
+    const newResetBtn = btnReset.cloneNode(true);
+    btnReset.parentNode.replaceChild(newResetBtn, btnReset);
+    btnReset = newResetBtn;
+    // --- FIN DE LA CORRECCIÓN ---
     // --- INICIO DE LA MODIFICACIÓN: Nueva paleta de colores ---
     const colors = [
         '#212529', // Default Dark
@@ -113,9 +136,18 @@ function applyBodyTheme(color) {
  * @param {string} userId - El ID del documento del usuario en Firestore.
  */
 function initBodyThemeSelector(userId) {
-    const paletteContainer = document.getElementById('body-theme-color-palette');
-    const btnReset = document.getElementById('btn-reset-body-theme');
+    let paletteContainer = document.getElementById('body-theme-color-palette');
+    let btnReset = document.getElementById('btn-reset-body-theme');
     
+    // --- INICIO DE LA CORRECCIÓN: Clonar elementos para limpiar listeners ---
+    const newPalette = paletteContainer.cloneNode(false);
+    paletteContainer.parentNode.replaceChild(newPalette, paletteContainer);
+    paletteContainer = newPalette;
+
+    const newResetBtn = btnReset.cloneNode(true);
+    btnReset.parentNode.replaceChild(newResetBtn, btnReset);
+    btnReset = newResetBtn;
+    // --- FIN DE LA CORRECCIÓN ---
     const colors = [
         '#f8f9fa', // Default Light
         '#e9ecef', // Light Gray
@@ -167,76 +199,181 @@ document.addEventListener('click', (e) => {
 
 // --- FIN DE LA CORRECCIÓN ---
 
+function renderUserSwitcher() {
+    const container = document.getElementById('user-list-container');
+    if (!container) return;
 
-// --- Lógica de Autenticación y Carga de la App ---
-onAuthStateChanged(auth, async (user) => {
-    if (user) {
-        const userProfile = await getUserProfile(user);
+    const allUsers = sessionManager.getUsers();
+    const activeUID = sessionManager.getActiveUserUID();
 
-        // --- INICIO DE LA MODIFICACIÓN: Lógica de autorización con Modal ---
-        if (!userProfile) {
-            // Si el rol es null, el usuario está autenticado pero NO autorizado.
-            const mainNavbar = document.querySelector('.navbar');
-            if (mainNavbar) mainNavbar.style.display = 'none'; // Ocultamos toda la barra de navegación
+    if (allUsers.length <= 1) {
+        container.innerHTML = ''; // No se necesita cambiador para un solo usuario
+        return;
+    }
 
-            // Mostramos el modal de acceso denegado
-            const accesoDenegadoModalEl = document.getElementById('accesoDenegadoModal');
-            if (accesoDenegadoModalEl) {
-                const modal = new bootstrap.Modal(accesoDenegadoModalEl);
-                modal.show();
-            }
+    let listHtml = '<li><hr class="dropdown-divider"></li>';
+    listHtml += '<li><h6 class="dropdown-header">Cambiar a:</h6></li>';
 
-            document.getElementById('logout-unauthorized').addEventListener('click', () => signOut(auth));
-            return; // Detenemos la ejecución para que no cargue nada más.
+    allUsers.forEach(user => {
+        if (user.uid !== activeUID) {
+            listHtml += `
+                <li>
+                    <a class="dropdown-item d-flex align-items-center" href="#" data-uid-switch="${user.uid}">
+                        <img src="${user.photoURL}" width="24" height="24" class="rounded-circle me-2">
+                        ${user.displayName}
+                    </a>
+                </li>
+            `;
         }
-        // --- FIN DE LA MODIFICACIÓN ---
+    });
 
-        // Guardamos el rol y aplicamos el tema
-        currentUserRole = userProfile.rol;
-        applyUserTheme(userProfile.themeColor);
-        applyBodyTheme(userProfile.bodyThemeColor); // Aplicamos el tema de fondo
-        initThemeSelector(userProfile.id);
-        initBodyThemeSelector(userProfile.id); // Inicializamos el nuevo selector
+    container.innerHTML = listHtml;
 
-        console.log(`Usuario autenticado: ${user.email}, Rol: ${currentUserRole}`);
+    document.querySelectorAll('[data-uid-switch]').forEach(button => {
+        button.addEventListener('click', async (e) => {
+            e.preventDefault();
+            const newUID = e.currentTarget.dataset.uidSwitch;
+            const allUsers = sessionManager.getUsers();
+            targetUserForSwitch = allUsers.find(u => u.uid === newUID);
+            
+            if (!targetUserForSwitch) return;
 
-        // --- Lógica para el menú de usuario ---
-        const userAvatar = document.getElementById('user-avatar-img');
-        const userDisplayName = document.getElementById('user-display-name');
-        const userEmailDropdown = document.getElementById('user-email-dropdown');
-        const btnLogout = document.getElementById('btn-logout-dropdown');
+            const targetUserProfile = await getUserProfile(targetUserForSwitch);
 
-        if (userAvatar && user.photoURL) userAvatar.src = user.photoURL;
-        if (userDisplayName && user.displayName) userDisplayName.textContent = user.displayName.split(' ')[0];
-        if (userEmailDropdown) userEmailDropdown.textContent = user.email;
-        if (btnLogout) {
-            btnLogout.addEventListener('click', async () => {
-                try {
-                    await signOut(auth);
-                } catch (error) {
-                    console.error('Error al cerrar sesión:', error);
-                }
-            });
-        }
-        
-        // --- INICIO DE LA MODIFICACIÓN: Mostrar elementos solo para admin ---
-        document.querySelectorAll('.admin-only').forEach(el => {
-            if (currentUserRole === 'admin') {
-                el.style.display = 'list-item'; // O 'block', 'inline-block', etc., según el elemento
+            if (targetUserProfile && targetUserProfile.pin) {
+                openPinModal(targetUserForSwitch);
+            } else {
+                // Si no tiene PIN, cambia directamente sin preguntar.
+                sessionManager.setActiveUser(targetUserForSwitch.uid);
+                switchActiveUser();
             }
         });
-        // --- FIN DE LA MODIFICACIÓN ---
+    });
+}
 
-        loadSection('ventas');
-    } else {
-        console.log("Usuario no autenticado, redirigiendo a login.html");
-        window.location.href = 'login.html';
+function updateUserUI(user) {
+    const userAvatar = document.getElementById('user-avatar-img');
+    const userDisplayName = document.getElementById('user-display-name');
+    const userEmailDropdown = document.getElementById('user-email-dropdown');
+    const btnLogout = document.getElementById('btn-logout-dropdown');
+
+    if (userAvatar && user.photoURL) userAvatar.src = user.photoURL;
+    if (userDisplayName && user.displayName) userDisplayName.textContent = user.displayName.split(' ')[0];
+    if (userEmailDropdown) userEmailDropdown.textContent = user.email;
+
+    renderUserSwitcher();
+
+    if (btnLogout) {
+        btnLogout.addEventListener('click', async () => {
+            try {
+                await signOut(auth);
+                sessionManager.clearSession();
+                window.location.href = 'login.html';
+            } catch (error) {
+                console.error('Error al cerrar sesión:', error);
+            }
+        });
     }
+}
+
+async function initializeApp() {
+    activeUser = sessionManager.getActiveUser();
+
+    if (!activeUser) {
+        console.log("Ningún usuario activo, redirigiendo a login.html");
+        sessionManager.clearSession();
+        window.location.href = 'login.html';
+        return;
+    }
+
+    const userProfile = await getUserProfile(activeUser);
+
+    if (!userProfile) {
+        const mainNavbar = document.querySelector('.navbar');
+        if (mainNavbar) mainNavbar.style.display = 'none';
+        const accesoDenegadoModalEl = document.getElementById('accesoDenegadoModal');
+        if (accesoDenegadoModalEl) {
+            const modal = new bootstrap.Modal(accesoDenegadoModalEl);
+            modal.show();
+        }
+        document.getElementById('logout-unauthorized').addEventListener('click', () => {
+            sessionManager.clearSession();
+            signOut(auth);
+        });
+        return;
+    }
+
+    activeUserProfile = { ...activeUser, ...userProfile };
+    setActiveUserProfile(activeUserProfile);
+    currentUserRole = userProfile.rol;
+
+    applyUserTheme(userProfile.themeColor);
+    applyBodyTheme(userProfile.bodyThemeColor);
+    initThemeSelector(userProfile.id);
+    initBodyThemeSelector(userProfile.id);
+
+    console.log(`Usuario activo: ${activeUser.email}, Rol: ${currentUserRole}`);
+    updateUserUI(activeUser);
+
+    document.querySelectorAll('.admin-only').forEach(el => {
+        if (currentUserRole === 'admin') {
+            el.style.display = 'list-item';
+        }
+    });
+
+    loadSection(currentSection);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    initializeApp();
+
+    // --- INICIO: Inicialización de Modales de PIN ---
+    pinModalEl = document.getElementById('pinRequestModal');
+    if (pinModalEl) {
+        pinModal = new bootstrap.Modal(pinModalEl);
+        document.getElementById('btn-confirm-pin').addEventListener('click', verifyPinAndSwitch);
+        document.getElementById('pin-input').addEventListener('keyup', (e) => {
+            if (e.key === 'Enter') verifyPinAndSwitch();
+        });
+        pinModalEl.addEventListener('shown.bs.modal', () => {
+            document.getElementById('pin-input').focus();
+        });
+    }
+
+    setPinModalEl = document.getElementById('setPinModal');
+    if (setPinModalEl) {
+        setPinModal = new bootstrap.Modal(setPinModalEl);
+        const btnSetPin = document.getElementById('btn-set-pin');
+        if (btnSetPin) {
+            btnSetPin.addEventListener('click', () => {
+                const deletePinContainer = document.getElementById('delete-pin-container');
+                if (activeUserProfile && activeUserProfile.pin) {
+                    deletePinContainer.style.display = 'block';
+                } else {
+                    deletePinContainer.style.display = 'none';
+                }
+                document.getElementById('new-pin-input').value = '';
+                document.getElementById('confirm-pin-input').value = '';
+                document.getElementById('set-pin-error-message').style.display = 'none';
+                setPinModal.show();
+            });
+        }
+        document.getElementById('btn-confirm-set-pin').addEventListener('click', saveNewPin);
+        const btnDeletePin = document.getElementById('btn-delete-pin');
+        if (btnDeletePin) {
+            btnDeletePin.addEventListener('click', deletePin);
+        }
+        setPinModalEl.addEventListener('shown.bs.modal', () => {
+            document.getElementById('new-pin-input').focus();
+        });
+    }
+    // --- FIN: Inicialización de Modales de PIN ---
 });
 
 // --- Controlador de Secciones ---
 async function loadSection(section) {
     if (!section) return console.error("Intento de cargar una sección indefinida.");
+    currentSection = section; // Actualizamos la sección actual
 
     // Resaltar el enlace de navegación activo
     document.querySelectorAll('.navbar-nav .nav-link').forEach(link => {
@@ -267,6 +404,154 @@ async function loadSection(section) {
     }
 }
 
+/**
+ * Abre el modal para solicitar el PIN del usuario al que se desea cambiar.
+ * @param {object} user - El objeto del usuario de destino.
+ */
+function openPinModal(user) {
+    if (!user || !pinModal) return;
+    
+    document.getElementById('pin-user-avatar').src = user.photoURL;
+    document.getElementById('pin-user-name').textContent = user.displayName;
+    document.getElementById('pin-input').value = '';
+    document.getElementById('pin-error-message').style.display = 'none';
+    
+    pinModal.show();
+}
+
+/**
+ * Verifica el PIN ingresado y, si es correcto, realiza el cambio de usuario.
+ */
+async function verifyPinAndSwitch() {
+    const enteredPin = document.getElementById('pin-input').value;
+    const pinErrorMsg = document.getElementById('pin-error-message');
+
+    if (!targetUserForSwitch) return;
+
+    if (!/^\d{4}$/.test(enteredPin)) {
+        pinErrorMsg.textContent = "El PIN debe tener 4 dígitos.";
+        pinErrorMsg.style.display = 'block';
+        return;
+    }
+
+    const targetUserProfile = await getUserProfile(targetUserForSwitch);
+
+    // Ahora se asume que el usuario tiene un PIN, ya que el flujo cambió.
+    // Si no lo tiene, es una condición de error inesperada.
+    if (!targetUserProfile || !targetUserProfile.pin) {
+        await showAlertModal("Error: Se esperaba un PIN para este usuario pero no se encontró.", "Error de PIN");
+        pinModal.hide();
+        return;
+    }
+
+    if (enteredPin === targetUserProfile.pin) {
+        pinErrorMsg.style.display = 'none';
+        pinModal.hide();
+        sessionManager.setActiveUser(targetUserForSwitch.uid);
+        switchActiveUser();
+    } else {
+        pinErrorMsg.textContent = "PIN incorrecto. Intenta de nuevo.";
+        pinErrorMsg.style.display = 'block';
+        const pinInput = document.getElementById('pin-input');
+        pinInput.value = '';
+        pinInput.focus();
+    }
+}
+
+/**
+ * Elimina el PIN del usuario activo en Firestore.
+ */
+async function deletePin() {
+    const confirmed = await showConfirmationModal(
+        "¿Estás seguro de que deseas eliminar tu PIN? Ya no se te solicitará al cambiar a tu usuario.",
+        "Eliminar PIN",
+        { confirmText: 'Sí, eliminar', cancelText: 'Cancelar' }
+    );
+
+    if (confirmed) {
+        try {
+            const userRef = doc(db, 'usuarios', activeUserProfile.id);
+            await updateDoc(userRef, { pin: null });
+            
+            // Actualizar el perfil local para reflejar el cambio
+            activeUserProfile.pin = null;
+
+            setPinModal.hide();
+            await showAlertModal("¡Tu PIN ha sido eliminado con éxito!", "Éxito");
+
+        } catch (error) {
+            console.error("Error al eliminar el PIN:", error);
+            await showAlertModal("Ocurrió un error al intentar eliminar el PIN.", "Error");
+        }
+    }
+}
+
+/**
+ * Guarda el nuevo PIN del usuario activo en Firestore.
+ */
+async function saveNewPin() {
+    const newPin = document.getElementById('new-pin-input').value;
+    const confirmPin = document.getElementById('confirm-pin-input').value;
+    const errorMsg = document.getElementById('set-pin-error-message');
+
+    if (!/^\d{4}$/.test(newPin)) {
+        errorMsg.textContent = 'El PIN debe contener exactamente 4 dígitos numéricos.';
+        errorMsg.style.display = 'block';
+        return;
+    }
+    if (newPin !== confirmPin) {
+        errorMsg.textContent = 'Los PINs no coinciden.';
+        errorMsg.style.display = 'block';
+        return;
+    }
+
+    errorMsg.style.display = 'none';
+    const userRef = doc(db, 'usuarios', activeUserProfile.id);
+    await updateDoc(userRef, { pin: newPin });
+    setPinModal.hide();
+    await showAlertModal("¡Tu PIN se ha actualizado correctamente!", "Éxito");
+}
+
+/**
+ * Cambia el usuario activo sin recargar la página.
+ * Re-aplica temas, permisos y recarga la sección actual.
+ */
+async function switchActiveUser() {
+    activeUser = sessionManager.getActiveUser();
+    if (!activeUser) {
+        window.location.href = 'login.html';
+        return;
+    }
+
+    const userProfile = await getUserProfile(activeUser);
+
+    if (!userProfile) {
+        // Si el usuario cambiado no está autorizado, es más seguro recargar
+        // para mostrar la pantalla de bloqueo completa.
+        showAlertModal("El usuario seleccionado no tiene permisos. La página se recargará.", "Acceso Denegado")
+            .then(() => window.location.reload());
+        return;
+    }
+
+    activeUserProfile = { ...activeUser, ...userProfile };
+    setActiveUserProfile(activeUserProfile);
+    currentUserRole = userProfile.rol;
+
+    // Re-aplicar configuraciones de UI específicas del usuario
+    applyUserTheme(userProfile.themeColor);
+    applyBodyTheme(userProfile.bodyThemeColor);
+    initThemeSelector(userProfile.id);
+    initBodyThemeSelector(userProfile.id);
+    updateUserUI(activeUser); // Actualiza el avatar, nombre y la lista del switcher
+
+    // Re-evaluar visibilidad de elementos de administrador
+    document.querySelectorAll('.admin-only').forEach(el => {
+        el.style.display = (currentUserRole === 'admin') ? 'list-item' : 'none';
+    });
+
+    // Recargar la sección actual para que refleje los cambios de rol/usuario
+    await loadSection(currentSection);
+}
 
 // =========================================================================
 // INICIO: LÓGICA PARA MANEJAR MODALES GLOBALES (SIN CAMBIOS)

@@ -334,10 +334,12 @@ function renderTablaDetalle(ventasParaMostrar) {
 
         const listaProductos = venta.productos.map(p => `${p.nombre} x${p.cantidad}`).join('<br>');
         const fechaFormateada = venta.timestamp || 'Sin Fecha';
+        const vendedorNombre = (venta.vendedor?.nombre || 'Desconocido').split(' ')[0];
 
         row.innerHTML = `
             <td>${fechaFormateada} ${isAnulada ? '<span class="badge bg-danger ms-2">ANULADA</span>' : ''}</td>
             <td>${listaProductos}</td>
+            <td>${vendedorNombre}</td>
             <td>${formatCurrency(venta.pagos.contado)}</td>
             <td>${formatCurrency(venta.pagos.transferencia)}</td>
             <td>${formatCurrency(venta.pagos.debito)}</td>

@@ -4,7 +4,7 @@ import { haySesionActiva, getSesionActivaId, verificarEstadoCaja } from './caja.
 import { getFirestore, collection, onSnapshot, query, orderBy, runTransaction, doc, updateDoc, serverTimestamp, getDoc, increment } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
 import { getCollection, saveDocument, formatCurrency, getTodayDate, updateDocument, deleteDocument, getFormattedDateTime, generatePDF, showAlertModal, showConfirmationModal } from '../utils.js';
 import { getProductos, getAppConfig } from './dataManager.js'; // <-- Importamos getAppConfig
-import { getAuth } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-auth.js"; // <-- Importamos getAuth estáticamente
+import { getActiveUserProfile } from '../userSession.js';
 
 const db = getFirestore();
 
@@ -671,8 +671,6 @@ async function finalizarVenta() {
     showLoading();
 
     try {
-        const auth = getAuth(); // <-- Usamos la importación estática (más rápido)
-        
         // Obtener configuración de Loyalty desde CACHÉ (Instantáneo, sin red)
         let loyaltyPercentage = 1;
         let loyaltyConfig = { percentage: 1, expirationEnabled: false, expirationDays: 365 };
@@ -759,9 +757,9 @@ async function finalizarVenta() {
             let puntosTotalSnapshot = 0;
 
             // --- INICIO DE LA MODIFICACIÓN ---
-            const currentUser = auth.currentUser;
-            const vendedorInfo = currentUser
-                ? { email: currentUser.email, nombre: currentUser.displayName || currentUser.email.split('@')[0] }
+            const vendedorProfile = getActiveUserProfile();
+            const vendedorInfo = vendedorProfile
+                ? { email: vendedorProfile.email, nombre: vendedorProfile.displayName || vendedorProfile.email.split('@')[0] }
                 : { email: 'desconocido', nombre: 'Desconocido' };
             // --- FIN DE LA MODIFICACIÓN ---
 

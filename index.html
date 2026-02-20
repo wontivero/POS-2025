@@ -47,7 +47,6 @@
                     <li class="nav-item">
                         <a class="nav-link" href="#" data-section="carga-productos"><i
                                 class="fas fa-box-open me-1"></i>Agregar Productos</a>
-                    </li>
                     <li class="nav-item">
                         <a class="nav-link" href="#" data-section="caja" id="nav-link-caja"><i
                                 class="fas fa-inbox me-1"></i>Caja</a>
@@ -75,9 +74,19 @@
                     <li>
                         <p class="dropdown-header" id="user-email-dropdown">usuario@email.com</p>
                     </li>
+
+                    <!-- Contenedor para la lista de usuarios (para cambiar de sesión) -->
+                    <div id="user-list-container"></div>
+
                     <li>
                         <hr class="dropdown-divider">
                     </li>
+                    <li><a class="dropdown-item" href="#" id="btn-set-pin"><i class="fas fa-key me-2"></i>Configurar PIN</a></li>
+                    <li>
+                        <hr class="dropdown-divider">
+                    </li>
+                    <li><a class="dropdown-item" href="login.html"><i class="fas fa-user-plus me-2"></i>Añadir otro usuario</a></li>
+
                     <!-- Selector de Tema de la Barra -->
                     <li>
                         <div class="px-3 py-2">
@@ -100,14 +109,73 @@
                         </div>
                     </li>
                     <li><hr class="dropdown-divider"></li>
-                    <li><a class="dropdown-item" href="#" id="btn-logout-dropdown"><i
-                                class="fas fa-sign-out-alt me-2"></i>Cerrar Sesión</a></li>
+                    <li><a class="dropdown-item" href="#" id="btn-logout-dropdown"><i class="fas fa-sign-out-alt me-2"></i>Cerrar todas las sesiones</a></li>
                 </ul>
             </div>
         </div>
     </nav>
 
     <div class="container-fluid mt-4" id="main-content">
+    </div>
+
+
+    <!-- Modal para solicitar PIN al cambiar de usuario -->
+    <div class="modal fade" id="pinRequestModal" tabindex="-1" aria-labelledby="pinRequestModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered" style="max-width: 350px;">
+            <div class="modal-content">
+                <div class="modal-header text-center">
+                    <h5 class="modal-title w-100" id="pinRequestModalLabel">Cambiar a Usuario</h5>
+                </div>
+                <div class="modal-body text-center">
+                    <img id="pin-user-avatar" src="" alt="Avatar" class="rounded-circle mb-3" width="80" height="80">
+                    <h4 id="pin-user-name"></h4>
+                    <p class="text-muted">Ingresa tu PIN de 4 dígitos para continuar.</p>
+                    <div class="d-flex justify-content-center my-3">
+                        <input type="password" id="pin-input" class="form-control form-control-lg text-center" maxlength="4" pattern="\d*" inputmode="numeric" style="width: 150px; letter-spacing: 0.5em;">
+                    </div>
+                    <div id="pin-error-message" class="text-danger small" style="display: none;">PIN incorrecto. Intenta de nuevo.</div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-primary" id="btn-confirm-pin">Confirmar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para configurar PIN -->
+    <div class="modal fade" id="setPinModal" tabindex="-1" aria-labelledby="setPinModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered" style="max-width: 400px;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="setPinModalLabel">Configurar PIN de Seguridad</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="delete-pin-container" class="mb-3" style="display: none;">
+                        <p class="small text-muted">Ya tienes un PIN configurado. Si lo deseas, puedes eliminarlo.</p>
+                        <button type="button" class="btn btn-outline-danger w-100" id="btn-delete-pin">
+                            <i class="fas fa-trash-alt me-2"></i>Eliminar mi PIN
+                        </button>
+                        <hr>
+                    </div>
+                    <p class="text-muted">Crea o actualiza tu PIN de 4 dígitos. Este PIN se te solicitará cuando quieras cambiar a tu usuario.</p>
+                    <div class="mb-3">
+                        <label for="new-pin-input" class="form-label">Nuevo PIN (4 dígitos)</label>
+                        <input type="password" id="new-pin-input" class="form-control" maxlength="4" pattern="\d*" inputmode="numeric">
+                    </div>
+                    <div class="mb-3">
+                        <label for="confirm-pin-input" class="form-label">Confirmar Nuevo PIN</label>
+                        <input type="password" id="confirm-pin-input" class="form-control" maxlength="4" pattern="\d*" inputmode="numeric">
+                    </div>
+                    <div id="set-pin-error-message" class="text-danger small" style="display: none;"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-primary" id="btn-confirm-set-pin">Guardar PIN</button>
+                </div>
+            </div>
+        </div>
     </div>
 
 

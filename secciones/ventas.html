@@ -1,6 +1,4 @@
 <section id="seccion-ventas">
-    <h2 class="mb-4">Asistente de Ventas</h2>
-
     <div class="row">
         <div class="col-md-7">
             <div class="card shadow-sm mb-4">
@@ -65,36 +63,40 @@
                             <button id="btnPagoRapidoContado" class="btn btn-success btn-lg w-100 btn-pago-rapido"
                                 data-metodo="contado" style="--btn-bg-color: #198754;">
                                 <div class="d-flex justify-content-between align-items-center w-100">
-                                    <span><i class="fas fa-hand-holding-usd me-2"></i>Contado <kbd>F1</kbd></span>
+                                    <span><i class="fas fa-hand-holding-usd me-2"></i>Contado</span>
                                     <span id="montoContadoRapido" class="badge bg-light text-dark ms-2">$0</span>
                                 </div>
+                                <kbd class="btn-shortcut-key">F1</kbd>
                             </button>
                         </div>
                         <div class="col-6">
                             <button id="btnPagoRapidoTransferencia" class="btn btn-primary btn-lg w-100 btn-pago-rapido"
                                 data-metodo="transferencia" style="--btn-bg-color: #0d6efd;">
                                 <div class="d-flex justify-content-between align-items-center w-100">
-                                    <span><i class="fas fa-exchange-alt me-2"></i>Transfer. <kbd>F2</kbd></span>
+                                    <span><i class="fas fa-exchange-alt me-2"></i>Transfer.</span>
                                     <span id="montoTransferenciaRapido" class="badge bg-light text-dark ms-2">$0</span>
                                 </div>
+                                <kbd class="btn-shortcut-key">F2</kbd>
                             </button>
                         </div>
                         <div class="col-6">
                             <button id="btnPagoRapidoDebito" class="btn btn-secondary btn-lg w-100 btn-pago-rapido"
                                 data-metodo="debito" style="--btn-bg-color: #6c757d;">
                                 <div class="d-flex justify-content-between align-items-center w-100">
-                                    <span><i class="fas fa-credit-card me-2"></i>Débito <kbd>F3</kbd></span>
+                                    <span><i class="fas fa-credit-card me-1"></i>Débito<span class="mx-1 text-white-50">|</span><i class="fas fa-qrcode me-1"></i>QR</span>
                                     <span id="montoDebitoRapido" class="badge bg-light text-dark ms-2">$0</span>
                                 </div>
+                                <kbd class="btn-shortcut-key">F3</kbd>
                             </button>
                         </div>
                         <div class="col-6">
                             <button id="btnPagoRapidoCredito" class="btn btn-warning btn-lg w-100 btn-pago-rapido"
                                 data-metodo="credito" style="--btn-bg-color: #ffc107;">
                                 <div class="d-flex justify-content-between align-items-center w-100">
-                                    <span><i class="far fa-credit-card me-2"></i>Crédito <kbd>F4</kbd></span>
+                                    <span><i class="far fa-credit-card me-2"></i>Crédito</span>
                                     <span id="montoCreditoRapido" class="badge bg-light text-dark ms-2">$0</span>
                                 </div>
+                                <kbd class="btn-shortcut-key">F4</kbd>
                             </button>
                         </div>
                     </div>
@@ -122,7 +124,7 @@
                                     step="1" placeholder="0">
                             </div>
                             <div class="col-md-6">
-                                <label for="txtDebito" class="form-label">Débito:</label>
+                                <label for="txtDebito" class="form-label">Débito | QR:</label>
                                 <input type="number" class="form-control campo-pago" id="txtDebito" value="0" step="1"
                                     placeholder="0">
                             </div>

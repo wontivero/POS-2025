@@ -6,6 +6,8 @@ body {
 /* Agrega esto al final de tu archivo style.css */
 
 .btn-pago-rapido {
+    position: relative; /* Contenedor para el atajo flotante */
+    overflow: hidden; /* Evita que el atajo se salga del botón */
     min-height: auto; /* Quitamos la altura mínima fija */
     padding: 0.75rem 1rem; /* Ajustamos el padding para el nuevo layout */
     font-weight: 500;
@@ -15,6 +17,21 @@ body {
 
 .btn-pago-rapido:active {
     transform: scale(0.97);
+}
+
+/* Nuevo estilo para el atajo de teclado flotante */
+.btn-shortcut-key {
+    position: absolute;
+    top: 0px;
+    left: 0px;
+    padding: 0.1em 0.4em;
+    font-size: 0.7rem;
+    font-weight: bold;
+    color: #fff;
+    background-color: #000;
+    border-radius: 3px;
+    border: 1px solid #333;
+    line-height: 1.5;
 }
 
 /* Estilo para el monto dentro del botón, ahora es un badge */
