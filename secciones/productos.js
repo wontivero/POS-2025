@@ -1,5 +1,5 @@
 // secciones/productos.js
-import { getCollection, saveDocument, deleteDocument, formatCurrency, getTodayDate, updateDocument, capitalizeFirstLetter, showAlertModal, showConfirmationModal, roundUpToNearest50 } from '../utils.js';
+import { getCollection, saveDocument, deleteDocument, formatCurrency, getTodayDate, updateDocument, capitalizeFirstLetter, showAlertModal, showConfirmationModal, roundUpToNearest50, normalizeString } from '../utils.js';
 import { getFirestore, collection, onSnapshot, query, orderBy, getDocs, writeBatch, Timestamp, doc, where, addDoc } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
 import { getProductos, getMarcas, getColores, getRubros } from './dataManager.js';
 
@@ -209,9 +209,9 @@ async function handleFormSubmit(e) {
         nombre: productoNombre.value.trim(),
         nombre_lowercase: productoNombre.value.trim().toLowerCase(),
         codigo: productoCodigo.value.trim(),
-        marca: productoMarca.value.trim().toLowerCase(),
-        color: productoColor.value.trim().toLowerCase(),
-        rubro: productoRubro.value.trim().toLowerCase(),
+        marca: normalizeString(productoMarca.value.trim()),
+        color: normalizeString(productoColor.value.trim()),
+        rubro: normalizeString(productoRubro.value.trim()),
         costo: parseFloat(productoCosto.value) || 0,
         venta: parseFloat(productoVenta.value) || 0,
         stock: parseInt(productoStock.value) || 0,
@@ -251,12 +251,12 @@ async function handleFormSubmit(e) {
 
 async function addUniqueItem(collectionName, itemName) {
     if (!itemName) return;
-    const itemNormalizado = itemName.trim().toLowerCase();
+    const itemNormalizado = normalizeString(itemName);
     const itemRef = collection(db, collectionName);
     const q = query(itemRef, where('nombre', '==', itemNormalizado));
     const querySnapshot = await getDocs(q);
     if (querySnapshot.empty) {
-        await addDoc(itemRef, { nombre: itemName });
+        await addDoc(itemRef, { nombre: itemNormalizado });
     }
 }
 
@@ -465,8 +465,11 @@ async function handleFileUpload(event) {
 
                 const productoData = {
                     nombre: productoCSV.nombre, nombre_lowercase: productoCSV.nombre.toLowerCase(),
-                    codigo: productoCSV.codigo, marca: productoCSV.marca || '', color: productoCSV.color || '',
-                    rubro: productoCSV.rubro || '', costo: costo, venta: ventaRedondeada,
+                    codigo: productoCSV.codigo, 
+                    marca: normalizeString(productoCSV.marca || ''), 
+                    color: normalizeString(productoCSV.color || ''),
+                    rubro: normalizeString(productoCSV.rubro || ''), 
+                    costo: costo, venta: ventaRedondeada,
                     stock: parseInt(productoCSV.stock, 10) || 0, stockMinimo: parseInt(productoCSV.stockMinimo, 10) || 0,
                     fechaUltimoCambioPrecio: Timestamp.now()
                 };
@@ -646,7 +649,7 @@ export function init() {
     importarArchivoInput = document.getElementById('importarArchivoInput');
 
     const actualizarDatalists = () => {
-        const poblar = (el, lista) => { if (el) el.innerHTML = lista.map(item => `<option value="${item}"></option>`).join(''); };
+        const poblar = (el, lista) => { if (el) el.innerHTML = lista.map(item => `<option value="${capitalizeFirstLetter(item)}"></option>`).join(''); };
         poblar(datalistMarcasFiltro, getMarcas());
         poblar(datalistMarcasModal, getMarcas());
         poblar(datalistColoresFiltro, getColores());

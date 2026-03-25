@@ -1,7 +1,7 @@
 // secciones/carga-productos.js
 import { db } from '../firebase.js';
 import { collection, writeBatch, doc, getDocs, query, where, addDoc, orderBy, Timestamp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
-import { showAlertModal, showConfirmationModal, roundUpToNearest50, formatCurrency } from '../utils.js';
+import { showAlertModal, showConfirmationModal, roundUpToNearest50, formatCurrency, normalizeString, capitalizeFirstLetter } from '../utils.js';
 import { getMarcas, getColores, getRubros } from './dataManager.js';
 // --- ESTADO Y ELEMENTOS DEL DOM ---
 let productosEnPreparacion = [];
@@ -43,7 +43,7 @@ export async function init() {
     const actualizarDatalistsCarga = () => {
         const poblar = (elemento, lista) => {
             if (elemento) {
-                elemento.innerHTML = lista.map(item => `<option value="${item}"></option>`).join('');
+                elemento.innerHTML = lista.map(item => `<option value="${capitalizeFirstLetter(item)}"></option>`).join('');
             }
         };
         poblar(datalistMarcas, getMarcas());
@@ -274,9 +274,9 @@ async function agregarProductoAGrilla(duplicarDespues = false) {
         status: modoFormulario === 'editar' ? 'editar' : 'nuevo',
         codigo: codigo,
         nombre: prodNombre.value.trim(),
-        marca: prodMarca.value.trim(),
-        color: prodColor.value.trim(),
-        rubro: prodRubro.value.trim(),
+        marca: normalizeString(prodMarca.value.trim()),
+        color: normalizeString(prodColor.value.trim()),
+        rubro: normalizeString(prodRubro.value.trim()),
         costo: parseFloat(prodCosto.value) || 0,
         ganancia: parseFloat(prodGanancia.value) || 70,
         venta: parseFloat(prodVenta.value) || 0,
@@ -537,8 +537,9 @@ async function guardarTodoEnBD() {
 
 async function addUniqueItem(collectionName, itemName) {
     if (!itemName) return;
+    const itemNormalizado = normalizeString(itemName);
     const itemRef = collection(db, collectionName);
-    const q = query(itemRef, where('nombre', '==', itemName));
+    const q = query(itemRef, where('nombre', '==', itemNormalizado));
     const querySnapshot = await getDocs(q);
-    if (querySnapshot.empty) await addDoc(itemRef, { nombre: itemName });
+    if (querySnapshot.empty) await addDoc(itemRef, { nombre: itemNormalizado });
 }
