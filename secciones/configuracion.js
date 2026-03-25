@@ -13,6 +13,7 @@ let saveCommissionButton;
 // --- INICIO DE LA MODIFICACIÓN: Nuevos elementos del DOM ---
 let companyNameInput, companyAddressInput, companyCuitInput, companyPhoneInput, companyIvaInput, companyEmailInput, companyLogoInput, userEmailInput, userRoleSelect, btnAddUser, usersTableBody;
 let saveCompanyButton;
+let autoPrintTicketCheck, savePrintingButton;
 let loyaltyPercentageInput, loyaltyPrintCheck, loyaltyExpirationCheck, loyaltyExpirationDaysInput, btnSaveLoyalty; // <-- NUEVO
 // --- FIN DE LA MODIFICACIÓN ---
 
@@ -27,6 +28,11 @@ async function loadConfiguration() {
             // Cargar configuración de comisión
             commissionInput.value = configData.commissionPercentage || 1;
             
+            // Cargar configuración de impresión
+            if (autoPrintTicketCheck) {
+                autoPrintTicketCheck.checked = configData.printing?.autoPrintTicket ?? false;
+            }
+
             // Cargar configuración de Loyalty
             if (loyaltyPercentageInput) {
                 loyaltyPercentageInput.value = configData.loyalty?.percentage || 1;
@@ -68,6 +74,9 @@ async function loadConfiguration() {
                     printOnTicket: true,
                     expirationEnabled: false,
                     expirationDays: 365
+                },
+                printing: {
+                    autoPrintTicket: false
                 }
             });
             commissionInput.value = 1;
@@ -102,6 +111,24 @@ async function saveCommissionPercentage() {
     } catch (error) {
         console.error("Error al guardar la configuración de comisión:", error);
         showAlertModal("No se pudo guardar la configuración.", "Error");
+    }
+}
+
+/**
+ * Guarda la configuración de impresión.
+ */
+async function savePrintingConfig() {
+    const autoPrint = autoPrintTicketCheck.checked;
+
+    try {
+        // Usamos { merge: true } para no sobreescribir otras configuraciones
+        await setDoc(configRef, { printing: { 
+            autoPrintTicket: autoPrint
+        } }, { merge: true });
+        showAlertModal("Configuración de impresión guardada.", "Éxito");
+    } catch (error) {
+        console.error("Error al guardar la configuración de impresión:", error);
+        showAlertModal("Error al guardar la configuración de impresión.", "Error");
     }
 }
 
@@ -265,6 +292,9 @@ export async function init() {
     userRoleSelect = document.getElementById('user-role');
     btnAddUser = document.getElementById('btn-add-user');
     usersTableBody = document.getElementById('users-table-body');
+
+    autoPrintTicketCheck = document.getElementById('config-auto-print-ticket');
+    savePrintingButton = document.getElementById('btn-guardar-impresion');
     
     // Loyalty Elements (Asumiendo que agregarás el HTML correspondiente en configuracion.html)
     loyaltyPercentageInput = document.getElementById('config-loyalty-percentage');
@@ -273,6 +303,10 @@ export async function init() {
     loyaltyExpirationDaysInput = document.getElementById('config-loyalty-expiration-days');
     btnSaveLoyalty = document.getElementById('btn-guardar-loyalty');
     
+    if (savePrintingButton) {
+        savePrintingButton.addEventListener('click', savePrintingConfig);
+    }
+
     if (btnSaveLoyalty) btnSaveLoyalty.addEventListener('click', saveLoyaltyConfig);
     if (loyaltyExpirationCheck) loyaltyExpirationCheck.addEventListener('change', toggleExpirationInput);
 

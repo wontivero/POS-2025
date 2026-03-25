@@ -208,11 +208,15 @@
                     </div>
                 </div>
                 <div class="modal-footer border-0">
-                    <button type="button" class="btn btn-secondary" id="btnConfirmacionVentaOK" data-bs-dismiss="modal"
-                        autofocus>
-                        OK <span id="venta-exitosa-countdown" class="badge bg-light text-dark ms-2">10</span>
+                    <button type="button" id="btnImprimirTicketModal" class="btn btn-success">
+                        <i class="fas fa-print me-2"></i>Imprimir Ticket
                     </button>
-                    <button type="button" class="btn btn-primary" id="btnGenerarTicketModal">Generar Ticket</button>
+                    <button type="button" id="btnGenerarTicketModal" class="btn btn-primary">
+                        <i class="fas fa-file-pdf me-2"></i>Generar PDF (A4)
+                    </button>
+                    <button type="button" class="btn btn-secondary" id="btnConfirmacionVentaOK" data-bs-dismiss="modal" autofocus>
+                        OK (<span id="venta-exitosa-countdown">10</span>)
+                    </button>
                 </div>
             </div>
         </div>

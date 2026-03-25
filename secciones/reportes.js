@@ -1,6 +1,6 @@
 // secciones/reportes.js
 import { getFirestore, collection, query, where, getDocs, orderBy, runTransaction, doc, getDoc } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
-import { getCollection, getDocumentById, formatCurrency, getTodayDate, generatePDF, showConfirmationModal, showAlertModal, normalizeString } from '../utils.js';
+import { getCollection, getDocumentById, formatCurrency, getTodayDate, generatePDF, printThermalTicket, showConfirmationModal, showAlertModal, normalizeString } from '../utils.js';
 import { getAuth } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-auth.js";
 import { haySesionActiva, getSesionActivaId } from './caja.js';
 import { getCurrentUserRole } from '../app.js';
@@ -349,6 +349,7 @@ function renderTablaDetalle(ventasParaMostrar) {
             <td>
                 <button class="btn btn-sm btn-info btn-ver-detalle" data-id="${venta.id}" title="Ver Detalle"><i class="fas fa-eye"></i></button>
                 <button class="btn btn-sm btn-secondary btn-pdf" data-id="${venta.id}" title="Generar PDF"><i class="fas fa-file-pdf"></i></button>
+                <button class="btn btn-sm btn-success btn-print-thermal" data-id="${venta.id}" title="Imprimir Ticket Térmico"><i class="fas fa-print"></i></button>
                 <button class="btn btn-sm btn-warning btn-anular-venta" data-id="${venta.id}" title="Anular y Corregir Venta" ${isAnulada ? 'disabled' : ''}>
                     <i class="fas fa-undo"></i>
                 </button>
@@ -644,6 +645,7 @@ export async function init() {
     tablaVentasDetalleBody.addEventListener('click', async (e) => {
         const detalleBtn = e.target.closest('.btn-ver-detalle');
         const pdfBtn = e.target.closest('.btn-pdf');
+        const thermalBtn = e.target.closest('.btn-print-thermal');
         const anularBtn = e.target.closest('.btn-anular-venta');
 
         if (detalleBtn) {
@@ -708,6 +710,10 @@ export async function init() {
             const ventaId = pdfBtn.dataset.id;
             const venta = ventas.find(v => v.id === ventaId);
             if (venta) generatePDF(venta.ticketId, venta);
+        } else if (thermalBtn) {
+            const ventaId = thermalBtn.dataset.id;
+            const venta = ventas.find(v => v.id === ventaId);
+            if (venta) printThermalTicket(venta.ticketId, venta);
         } else if (anularBtn) {
             const ventaId = anularBtn.dataset.id;
             anularVenta(ventaId);

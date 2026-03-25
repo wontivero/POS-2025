@@ -102,6 +102,26 @@
         </div>
     </div>
 
+    <div class="card shadow mb-4 mt-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">Configuración de Impresión</h6>
+        </div>
+        <div class="card-body">
+            <p class="card-text">
+                Define el comportamiento de la impresión de tickets de venta. Para la impresión directa, asegúrate de que tu impresora térmica (ej. 80mm) esté configurada como la impresora predeterminada en tu sistema operativo o navegador.
+            </p>
+            <div class="form-check form-switch mb-3">
+                <input class="form-check-input" type="checkbox" role="switch" id="config-auto-print-ticket">
+                <label class="form-check-label" for="config-auto-print-ticket">
+                    <strong>Imprimir ticket térmico automáticamente después de cada venta</strong>
+                </label>
+            </div>
+            <button id="btn-guardar-impresion" class="btn btn-primary">
+                <i class="fas fa-save me-2"></i>Guardar Configuración de Impresión
+            </button>
+        </div>
+    </div>
+
     <!-- INICIO DE LA MODIFICACIÓN: Gestión de Usuarios -->
     <div class="card shadow-sm mt-4">
         <div class="card-header bg-dark text-white">

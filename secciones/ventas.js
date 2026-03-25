@@ -2,7 +2,7 @@
 import { init as initProductosModal } from './productos.js';
 import { haySesionActiva, getSesionActivaId, verificarEstadoCaja } from './caja.js';
 import { getFirestore, collection, onSnapshot, query, orderBy, runTransaction, doc, updateDoc, serverTimestamp, getDoc, increment } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
-import { getCollection, saveDocument, formatCurrency, getTodayDate, updateDocument, deleteDocument, getFormattedDateTime, generatePDF, showAlertModal, showConfirmationModal } from '../utils.js';
+import { getCollection, saveDocument, formatCurrency, getTodayDate, updateDocument, deleteDocument, getFormattedDateTime, generatePDF, printThermalTicket, showAlertModal, showConfirmationModal } from '../utils.js';
 import { getProductos, getAppConfig } from './dataManager.js'; // <-- Importamos getAppConfig
 import { getActiveUserProfile } from '../userSession.js';
 
@@ -24,8 +24,8 @@ let clienteModal, clienteModalLabel, clienteId, clienteNombre, clienteCuit, clie
 let clienteSeleccionado = null;
 let selectedIndex = -1;
 
-// Elementos del modal y spinner
-let confirmacionVentaModal, btnGenerarTicketModal, loadingOverlay;
+// Elementos del modal, spinner y botones de ticket
+let confirmacionVentaModal, btnGenerarTicketModal, btnImprimirTicketModal, loadingOverlay;
 let ventaData;
 let genericPriceModalEl, genericPriceModal, genericProductName, genericPriceInput, btnConfirmGenericPrice;
 let genericProductToAdd = null; // Nuevo estado para el producto genérico
@@ -827,6 +827,13 @@ async function finalizarVenta() {
             ventaData = { id: ticketNumber, data: nuevaVenta };
         });
 
+        // --- INICIO DE LA MODIFICACIÓN: Auto-impresión ---
+        const printingConfig = appConfig.printing || {};
+        if (printingConfig.autoPrintTicket) {
+            // No esperamos a que termine (no usamos await), lo lanzamos en segundo plano para no bloquear la UI
+            printThermalTicket(ventaData.id, ventaData.data);
+        }
+
         // --- INICIO DE LA MODIFICACIÓN ---
         // Preparamos el contenido del modal antes de mostrarlo
         const detalleContainer = document.getElementById('detalle-venta-exitosa');
@@ -1090,6 +1097,7 @@ export async function init() {
     montoDebitoRapidoSpan = document.getElementById('montoDebitoRapido');
     montoCreditoRapidoSpan = document.getElementById('montoCreditoRapido');
     confirmacionVentaModal = document.getElementById('confirmacionVentaModal');
+    btnImprimirTicketModal = document.getElementById('btnImprimirTicketModal');
     btnGenerarTicketModal = document.getElementById('btnGenerarTicketModal');
     loadingOverlay = document.getElementById('loadingOverlay');
     clienteSearch = document.getElementById('clienteSearch');
@@ -1153,6 +1161,12 @@ export async function init() {
         modalInstance.hide();
         resetVentas();
     });
+
+    if (btnImprimirTicketModal) {
+        btnImprimirTicketModal.addEventListener('click', () => {
+            if (ventaData) printThermalTicket(ventaData.id, ventaData.data);
+        });
+    }
 
     confirmacionVentaModal.addEventListener('shown.bs.modal', () => {
         const okButton = document.getElementById('btnConfirmacionVentaOK');

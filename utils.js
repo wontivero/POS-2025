@@ -372,6 +372,168 @@ export async function generatePDF(ticketId, venta) {
     doc.save(`factura-${venta.fecha}-${ticketId}.pdf`);
 }
 
+/**
+ * **NUEVA FUNCIÓN**
+ * Genera un ticket para impresora térmica de 80mm y abre el diálogo de impresión.
+ * @param {string} ticketId - El número/ID del ticket.
+ * @param {object} venta - El objeto de la venta.
+ */
+export async function printThermalTicket(ticketId, venta) {
+    const appConfig = getAppConfig();
+    const companyInfo = appConfig.companyInfo || {};
+
+    // Crear un iframe oculto para no molestar al usuario
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'absolute';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    document.body.appendChild(iframe);
+
+    const ticketWindow = iframe.contentWindow;
+    const ticketDocument = ticketWindow.document;
+
+    // Estilos CSS optimizados para impresión térmica en 80mm
+    const styles = `
+        <style>
+            @media print {
+                @page {
+                    margin: 0;
+                    size: 80mm auto; /* Ancho del papel térmico */
+                }
+            }
+            body {
+                font-family: 'Courier New', Courier, monospace;
+                font-size: 10pt;
+                color: #000;
+                width: 280px; /* Ancho de contenido para 80mm, ajustar si es necesario */
+                margin: 0;
+                padding: 5px;
+            }
+            .center { text-align: center; }
+            .right { text-align: right; }
+            .left { text-align: left; }
+            h1, h2, h3, h4, h5, h6, p, span { margin: 0; padding: 0; }
+            hr {
+                border: none;
+                border-top: 1px dashed #000;
+                margin: 5px 0;
+            }
+            table {
+                width: 100%;
+                border-collapse: collapse;
+            }
+            th, td {
+                padding: 2px 0;
+            }
+            .item-desc {
+                white-space: normal; /* Permitir que el nombre del producto ocupe varias líneas */
+            }
+            .item-line td:nth-child(2) { text-align: right; }
+            .item-line td:nth-child(3) { text-align: right; }
+            .totals-row td:first-child { text-align: right; font-weight: bold; padding-right: 10px; }
+            .totals-row td:last-child { text-align: right; font-weight: bold; }
+        </style>
+    `;
+
+    // Construcción del HTML del ticket
+    let html = `
+        <div class="center">
+            ${companyInfo.name ? `<h3>${companyInfo.name}</h3>` : ''}
+            ${companyInfo.address ? `<p>${companyInfo.address}</p>` : ''}
+            ${companyInfo.cuit ? `<p>CUIT: ${companyInfo.cuit}</p>` : ''}
+            ${companyInfo.ivaCondition ? `<p>${companyInfo.ivaCondition}</p>` : ''}
+            ${companyInfo.phone ? `<p>Tel: ${companyInfo.phone}</p>` : ''}
+        </div>
+        <hr>
+        <p>Fecha: ${venta.timestamp}</p>
+        <p>Ticket N°: ${ticketId}</p>
+        ${venta.vendedor?.nombre ? `<p>Vendedor: ${venta.vendedor.nombre}</p>` : ''}
+        ${(venta.cliente?.nombre && venta.cliente.nombre !== 'Consumidor Final') ? `<hr><p>Cliente: ${venta.cliente.nombre}</p>${venta.cliente.cuit ? `<p>CUIT/DNI: ${venta.cliente.cuit}</p>` : ''}` : ''}
+        <hr>
+        <table>
+            <thead>
+                <tr>
+                    <th class="left">Desc.</th>
+                    <th class="right">Cant.</th>
+                    <th class="right">Total</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+
+    venta.productos.forEach(p => {
+        let descripcionCompleta = p.nombre;
+        if (p.marca && p.marca !== 'Desconocido') {
+            descripcionCompleta += ` ${p.marca}`;
+        }
+        if (p.color && p.color !== 'N/A') {
+            descripcionCompleta += ` ${p.color}`;
+        }
+        html += `
+            <tr>
+                <td colspan="3" class="left item-desc">${descripcionCompleta}</td>
+            </tr>
+            <tr class="item-line">
+                <td class="left">${formatCurrency(p.precio)}</td>
+                <td class="right">x${p.cantidad}</td>
+                <td class="right">${formatCurrency(p.cantidad * p.precio)}</td>
+            </tr>
+        `;
+    });
+
+    html += `
+            </tbody>
+        </table>
+        <hr>
+        <table>
+            <tbody>
+                <tr class="totals-row">
+                    <td>TOTAL:</td>
+                    <td>${formatCurrency(venta.total)}</td>
+                </tr>
+            </tbody>
+        </table>
+    `;
+
+    // Detalle de pagos
+    const pagosConMonto = Object.entries(venta.pagos).filter(([key, value]) => key !== 'recargoCredito' && value > 0);
+    if (pagosConMonto.length > 0) {
+        html += `<hr><p><strong>Forma de Pago:</strong></p>`;
+        pagosConMonto.forEach(([metodo, monto]) => {
+            const nombreMetodo = metodo.charAt(0).toUpperCase() + metodo.slice(1);
+            html += `<p>${nombreMetodo}: ${formatCurrency(monto)}</p>`;
+        });
+    }
+    
+    // Puntos de lealtad
+    const loyaltyConfig = appConfig.loyalty || {};
+    if (loyaltyConfig.printOnTicket && venta.loyalty) {
+        html += `<hr><div class="center"><p>Sumaste: ${venta.loyalty.puntosGanados} pts.</p><p>Saldo: ${venta.loyalty.puntosTotalSnapshot} pts.</p></div>`;
+    }
+
+    html += `
+        <hr>
+        <div class="center">
+            <p>¡Gracias por su compra!</p>
+        </div>
+    `;
+
+    ticketDocument.open();
+    ticketDocument.write(styles + html);
+    ticketDocument.close();
+
+    // Esperar a que el contenido del iframe esté completamente cargado
+    iframe.onload = () => {
+        ticketWindow.focus(); // Foco en la ventana de impresión
+        ticketWindow.print(); // Abrir diálogo de impresión
+        // Eliminar el iframe después de un tiempo para asegurar que el diálogo de impresión se procese
+        setTimeout(() => {
+            document.body.removeChild(iframe);
+        }, 1000);
+    };
+}
+
 
 let genericModalEl, genericModal;
 
