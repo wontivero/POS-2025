@@ -10,10 +10,12 @@ let ventas = [];
 let ventasFiltradasActivas = [];
 let commissionPercentage = 1; // Valor por defecto
 let rubrosSeleccionadosParaPagos = new Set();
+let datosReporteDiario = {};
 
 // --- Elementos del DOM (variables que se inicializarán en init) ---
 let reporteFechaDesde, reporteFechaHasta, btnGenerarReporte, btnQuitarFiltro, filtroReporteRubro, datalistRubrosReporte, filtroReporteVendedor, filtroReporteCliente, datalistClientesReporte;
 let reporteTotalVentas, reporteTotalGanancia, reporteNumVentas, reporteTicketPromedio, tablaVentasDetalleBody, tablaTopProductosBody, tablaVentasVendedorBody, commissionNote;
+let tablaReporteDiarioBody, tablaReporteDiarioFoot, btnExportarReporteDiario;
 let chartRubros, chartPagos, chartVentasTiempo, chartContadoPorRubro;
 
 const auth = getAuth();
@@ -121,10 +123,9 @@ function filtrarVentasPorRubrosSeleccionados() {
 }
 
 function actualizarGraficoPagos() {
-    const ventasParaGrafico = filtrarVentasPorRubrosSeleccionados();
     const datosPagos = { contado: 0, transferencia: 0, debito: 0, credito: 0 };
 
-    ventasParaGrafico.forEach(venta => {
+    ventasFiltradasActivas.forEach(venta => {
         const totalVenta = venta.total;
         if (totalVenta > 0 && Array.isArray(venta.productos)) {
             venta.productos.forEach(producto => {
@@ -139,7 +140,10 @@ function actualizarGraficoPagos() {
     });
 
     if (chartPagos) chartPagos.destroy();
-    const sortedPagos = Object.entries(datosPagos).sort(([, a], [, b]) => b - a);
+    
+    const fixedOrder = ['contado', 'transferencia', 'debito', 'credito'];
+    const sortedPagos = Object.entries(datosPagos).sort(([a], [b]) => fixedOrder.indexOf(a) - fixedOrder.indexOf(b));
+
     const ctxPagos = document.getElementById('chartPagos');
     const pagoColors = { contado: '#1cc88a', transferencia: '#4e73df', debito: '#858796', credito: '#f6c23e' };
 
@@ -149,10 +153,7 @@ function actualizarGraficoPagos() {
             type: 'doughnut',
             data: {
                 labels: sortedPagos.map(e => e[0].charAt(0).toUpperCase() + e[0].slice(1)),
-                datasets: [{
-                    data: sortedPagos.map(e => e[1]),
-                    backgroundColor: pagosChartColores
-                }]
+                datasets: [{ data: sortedPagos.map(e => e[1]), backgroundColor: pagosChartColores }]
             },
             options: { maintainAspectRatio: false, plugins: { legend: { display: false } } }
         });
@@ -359,6 +360,83 @@ function renderTablaDetalle(ventasParaMostrar) {
     });
 }
 
+function renderReporteDiario(ventasParaCalcular) {
+    if (!tablaReporteDiarioBody) return;
+
+    datosReporteDiario = {}; // Reset data
+
+    // 1. Agrupar y sumar por día
+    ventasParaCalcular.forEach(venta => {
+        // Usamos el campo 'fecha' que es YYYY-MM-DD
+        const fecha = venta.fecha;
+        if (!fecha) return;
+
+        if (!datosReporteDiario[fecha]) {
+            datosReporteDiario[fecha] = {
+                contado: 0,
+                transferencia: 0,
+                debito: 0,
+                credito: 0,
+                totalDia: 0
+            };
+        }
+
+        datosReporteDiario[fecha].contado += venta.pagos.contado || 0;
+        datosReporteDiario[fecha].transferencia += venta.pagos.transferencia || 0;
+        datosReporteDiario[fecha].debito += venta.pagos.debito || 0;
+        datosReporteDiario[fecha].credito += venta.pagos.credito || 0;
+        datosReporteDiario[fecha].totalDia += venta.total || 0;
+    });
+
+    // 2. Renderizar la tabla
+    tablaReporteDiarioBody.innerHTML = '';
+    const fechasOrdenadas = Object.keys(datosReporteDiario).sort();
+
+    if (fechasOrdenadas.length === 0) {
+        tablaReporteDiarioBody.innerHTML = '<tr><td colspan="6" class="text-center">No hay datos para el período seleccionado.</td></tr>';
+        tablaReporteDiarioFoot.innerHTML = '';
+        return;
+    }
+
+    let grandTotals = { contado: 0, transferencia: 0, debito: 0, credito: 0, totalDia: 0 };
+
+    fechasOrdenadas.forEach(fecha => {
+        const datosDia = datosReporteDiario[fecha];
+        const [year, month, day] = fecha.split('-');
+        const fechaFormateada = `${day}/${month}/${year}`;
+
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td><strong>${fechaFormateada}</strong></td>
+            <td class="text-end">${formatCurrency(datosDia.contado)}</td>
+            <td class="text-end">${formatCurrency(datosDia.transferencia)}</td>
+            <td class="text-end">${formatCurrency(datosDia.debito)}</td>
+            <td class="text-end">${formatCurrency(datosDia.credito)}</td>
+            <td class="text-end"><strong>${formatCurrency(datosDia.totalDia)}</strong></td>
+        `;
+        tablaReporteDiarioBody.appendChild(row);
+
+        // Sumar a los totales generales
+        grandTotals.contado += datosDia.contado;
+        grandTotals.transferencia += datosDia.transferencia;
+        grandTotals.debito += datosDia.debito;
+        grandTotals.credito += datosDia.credito;
+        grandTotals.totalDia += datosDia.totalDia;
+    });
+
+    // 3. Renderizar el footer con los totales
+    tablaReporteDiarioFoot.innerHTML = `
+        <tr class="table-dark fw-bold">
+            <td>TOTAL GENERAL</td>
+            <td class="text-end">${formatCurrency(grandTotals.contado)}</td>
+            <td class="text-end">${formatCurrency(grandTotals.transferencia)}</td>
+            <td class="text-end">${formatCurrency(grandTotals.debito)}</td>
+            <td class="text-end">${formatCurrency(grandTotals.credito)}</td>
+            <td class="text-end">${formatCurrency(grandTotals.totalDia)}</td>
+        </tr>
+    `;
+}
+
 function renderTopProductos(ventasParaCalcular) {
     if (!tablaTopProductosBody) return;
     tablaTopProductosBody.innerHTML = '';
@@ -459,7 +537,8 @@ function renderCharts(ventasParaCalcular) {
     }
 
     if (chartPagos) chartPagos.destroy();
-    const sortedPagos = Object.entries(datosPagos).sort(([, a], [, b]) => b - a);
+    const fixedOrder = ['contado', 'transferencia', 'debito', 'credito'];
+    const sortedPagos = Object.entries(datosPagos).sort(([a], [b]) => fixedOrder.indexOf(a) - fixedOrder.indexOf(b));
     const ctxPagos = document.getElementById('chartPagos');
     if (ctxPagos) {
         const pagosChartColores = sortedPagos.map(([metodo]) => pagoColors[metodo] || '#cccccc');
@@ -563,6 +642,7 @@ async function filtrarReporte() {
 
         renderTablaDetalle(ventasProcesadas);
         await renderReportes(ventasFiltradasActivas);
+        renderReporteDiario(ventasFiltradasActivas);
 
         renderFiltroRubrosPagos(ventasFiltradasActivas);
 
@@ -601,6 +681,61 @@ async function renderDatalistClientes() {
     datalistClientesReporte.innerHTML = clientes.map(c => `<option value="${c.nombre}"></option>`).join('');
 }
 
+function exportarReporteDiarioAExcel() {
+    const fechasOrdenadas = Object.keys(datosReporteDiario).sort();
+
+    if (fechasOrdenadas.length === 0) {
+        showAlertModal('No hay datos para exportar.', 'Reporte Vacío');
+        return;
+    }
+
+    const headers = ["Fecha", "Contado", "Transferencia", "Debito", "Credito", "Total Dia"];
+    
+    const data = fechasOrdenadas.map(fecha => {
+        const datosDia = datosReporteDiario[fecha];
+        const [year, month, day] = fecha.split('-');
+        const fechaFormateada = `${day}/${month}/${year}`;
+        return [
+            fechaFormateada,
+            datosDia.contado.toFixed(2),
+            datosDia.transferencia.toFixed(2),
+            datosDia.debito.toFixed(2),
+            datosDia.credito.toFixed(2),
+            datosDia.totalDia.toFixed(2)
+        ];
+    });
+
+    // Calcular totales
+    const grandTotals = data.reduce((totals, row) => {
+        totals[0] += parseFloat(row[1]);
+        totals[1] += parseFloat(row[2]);
+        totals[2] += parseFloat(row[3]);
+        totals[3] += parseFloat(row[4]);
+        totals[4] += parseFloat(row[5]);
+        return totals;
+    }, [0, 0, 0, 0, 0]);
+
+    // Agregar fila de totales al final
+    data.push(["TOTAL", grandTotals[0].toFixed(2), grandTotals[1].toFixed(2), grandTotals[2].toFixed(2), grandTotals[3].toFixed(2), grandTotals[4].toFixed(2)]);
+
+    const csvContent = [
+        headers.join(';'),
+        ...data.map(row => row.join(';'))
+    ].join('\n');
+
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const desde = reporteFechaDesde.value;
+    const hasta = reporteFechaHasta.value;
+    a.download = `reporte-diario-pagos_${desde}_a_${hasta}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
 export async function init() {
     reporteFechaDesde = document.getElementById('reporte-fecha-desde');
     reporteFechaHasta = document.getElementById('reporte-fecha-hasta');
@@ -620,12 +755,18 @@ export async function init() {
     tablaTopProductosBody = document.getElementById('tablaTopProductos');
     tablaVentasVendedorBody = document.getElementById('tabla-ventas-vendedor-body');
     commissionNote = document.getElementById('commission-note');
+    tablaReporteDiarioBody = document.getElementById('tabla-reporte-diario-body');
+    tablaReporteDiarioFoot = document.getElementById('tabla-reporte-diario-foot');
+    btnExportarReporteDiario = document.getElementById('btn-exportar-reporte-diario');
 
     btnGenerarReporte.addEventListener('click', filtrarReporte);
     btnQuitarFiltro.addEventListener('click', limpiarFiltros);
     filtroReporteRubro.addEventListener('input', filtrarReporte);
     filtroReporteCliente.addEventListener('input', filtrarReporte);
     if (filtroReporteVendedor) filtroReporteVendedor.addEventListener('change', filtrarReporte);
+    if (btnExportarReporteDiario) {
+        btnExportarReporteDiario.addEventListener('click', exportarReporteDiarioAExcel);
+    }
 
     const filtroPagosContainer = document.getElementById('filtro-rubros-pagos-container');
     if (filtroPagosContainer) {

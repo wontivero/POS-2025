@@ -283,4 +283,31 @@
             </div>
         </div>
     </div>
+
+    <div class="card shadow mb-4">
+        <div class="card-header py-3 bg-dark text-white d-flex justify-content-between align-items-center">
+            <h6 class="m-0 font-weight-bold">Desglose Diario por Medio de Pago</h6>
+            <button class="btn btn-sm btn-outline-light" id="btn-exportar-reporte-diario">
+                <i class="fas fa-file-excel me-2"></i>Exportar a Excel
+            </button>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-striped table-hover table-sm">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>Fecha</th>
+                            <th class="text-end">Contado</th>
+                            <th class="text-end">Transferencia</th>
+                            <th class="text-end">Débito</th>
+                            <th class="text-end">Crédito</th>
+                            <th class="text-end">Total del Día</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabla-reporte-diario-body"></tbody>
+                    <tfoot id="tabla-reporte-diario-foot"></tfoot>
+                </table>
+            </div>
+        </div>
+    </div>
 </section>
