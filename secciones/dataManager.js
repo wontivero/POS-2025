@@ -9,6 +9,7 @@ let marcas = [];
 let colores = [];
 let rubros = [];
 let appConfig = {}; // <-- NUEVO CACHÉ PARA LA CONFIGURACIÓN
+let clientes = []; // <-- NUEVO CACHÉ PARA CLIENTES
 
 // Banderas para asegurar que cada oyente se inicie una sola vez
 let listenersInicializados = {
@@ -17,6 +18,7 @@ let listenersInicializados = {
     colores: false,
     rubros: false,
     config: false, // <-- NUEVA BANDERA
+    clientes: false // <-- NUEVA BANDERA
 };
 
 // --- GETTERS (Funciones para obtener los datos del caché) ---
@@ -25,6 +27,7 @@ export const getMarcas = () => marcas;
 export const getColores = () => colores;
 export const getRubros = () => rubros;
 export const getAppConfig = () => appConfig; // <-- NUEVO GETTER
+export const getClientes = () => clientes; // <-- NUEVO GETTER
 
 // --- LISTENERS (Funciones para iniciar la escucha en tiempo real) ---
 
@@ -110,4 +113,22 @@ export function initConfigListener() {
     });
 
     listenersInicializados.config = true;
+}
+
+export function initClientesListener() {
+    if (listenersInicializados.clientes) return;
+    
+    console.log("Iniciando oyente para la colección: clientes...");
+    const q = query(collection(db, 'clientes'), orderBy('nombre'));
+    
+    onSnapshot(q, (snapshot) => {
+        const dataList = [];
+        snapshot.forEach(doc => {
+            dataList.push({ id: doc.id, ...doc.data() });
+        });
+        clientes = dataList;
+        console.log(`Caché de 'clientes' actualizado con ${dataList.length} items.`);
+        document.dispatchEvent(new CustomEvent('clientes-updated'));
+    });
+    listenersInicializados.clientes = true;
 }

@@ -252,6 +252,12 @@ async function handleFormSubmit(e) {
 async function addUniqueItem(collectionName, itemName) {
     if (!itemName) return;
     const itemNormalizado = normalizeString(itemName);
+    
+    // OPTIMIZACIÓN: Revisamos la caché local antes de gastar una lectura de BD
+    if (collectionName === 'marcas' && getMarcas().some(m => normalizeString(m) === itemNormalizado)) return;
+    if (collectionName === 'colores' && getColores().some(c => normalizeString(c) === itemNormalizado)) return;
+    if (collectionName === 'rubros' && getRubros().some(r => normalizeString(r) === itemNormalizado)) return;
+
     const itemRef = collection(db, collectionName);
     const q = query(itemRef, where('nombre', '==', itemNormalizado));
     const querySnapshot = await getDocs(q);
@@ -432,11 +438,11 @@ async function handleFileUpload(event) {
         let productosAgregados = 0, productosActualizados = 0;
         try {
             const batch = writeBatch(db);
-            const snapshotProductos = await getDocs(collection(db, 'productos'));
+            
+            // OPTIMIZACIÓN: Usamos los productos en caché en lugar de descargar la base entera de nuevo
             const productosExistentes = {};
-            snapshotProductos.forEach(doc => {
-                const data = doc.data();
-                if (data.codigo) productosExistentes[data.codigo] = { id: doc.id, ...data };
+            listaCompletaProductos.forEach(data => {
+                if (data.codigo) productosExistentes[data.codigo] = data;
             });
 
             const nuevasCategorias = { marcas: new Set(), colores: new Set(), rubros: new Set() };
@@ -566,11 +572,8 @@ async function handleCodigoBlur() {
     const idProductoActual = productoId.value;
     if (codigo === '') return;
 
-    const q = query(collection(db, 'productos'), where('codigo', '==', codigo));
-    const querySnapshot = await getDocs(q);
-
-    if (!querySnapshot.empty) {
-        const productoExistente = { id: querySnapshot.docs[0].id, ...querySnapshot.docs[0].data() };
+    const productoExistente = listaCompletaProductos.find(p => p.codigo === codigo);
+    if (productoExistente) {
         if (productoExistente.id === idProductoActual) return;
 
         productoCodigo.classList.add('is-invalid');

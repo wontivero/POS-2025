@@ -2,6 +2,7 @@ import { getFirestore, collection, query, orderBy, onSnapshot, doc, updateDoc, i
 import { getAuth } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-auth.js";
 import { showAlertModal, showConfirmationModal, formatCurrency } from '../utils.js';
 import { db } from '../firebase.js';
+import { getClientes } from './dataManager.js';
 
 let clientes = [];
 let tablaClientesBody, filtroInput, totalClientesCount, totalPuntosCirculantes;
@@ -67,12 +68,16 @@ export async function init() {
     document.getElementById('btnNuevoClienteSeccion')?.addEventListener('click', abrirModalNuevoCliente);
 
     // Listener en tiempo real para clientes
-    const q = query(collection(db, 'clientes'), orderBy('nombre'));
-    onSnapshot(q, (snapshot) => {
-        clientes = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    document.addEventListener('clientes-updated', () => {
+        clientes = getClientes();
         renderTabla();
         actualizarKPIs();
     });
+    
+    // Carga inicial local
+    clientes = getClientes();
+    renderTabla();
+    actualizarKPIs();
 }
 
 function actualizarKPIs() {

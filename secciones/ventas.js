@@ -3,7 +3,7 @@ import { init as initProductosModal } from './productos.js';
 import { haySesionActiva, getSesionActivaId, verificarEstadoCaja } from './caja.js';
 import { getFirestore, collection, onSnapshot, query, orderBy, runTransaction, doc, updateDoc, serverTimestamp, getDoc, increment } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
 import { getCollection, saveDocument, formatCurrency, getTodayDate, updateDocument, deleteDocument, getFormattedDateTime, generatePDF, printThermalTicket, showAlertModal, showConfirmationModal } from '../utils.js';
-import { getProductos, getAppConfig } from './dataManager.js'; // <-- Importamos getAppConfig
+import { getProductos, getAppConfig, getClientes } from './dataManager.js'; // <-- Importamos getClientes
 import { getActiveUserProfile } from '../userSession.js';
 
 const db = getFirestore();
@@ -73,15 +73,15 @@ async function loadData() {
     // Renderizamos los productos de acceso rápido con la lista que ya tenemos.
     renderQuickAccessProducts();
 
-    // Las otras cargas se mantienen igual.
-    await loadClientes();
+    // Cargamos clientes desde el caché local.
+    loadClientes();
     renderTicket();
 }
 
 
 
 async function loadClientes() {
-    clientes = await getCollection('clientes');
+    clientes = getClientes();
 
     // Comprobamos si "Consumidor Final" existe
     const consumidorFinalExiste = clientes.some(c => c.nombre === 'Consumidor Final');
@@ -91,7 +91,7 @@ async function loadClientes() {
         const nuevoCliente = { nombre: 'Consumidor Final', cuit: '99-99999999-9' };
         await saveDocument('clientes', nuevoCliente);
         // Volvemos a cargar la lista para incluir el recién creado
-        clientes = await getCollection('clientes');
+        clientes = getClientes(); // Firebase Snapshot actualizará pronto, lo llamamos de nuevo localmente
     }
 
     renderClientesList();
@@ -1332,6 +1332,16 @@ export async function init() {
         window.productosUpdateListenerAttached = true;
     }
 
+    // Oyente para actualizar clientes automáticamente desde la caché
+    if (!window.clientesUpdateListenerAttached) {
+        document.addEventListener('clientes-updated', () => {
+            console.log("Evento 'clientes-updated' recibido. Actualizando UI de Ventas...");
+            clientes = getClientes();
+            renderClientesList();
+            setDefaultCliente();
+        });
+        window.clientesUpdateListenerAttached = true;
+    }
 
     // 5. CARGAR DATOS (Sin cambios)
     await loadData();

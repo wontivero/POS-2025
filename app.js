@@ -8,7 +8,8 @@ import {
     initMarcasListener, 
     initColoresListener, 
     initRubrosListener,
-    initConfigListener // <-- 1. IMPORTAMOS EL NUEVO INICIALIZADOR
+    initConfigListener,
+    initClientesListener // <-- IMPORTAMOS EL OYENTE DE CLIENTES
 } from './secciones/dataManager.js';
 import { sessionManager, setActiveUserProfile } from './userSession.js';
 import { showAlertModal, showConfirmationModal } from './utils.js';
@@ -39,6 +40,7 @@ initMarcasListener();
 initColoresListener();
 initRubrosListener();
 initConfigListener(); // <-- 2. LO LLAMAMOS AL INICIO
+initClientesListener(); // <-- INICIAMOS CACHÉ DE CLIENTES
 
 // --- Nueva Función para obtener el Rol ---
 async function getUserProfile(user) {

@@ -2,7 +2,7 @@
 import { db } from '../firebase.js';
 import { collection, writeBatch, doc, getDocs, query, where, addDoc, orderBy, Timestamp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
 import { showAlertModal, showConfirmationModal, roundUpToNearest50, formatCurrency, normalizeString, capitalizeFirstLetter } from '../utils.js';
-import { getMarcas, getColores, getRubros } from './dataManager.js';
+import { getProductos, getMarcas, getColores, getRubros } from './dataManager.js';
 // --- ESTADO Y ELEMENTOS DEL DOM ---
 let productosEnPreparacion = [];
 let modoFormulario = 'nuevo';
@@ -388,14 +388,12 @@ async function verificarCodigoExistente(codigo, idExcluir = null) {
     if (enGrilla) return { existe: true, origen: 'la grilla de preparación' };
 
     // Luego busca en la base de datos
-    const q = query(collection(db, "productos"), where("codigo", "==", codigo));
-    const querySnapshot = await getDocs(q);
+    const productosEnBD = getProductos();
+    const docEncontrado = productosEnBD.find(p => p.codigo === codigo);
 
-    if (!querySnapshot.empty) {
-        const docEncontrado = querySnapshot.docs[0];
-        // IMPORTANTE: Comprueba si el ID encontrado es diferente al que estamos excluyendo
+    if (docEncontrado) {
         if (docEncontrado.id !== idExcluir) {
-            return { existe: true, origen: 'la base de datos', data: { id: docEncontrado.id, ...docEncontrado.data() } };
+            return { existe: true, origen: 'la base de datos', data: docEncontrado };
         }
     }
 
@@ -538,6 +536,12 @@ async function guardarTodoEnBD() {
 async function addUniqueItem(collectionName, itemName) {
     if (!itemName) return;
     const itemNormalizado = normalizeString(itemName);
+    
+    // OPTIMIZACIÓN: Revisar caché primero
+    if (collectionName === 'marcas' && getMarcas().some(m => normalizeString(m) === itemNormalizado)) return;
+    if (collectionName === 'colores' && getColores().some(c => normalizeString(c) === itemNormalizado)) return;
+    if (collectionName === 'rubros' && getRubros().some(r => normalizeString(r) === itemNormalizado)) return;
+
     const itemRef = collection(db, collectionName);
     const q = query(itemRef, where('nombre', '==', itemNormalizado));
     const querySnapshot = await getDocs(q);
