@@ -15,6 +15,7 @@ let companyNameInput, companyAddressInput, companyCuitInput, companyPhoneInput, 
 let saveCompanyButton;
 let autoPrintTicketCheck, savePrintingButton;
 let loyaltyPercentageInput, loyaltyPrintCheck, loyaltyExpirationCheck, loyaltyExpirationDaysInput, btnSaveLoyalty; // <-- NUEVO
+let arcaAutoContado, arcaAutoTransferencia, arcaAutoDebito, arcaAutoCredito, btnSaveArca; // <-- NUEVO ARCA
 // --- FIN DE LA MODIFICACIÓN ---
 
 /**
@@ -42,6 +43,14 @@ async function loadConfiguration() {
                     toggleExpirationInput();
                 }
                 if (loyaltyExpirationDaysInput) loyaltyExpirationDaysInput.value = configData.loyalty?.expirationDays || 365;
+            }
+
+            // Cargar configuración de ARCA
+            if (arcaAutoContado) {
+                arcaAutoContado.checked = configData.arca?.autoFacturar?.contado ?? false;
+                arcaAutoTransferencia.checked = configData.arca?.autoFacturar?.transferencia ?? false;
+                arcaAutoDebito.checked = configData.arca?.autoFacturar?.debito ?? false;
+                arcaAutoCredito.checked = configData.arca?.autoFacturar?.credito ?? false;
             }
 
             // Cargar configuración de la empresa
@@ -92,6 +101,28 @@ async function loadConfiguration() {
     } catch (error) {
         console.error("Error al cargar la configuración de comisión:", error);
         showAlertModal("No se pudo cargar la configuración de comisión.", "Error");
+    }
+}
+
+/**
+ * Guarda la configuración de facturación automática ARCA.
+ */
+async function saveArcaConfig() {
+    try {
+        await setDoc(configRef, { 
+            arca: {
+                autoFacturar: {
+                    contado: arcaAutoContado.checked,
+                    transferencia: arcaAutoTransferencia.checked,
+                    debito: arcaAutoDebito.checked,
+                    credito: arcaAutoCredito.checked
+                }
+            } 
+        }, { merge: true });
+        showAlertModal("Configuración de facturación automática ARCA guardada.", "Éxito");
+    } catch (error) {
+        console.error(error);
+        showAlertModal("Error al guardar configuración de ARCA.", "Error");
     }
 }
 
@@ -303,11 +334,18 @@ export async function init() {
     loyaltyExpirationDaysInput = document.getElementById('config-loyalty-expiration-days');
     btnSaveLoyalty = document.getElementById('btn-guardar-loyalty');
     
+    arcaAutoContado = document.getElementById('config-arca-auto-contado');
+    arcaAutoTransferencia = document.getElementById('config-arca-auto-transferencia');
+    arcaAutoDebito = document.getElementById('config-arca-auto-debito');
+    arcaAutoCredito = document.getElementById('config-arca-auto-credito');
+    btnSaveArca = document.getElementById('btn-guardar-arca');
+
     if (savePrintingButton) {
         savePrintingButton.addEventListener('click', savePrintingConfig);
     }
 
     if (btnSaveLoyalty) btnSaveLoyalty.addEventListener('click', saveLoyaltyConfig);
+    if (btnSaveArca) btnSaveArca.addEventListener('click', saveArcaConfig);
     if (loyaltyExpirationCheck) loyaltyExpirationCheck.addEventListener('change', toggleExpirationInput);
 
     saveCommissionButton.addEventListener('click', saveCommissionPercentage);

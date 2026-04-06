@@ -1,6 +1,6 @@
 // secciones/reportes.js
 import { getFirestore, collection, query, where, getDocs, orderBy, runTransaction, doc, getDoc } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
-import { getCollection, getDocumentById, formatCurrency, getTodayDate, generatePDF, printThermalTicket, showConfirmationModal, showAlertModal, normalizeString } from '../utils.js';
+import { getCollection, getDocumentById, formatCurrency, getTodayDate, generatePDF, printThermalTicket, showConfirmationModal, showAlertModal, normalizeString, facturarEnArca, marcarVentaFacturada } from '../utils.js';
 import { getAuth } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-auth.js";
 import { haySesionActiva, getSesionActivaId } from './caja.js';
 import { getCurrentUserRole } from '../app.js';
@@ -337,6 +337,15 @@ function renderTablaDetalle(ventasParaMostrar) {
         const fechaFormateada = venta.timestamp || 'Sin Fecha';
         const vendedorNombre = (venta.vendedor?.nombre || 'Desconocido').split(' ')[0];
 
+        let arcaBtnHtml = '';
+        if (isAnulada) {
+            arcaBtnHtml = `<button class="btn btn-sm btn-outline-secondary" disabled title="Venta Anulada"><i class="fas fa-ban"></i></button>`;
+        } else if (venta.facturadoEnArca) {
+            arcaBtnHtml = `<button class="btn btn-sm btn-success" disabled title="Facturado en ARCA"><i class="fas fa-check-circle"></i></button>`;
+        } else {
+            arcaBtnHtml = `<button class="btn btn-sm btn-primary btn-facturar-arca" data-id="${venta.id}" title="Generar Factura ARCA"><i class="fas fa-file-invoice-dollar"></i></button>`;
+        }
+
         row.innerHTML = `
             <td>${fechaFormateada} ${isAnulada ? '<span class="badge bg-danger ms-2">ANULADA</span>' : ''}</td>
             <td>${listaProductos}</td>
@@ -351,6 +360,7 @@ function renderTablaDetalle(ventasParaMostrar) {
                 <button class="btn btn-sm btn-info btn-ver-detalle" data-id="${venta.id}" title="Ver Detalle"><i class="fas fa-eye"></i></button>
                 <button class="btn btn-sm btn-secondary btn-pdf" data-id="${venta.id}" title="Generar PDF"><i class="fas fa-file-pdf"></i></button>
                 <button class="btn btn-sm btn-success btn-print-thermal" data-id="${venta.id}" title="Imprimir Ticket Térmico"><i class="fas fa-print"></i></button>
+                ${arcaBtnHtml}
                 <button class="btn btn-sm btn-warning btn-anular-venta" data-id="${venta.id}" title="Anular y Corregir Venta" ${isAnulada ? 'disabled' : ''}>
                     <i class="fas fa-undo"></i>
                 </button>
@@ -788,6 +798,7 @@ export async function init() {
         const pdfBtn = e.target.closest('.btn-pdf');
         const thermalBtn = e.target.closest('.btn-print-thermal');
         const anularBtn = e.target.closest('.btn-anular-venta');
+        const arcaBtn = e.target.closest('.btn-facturar-arca');
 
         if (detalleBtn) {
             const ventaId = detalleBtn.dataset.id;
@@ -811,6 +822,22 @@ export async function init() {
                         <span class="fw-bold">${formatCurrency(p.precio * p.cantidad)}</span>
                     </li>
                 `).join('');
+
+                let afipHtml = '';
+                if (venta.facturadoEnArca && venta.arcaData && venta.arcaData.CAE) {
+                    const cbtNro = venta.arcaData.CbteNro.toString().padStart(8, '0');
+                    const vtoStr = venta.arcaData.CAEFchVto || '';
+                    const vtoFormat = vtoStr.length === 8 ? `${vtoStr.substring(6,8)}/${vtoStr.substring(4,6)}/${vtoStr.substring(0,4)}` : vtoStr;
+                    afipHtml = `
+                        <hr class="my-3">
+                        <h6><i class="fas fa-file-invoice me-2 text-info"></i>DATOS AFIP</h6>
+                        <div class="row bg-light pt-2 pb-2 rounded">
+                            <div class="col-6">Comprobante N°:</div><div class="col-6 text-end fw-bold">0001-${cbtNro}</div>
+                            <div class="col-6">CAE:</div><div class="col-6 text-end fw-bold">${venta.arcaData.CAE}</div>
+                            <div class="col-6">Vto CAE:</div><div class="col-6 text-end fw-bold">${vtoFormat}</div>
+                        </div>
+                    `;
+                }
 
                 modalBody.innerHTML = `
                     <div class="row">
@@ -844,6 +871,8 @@ export async function init() {
                         <div class="col-6">Crédito:</div>
                         <div class="col-6 text-end fw-bold">${formatCurrency(venta.pagos.credito)}</div>
                     </div>
+                    ${afipHtml}
+                    <hr class="my-3">
                 `;
                 new bootstrap.Modal(document.getElementById('ticketModal')).show();
             }
@@ -858,6 +887,33 @@ export async function init() {
         } else if (anularBtn) {
             const ventaId = anularBtn.dataset.id;
             anularVenta(ventaId);
+        } else if (arcaBtn) {
+            const ventaId = arcaBtn.dataset.id;
+            const venta = ventas.find(v => v.id === ventaId);
+            if (!venta) return;
+
+            const confirmado = await showConfirmationModal(
+                `¿Deseas generar la factura electrónica en ARCA para la Venta #${venta.ticketId} por <strong>${formatCurrency(venta.total)}</strong>?`,
+                "Facturar en ARCA"
+            );
+            
+            if (confirmado) {
+                const originalHtml = arcaBtn.innerHTML;
+                arcaBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+                arcaBtn.disabled = true;
+
+                const result = await facturarEnArca(venta.total);
+                if (result.success) {
+                    await marcarVentaFacturada(venta.id, result.data);
+                    venta.facturadoEnArca = true;
+                    venta.arcaData = result.data;
+                    arcaBtn.outerHTML = `<button class="btn btn-sm btn-success" disabled title="Facturado en ARCA"><i class="fas fa-check-circle"></i></button>`;
+                } else {
+                    await showAlertModal('Error al facturar: ' + result.error, 'Error');
+                    arcaBtn.innerHTML = originalHtml;
+                    arcaBtn.disabled = false;
+                }
+            }
         }
     });
 

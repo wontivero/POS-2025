@@ -160,6 +160,43 @@ export function capitalizeFirstLetter(str) {
     return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
+function getAfipQrUrl(venta, appConfig) {
+    if (!venta.facturadoEnArca || !venta.arcaData || !venta.arcaData.CAE) return null;
+    const companyInfo = appConfig.companyInfo || {};
+    const cuitEmisor = parseInt((companyInfo.cuit || "0").replace(/\D/g, ''));
+    
+    let tipoDocRec = 99;
+    let nroDocRec = 0;
+    if (venta.cliente && venta.cliente.cuit) {
+        const cleanId = venta.cliente.cuit.replace(/\D/g, '');
+        if (cleanId.length === 11) {
+            tipoDocRec = 80; // CUIT
+        } else if (cleanId.length >= 7) {
+            tipoDocRec = 96; // DNI
+        }
+        nroDocRec = parseInt(cleanId) || 0;
+    }
+
+    const qrData = {
+        ver: 1,
+        fecha: venta.fecha,
+        cuit: cuitEmisor,
+        ptoVta: 1,
+        tipoCmp: 11, // Factura C (por defecto)
+        nroCmp: parseInt(venta.arcaData.CbteNro) || 0,
+        importe: parseFloat(venta.total.toFixed(2)),
+        moneda: "PES",
+        ctz: 1,
+        tipoDocRec: tipoDocRec,
+        nroDocRec: nroDocRec,
+        tipoCodAut: "E",
+        codAut: parseInt(venta.arcaData.CAE)
+    };
+
+    const qrBase64 = btoa(JSON.stringify(qrData));
+    return `https://www.afip.gob.ar/fe/qr/?p=${qrBase64}`;
+}
+
 // ** FUNCIÓN MODIFICADA PARA EL NUEVO LAYOUT **
 // REEMPLAZAR en utils.js
 export async function generatePDF(ticketId, venta) {
@@ -240,6 +277,33 @@ export async function generatePDF(ticketId, venta) {
             }
         } catch (e) { console.error("No se pudo cargar el logo:", e); }
     }
+
+    // --- INICIO DE CARGA DE QR AFIP ---
+    let afipQrBase64 = null;
+    if (venta.facturadoEnArca && venta.arcaData && venta.arcaData.CAE) {
+        try {
+            const qrUrl = getAfipQrUrl(venta, appConfig);
+            if (qrUrl) {
+                const qrImgUrl = `https://quickchart.io/qr?text=${encodeURIComponent(qrUrl)}&size=150`;
+                await new Promise((resolve) => {
+                    const img = new Image();
+                    img.crossOrigin = "Anonymous";
+                    img.src = qrImgUrl;
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        canvas.width = img.width;
+                        canvas.height = img.height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0);
+                        afipQrBase64 = canvas.toDataURL('image/png');
+                        resolve();
+                    };
+                    img.onerror = () => resolve();
+                });
+            }
+        } catch (e) { console.error("Error cargando QR AFIP", e); }
+    }
+    // --- FIN DE CARGA DE QR AFIP ---
 
     const boxSize = 10;
     const boxX = (pageWidth / 2) - (boxSize / 2);
@@ -359,6 +423,31 @@ export async function generatePDF(ticketId, venta) {
         y += lineHeight;
     }
     // --------------------------------
+
+    // --- SECCIÓN AFIP (ARCA) ---
+    if (venta.facturadoEnArca && venta.arcaData && venta.arcaData.CAE) {
+        doc.line(margin, y, pageWidth - margin, y);
+        y += lineHeight;
+        drawText('Comprobante Electrónico AFIP', pageWidth / 2, y, 11, 'bold', 'center');
+        y += lineHeight;
+        
+        const cbtNro = venta.arcaData.CbteNro.toString().padStart(8, '0');
+        drawText(`Factura Nro: 0001-${cbtNro}`, pageWidth / 2, y, 10, 'normal', 'center');
+        y += lineHeight;
+        
+        const vtoStr = venta.arcaData.CAEFchVto || '';
+        const vtoFormat = vtoStr.length === 8 ? `${vtoStr.substring(6,8)}/${vtoStr.substring(4,6)}/${vtoStr.substring(0,4)}` : vtoStr;
+        drawText(`CAE: ${venta.arcaData.CAE}  Vto: ${vtoFormat}`, pageWidth / 2, y, 10, 'normal', 'center');
+        y += lineHeight;
+
+        if (afipQrBase64) {
+            const qrSize = 30;
+            doc.addImage(afipQrBase64, 'PNG', (pageWidth / 2) - (qrSize / 2), y, qrSize, qrSize);
+            y += qrSize + lineHeight;
+        }
+    }
+    // --------------------------------
+
     doc.line(margin, y, pageWidth - margin, y);
     
     y += lineHeight;
@@ -381,6 +470,33 @@ export async function generatePDF(ticketId, venta) {
 export async function printThermalTicket(ticketId, venta) {
     const appConfig = getAppConfig();
     const companyInfo = appConfig.companyInfo || {};
+
+    // --- INICIO DE CARGA DE QR AFIP ---
+    let afipQrBase64 = '';
+    if (venta.facturadoEnArca && venta.arcaData && venta.arcaData.CAE) {
+        try {
+            const qrUrl = getAfipQrUrl(venta, appConfig);
+            if (qrUrl) {
+                const qrImgUrl = `https://quickchart.io/qr?text=${encodeURIComponent(qrUrl)}&size=150`;
+                await new Promise((resolve) => {
+                    const img = new Image();
+                    img.crossOrigin = "Anonymous";
+                    img.src = qrImgUrl;
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        canvas.width = img.width;
+                        canvas.height = img.height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0);
+                        afipQrBase64 = canvas.toDataURL('image/png');
+                        resolve();
+                    };
+                    img.onerror = () => resolve();
+                });
+            }
+        } catch (e) { console.error("Error cargando QR AFIP", e); }
+    }
+    // --- FIN DE CARGA DE QR AFIP ---
 
     // Crear un iframe oculto para no molestar al usuario
     const iframe = document.createElement('iframe');
@@ -510,6 +626,20 @@ export async function printThermalTicket(ticketId, venta) {
     const loyaltyConfig = appConfig.loyalty || {};
     if (loyaltyConfig.printOnTicket && venta.loyalty) {
         html += `<hr><div class="center"><p>Sumaste: ${venta.loyalty.puntosGanados} pts.</p><p>Saldo: ${venta.loyalty.puntosTotalSnapshot} pts.</p></div>`;
+    }
+
+    if (venta.facturadoEnArca && venta.arcaData && venta.arcaData.CAE) {
+        const cbtNro = venta.arcaData.CbteNro.toString().padStart(8, '0');
+        const vtoStr = venta.arcaData.CAEFchVto || '';
+        const vtoFormat = vtoStr.length === 8 ? `${vtoStr.substring(6,8)}/${vtoStr.substring(4,6)}/${vtoStr.substring(0,4)}` : vtoStr;
+        
+        html += `<hr><div class="center">
+            <p><strong>Comprobante AFIP</strong></p>
+            <p>Factura N°: 0001-${cbtNro}</p>
+            <p>CAE: ${venta.arcaData.CAE}</p>
+            <p>Vto CAE: ${vtoFormat}</p>
+            ${afipQrBase64 ? `<p><img src="${afipQrBase64}" style="width:120px; height:120px; margin-top:5px;" /></p>` : ''}
+        </div>`;
     }
 
     html += `
@@ -684,4 +814,69 @@ export function roundUpToNearest50(num) {
 export function normalizeString(str) {
     if (!str || typeof str !== 'string') return '';
     return str.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
+// =========================================================================
+// --- INTEGRACIÓN ARCA (FACTURACIÓN ELECTRÓNICA) ---
+// =========================================================================
+
+const ARCA_CONFIG = {
+    baseUrl: 'http://localhost:8000',
+    cuit: '20308436609', // Reemplazar con el CUIT real
+    apiKey: 'oowwv--ozR4LBiukYPD2mmL2c0bPERcbcAIvnzcGi_I', // Reemplazar con la llave real
+    isProd: false
+};
+
+export async function facturarEnArca(total) {
+    const url = `${ARCA_CONFIG.baseUrl}/invoices/authorize?cuit=${ARCA_CONFIG.cuit}&prod=${ARCA_CONFIG.isProd}`;
+    const payload = {
+        PtoVta: 1,
+        Concepto: 1,
+        ImpTotal: parseFloat(total.toFixed(2)),
+        ImpNeto: parseFloat(total.toFixed(2))
+    };
+
+    try {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-API-Key': ARCA_CONFIG.apiKey
+            },
+            body: JSON.stringify(payload)
+        });
+
+        // Primero leemos la respuesta como texto crudo para evitar que colapse si está vacía
+        const textData = await response.text();
+        console.log("=== RESPUESTA CRUDA DE ARCA ===", textData);
+        let parsedData = {};
+        try {
+            parsedData = textData ? JSON.parse(textData) : {};
+            console.log("=== RESPUESTA PARSEADA JSON ===", parsedData);
+        } catch (e) {
+            console.warn("La respuesta de la API no es JSON:", textData);
+            parsedData = { rawResponse: textData };
+        }
+
+        if (!response.ok) {
+            throw new Error(parsedData.detail || 'Error al comunicarse con la API de ARCA');
+        }
+
+        return { success: true, data: parsedData };
+    } catch (error) {
+        console.error("Error ARCA:", error);
+        return { success: false, error: error.message };
+    }
+}
+
+export async function marcarVentaFacturada(docId, arcaData) {
+    try {
+        const docRef = doc(db, 'ventas', docId);
+        await updateDoc(docRef, {
+            facturadoEnArca: true,
+            arcaData: arcaData || {}
+        });
+    } catch (error) {
+        console.error("Error actualizando estado de facturación en la BD:", error);
+    }
 }

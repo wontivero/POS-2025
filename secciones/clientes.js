@@ -177,6 +177,7 @@ async function cargarHistorialUnificado(cliente) {
         // Procesar Ventas
         snapshotVentas.forEach(doc => {
             const v = doc.data();
+            v.docId = doc.id; // Conservar el ID del documento
             movimientos.push({
                 tipo: 'venta',
                 fechaObj: parseFechaString(v.timestamp), // Función auxiliar abajo
@@ -367,6 +368,22 @@ function mostrarDetalleTicket(venta) {
         </li>
     `).join('');
 
+    let afipHtml = '';
+    if (venta.facturadoEnArca && venta.arcaData && venta.arcaData.CAE) {
+        const cbtNro = venta.arcaData.CbteNro.toString().padStart(8, '0');
+        const vtoStr = venta.arcaData.CAEFchVto || '';
+        const vtoFormat = vtoStr.length === 8 ? `${vtoStr.substring(6,8)}/${vtoStr.substring(4,6)}/${vtoStr.substring(0,4)}` : vtoStr;
+        afipHtml = `
+            <hr class="my-3">
+            <h6><i class="fas fa-file-invoice me-2 text-info"></i>DATOS AFIP</h6>
+            <div class="row bg-light pt-2 pb-2 rounded">
+                <div class="col-6">Comprobante N°:</div><div class="col-6 text-end fw-bold">0001-${cbtNro}</div>
+                <div class="col-6">CAE:</div><div class="col-6 text-end fw-bold">${venta.arcaData.CAE}</div>
+                <div class="col-6">Vto CAE:</div><div class="col-6 text-end fw-bold">${vtoFormat}</div>
+            </div>
+        `;
+    }
+
     modalBody.innerHTML = `
         <div class="row">
             <div class="col-md-7">
@@ -383,6 +400,7 @@ function mostrarDetalleTicket(venta) {
                 <span class="badge ${estadoBadgeClass}">${estadoTexto}</span>
             </div>
         </div>
+        ${afipHtml}
         <hr class="my-3">
         <h6><i class="fas fa-boxes me-2 text-muted"></i>PRODUCTOS</h6>
         <ul class="list-group list-group-flush mb-3">
@@ -395,8 +413,37 @@ function mostrarDetalleTicket(venta) {
             <div class="col-6">Débito:</div><div class="col-6 text-end fw-bold">${formatCurrency(venta.pagos?.debito || 0)}</div>
             <div class="col-6">Crédito:</div><div class="col-6 text-end fw-bold">${formatCurrency(venta.pagos?.credito || 0)}</div>
         </div>
+        <hr class="my-3">
+        <div id="arca-container-ticket" class="text-center"></div>
     `;
     
+    const arcaContainer = document.getElementById('arca-container-ticket');
+    if (arcaContainer) {
+        if (venta.facturadoEnArca) {
+            arcaContainer.innerHTML = '<span class="badge bg-info p-2"><i class="fas fa-check-circle"></i> Facturado en ARCA</span>';
+        } else {
+            arcaContainer.innerHTML = '<button id="btn-facturar-arca-historial" class="btn btn-info text-white"><i class="fas fa-file-invoice"></i> Emitir Factura ARCA</button>';
+            const btnFacturar = document.getElementById('btn-facturar-arca-historial');
+            btnFacturar.addEventListener('click', async () => {
+                btnFacturar.disabled = true;
+                btnFacturar.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Procesando...';
+                
+                const { facturarEnArca, marcarVentaFacturada } = await import('../utils.js');
+                const result = await facturarEnArca(venta.total);
+                
+                if (result.success) {
+                    await marcarVentaFacturada(venta.docId, result.data);
+                    venta.facturadoEnArca = true;
+                    arcaContainer.innerHTML = '<span class="badge bg-info p-2"><i class="fas fa-check-circle"></i> Facturado en ARCA</span>';
+                } else {
+                    alert('Error al facturar: ' + result.error);
+                    btnFacturar.disabled = false;
+                    btnFacturar.innerHTML = '<i class="fas fa-file-invoice"></i> Reintentar Facturar ARCA';
+                }
+            });
+        }
+    }
+
     // Abrimos el modal. Como ya tenemos bootstrap disponible globalmente:
     const ticketModal = new bootstrap.Modal(document.getElementById('ticketModal'));
     ticketModal.show();

@@ -122,6 +122,34 @@
         </div>
     </div>
 
+    <!-- INICIO DE LA MODIFICACIÓN: Configuración de Facturación Automática ARCA -->
+    <div class="card shadow-sm mb-4 mt-4">
+        <div class="card-header bg-info text-white">
+            <h5 class="mb-0"><i class="fas fa-file-invoice me-2"></i>Facturación Automática ARCA</h5>
+        </div>
+        <div class="card-body">
+            <p class="text-muted mb-3">Selecciona qué métodos de pago generarán la factura electrónica automáticamente al finalizar la venta.</p>
+            <div class="form-check form-switch mb-2">
+                <input class="form-check-input" type="checkbox" id="config-arca-auto-contado">
+                <label class="form-check-label" for="config-arca-auto-contado">Efectivo / Contado</label>
+            </div>
+            <div class="form-check form-switch mb-2">
+                <input class="form-check-input" type="checkbox" id="config-arca-auto-transferencia">
+                <label class="form-check-label" for="config-arca-auto-transferencia">Transferencia Bancaria</label>
+            </div>
+            <div class="form-check form-switch mb-2">
+                <input class="form-check-input" type="checkbox" id="config-arca-auto-debito">
+                <label class="form-check-label" for="config-arca-auto-debito">Tarjeta de Débito</label>
+            </div>
+            <div class="form-check form-switch mb-4">
+                <input class="form-check-input" type="checkbox" id="config-arca-auto-credito">
+                <label class="form-check-label" for="config-arca-auto-credito">Tarjeta de Crédito</label>
+            </div>
+            <button id="btn-guardar-arca" class="btn btn-info text-white"><i class="fas fa-save me-2"></i>Guardar Configuración ARCA</button>
+        </div>
+    </div>
+    <!-- FIN DE LA MODIFICACIÓN -->
+
     <!-- INICIO DE LA MODIFICACIÓN: Gestión de Usuarios -->
     <div class="card shadow-sm mt-4">
         <div class="card-header bg-dark text-white">

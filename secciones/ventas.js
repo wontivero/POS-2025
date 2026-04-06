@@ -2,7 +2,7 @@
 import { init as initProductosModal } from './productos.js';
 import { haySesionActiva, getSesionActivaId, verificarEstadoCaja } from './caja.js';
 import { getFirestore, collection, onSnapshot, query, orderBy, runTransaction, doc, updateDoc, serverTimestamp, getDoc, increment } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
-import { getCollection, saveDocument, formatCurrency, getTodayDate, updateDocument, deleteDocument, getFormattedDateTime, generatePDF, printThermalTicket, showAlertModal, showConfirmationModal } from '../utils.js';
+import { getCollection, saveDocument, formatCurrency, getTodayDate, updateDocument, deleteDocument, getFormattedDateTime, generatePDF, printThermalTicket, showAlertModal, showConfirmationModal, facturarEnArca, marcarVentaFacturada } from '../utils.js';
 import { getProductos, getAppConfig, getClientes } from './dataManager.js'; // <-- Importamos getClientes
 import { getActiveUserProfile } from '../userSession.js';
 
@@ -771,6 +771,8 @@ async function finalizarVenta() {
                 ticketId: ticketNumber,
                 cliente: clienteSeleccionado,
                 vendedor: vendedorInfo, // <-- AÑADIMOS EL VENDEDOR
+                facturadoEnArca: false, // <-- NUEVO ESTADO DE FACTURACION
+                arcaData: null,
                 productos: productosParaGuardar.map(item => ({
                     id: item.id, nombre: item.nombre, precio: item.precio, costo: item.costo, cantidad: item.cantidad,
                     rubro: productos.find(p => p.id === item.id)?.rubro || 'Desconocido',
@@ -824,8 +826,29 @@ async function finalizarVenta() {
             const newVentaRef = doc(collection(db, 'ventas'));
             transaction.set(newVentaRef, nuevaVenta);
             
-            ventaData = { id: ticketNumber, data: nuevaVenta };
+            ventaData = { id: ticketNumber, data: nuevaVenta, docId: newVentaRef.id };
         });
+
+        // --- INICIO DE AUTO-FACTURACIÓN ARCA ---
+        const arcaConfig = appConfig.arca?.autoFacturar || {};
+        const autoFacturar = (
+            (ventaData.data.pagos.contado > 0 && arcaConfig.contado) ||
+            (ventaData.data.pagos.transferencia > 0 && arcaConfig.transferencia) ||
+            (ventaData.data.pagos.debito > 0 && arcaConfig.debito) ||
+            (ventaData.data.pagos.credito > 0 && arcaConfig.credito)
+        );
+
+        if (autoFacturar) {
+            const result = await facturarEnArca(ventaData.data.total);
+            if (result.success) {
+                await marcarVentaFacturada(ventaData.docId, result.data);
+                ventaData.data.facturadoEnArca = true;
+                ventaData.data.arcaData = result.data;
+            } else {
+                await showAlertModal('La venta se guardó, pero hubo un error al facturar automáticamente en ARCA: ' + result.error, 'Aviso: Error ARCA');
+            }
+        }
+        // --- FIN DE AUTO-FACTURACIÓN ARCA ---
 
         // --- INICIO DE LA MODIFICACIÓN: Auto-impresión ---
         const printingConfig = appConfig.printing || {};
@@ -1172,6 +1195,67 @@ export async function init() {
         const okButton = document.getElementById('btnConfirmacionVentaOK');
         if (okButton) okButton.focus();
         startVentaExitosaCountdown();
+
+        // --- INICIO INTEGRACION ARCA ---
+        let btnFacturar = document.getElementById('btnFacturarArcaModal');
+        if (!btnFacturar) {
+            btnFacturar = document.createElement('button');
+            btnFacturar.id = 'btnFacturarArcaModal';
+            btnFacturar.className = 'btn btn-info text-white px-4 py-2 shadow-sm';
+            btnFacturar.innerHTML = '<i class="fas fa-file-invoice"></i> Facturar en ARCA';
+
+            const wrapper = document.createElement('div');
+            wrapper.className = 'w-100 text-center mb-3';
+            wrapper.id = 'arcaWrapperModal';
+            wrapper.appendChild(btnFacturar);
+            
+            const footer = document.querySelector('#confirmacionVentaModal .modal-footer');
+            if (footer) {
+                footer.classList.add('gap-2'); // Mejora la separación visual de los botones a la derecha
+                footer.prepend(wrapper);
+            }
+        }
+
+        if (ventaData && ventaData.data.facturadoEnArca) {
+            btnFacturar.outerHTML = '<span id="btnFacturarArcaModal" class="badge bg-info p-3 fs-6 shadow-sm"><i class="fas fa-check"></i> Facturado en ARCA</span>';
+        } else {
+            if (btnFacturar.tagName !== 'BUTTON') {
+                const newBtn = document.createElement('button');
+                newBtn.id = 'btnFacturarArcaModal';
+                newBtn.className = 'btn btn-info text-white px-4 py-2 shadow-sm';
+                btnFacturar.replaceWith(newBtn);
+                btnFacturar = newBtn;
+            }
+            
+            btnFacturar.disabled = false;
+            btnFacturar.innerHTML = '<i class="fas fa-file-invoice"></i> Facturar en ARCA';
+            
+            btnFacturar.onclick = async () => {
+                if (!ventaData) return;
+                
+                if (typeof ventaExitosaTimer !== 'undefined' && ventaExitosaTimer) {
+                    clearInterval(ventaExitosaTimer);
+                    const countdownElement = document.getElementById('venta-exitosa-countdown');
+                    if (countdownElement) countdownElement.style.display = 'none';
+                }
+
+                btnFacturar.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Procesando...';
+                btnFacturar.disabled = true;
+                
+                const result = await facturarEnArca(ventaData.data.total);
+                if (result.success) {
+                    await marcarVentaFacturada(ventaData.docId, result.data);
+                    ventaData.data.facturadoEnArca = true;
+                    ventaData.data.arcaData = result.data; // <-- INYECTAMOS EL CAE AL INSTANTE
+                    btnFacturar.outerHTML = '<span id="btnFacturarArcaModal" class="badge bg-info p-3 fs-6 shadow-sm"><i class="fas fa-check"></i> Facturado en ARCA</span>';
+                } else {
+                    await showAlertModal('Error al facturar: ' + result.error);
+                    btnFacturar.innerHTML = '<i class="fas fa-file-invoice"></i> Reintentar Facturar';
+                    btnFacturar.disabled = false;
+                }
+            };
+        }
+        // --- FIN INTEGRACION ARCA ---
     });
 
     confirmacionVentaModal.addEventListener('hidden.bs.modal', () => {
