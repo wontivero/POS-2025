@@ -839,7 +839,7 @@ async function finalizarVenta() {
         );
 
         if (autoFacturar) {
-            const result = await facturarEnArca(ventaData.data.total);
+            const result = await facturarEnArca(ventaData.data);
             if (result.success) {
                 await marcarVentaFacturada(ventaData.docId, result.data);
                 ventaData.data.facturadoEnArca = true;
@@ -1239,16 +1239,19 @@ export async function init() {
                     if (countdownElement) countdownElement.style.display = 'none';
                 }
 
-                btnFacturar.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Procesando...';
+                btnFacturar.classList.add('btn-conectando-afip');
+                btnFacturar.innerHTML = '<span class="spinner-grow spinner-grow-sm me-2"></span>Conectando con AFIP...';
                 btnFacturar.disabled = true;
                 
-                const result = await facturarEnArca(ventaData.data.total);
+                const result = await facturarEnArca(ventaData.data);
                 if (result.success) {
+                    btnFacturar.classList.remove('btn-conectando-afip');
                     await marcarVentaFacturada(ventaData.docId, result.data);
                     ventaData.data.facturadoEnArca = true;
                     ventaData.data.arcaData = result.data; // <-- INYECTAMOS EL CAE AL INSTANTE
                     btnFacturar.outerHTML = '<span id="btnFacturarArcaModal" class="badge bg-info p-3 fs-6 shadow-sm"><i class="fas fa-check"></i> Facturado en ARCA</span>';
                 } else {
+                    btnFacturar.classList.remove('btn-conectando-afip');
                     await showAlertModal('Error al facturar: ' + result.error);
                     btnFacturar.innerHTML = '<i class="fas fa-file-invoice"></i> Reintentar Facturar';
                     btnFacturar.disabled = false;

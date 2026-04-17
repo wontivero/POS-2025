@@ -352,3 +352,15 @@ body.generic-modal-is-open .modal-backdrop.show {
     overflow-y: auto; /* Scroll vertical */
     border: 1px solid #dee2e6;
 }
+
+@keyframes pulse-afip {
+    0% { opacity: 1; box-shadow: 0 0 0 0 rgba(13, 202, 240, 0.7); }
+    70% { opacity: 0.85; box-shadow: 0 0 0 10px rgba(13, 202, 240, 0); }
+    100% { opacity: 1; box-shadow: 0 0 0 0 rgba(13, 202, 240, 0); }
+}
+.btn-conectando-afip {
+    animation: pulse-afip 1.5s infinite;
+    background-color: #0dcaf0 !important;
+    border-color: #0dcaf0 !important;
+    color: white !important;
+}

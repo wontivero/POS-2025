@@ -823,18 +823,35 @@ export function normalizeString(str) {
 const ARCA_CONFIG = {
     baseUrl: 'http://localhost:8000',
     cuit: '20308436609', // Reemplazar con el CUIT real
-    apiKey: 'oowwv--ozR4LBiukYPD2mmL2c0bPERcbcAIvnzcGi_I', // Reemplazar con la llave real
+    apiKey: 'N7rVA5qHhlNmL1yzMa8TdtOkVwgjKEM6Uat8Wi8SUmA', // Reemplazar con la llave real
     isProd: false
 };
 
-export async function facturarEnArca(total) {
+export async function facturarEnArca(venta) {
     const url = `${ARCA_CONFIG.baseUrl}/invoices/authorize?cuit=${ARCA_CONFIG.cuit}&prod=${ARCA_CONFIG.isProd}`;
     const payload = {
         PtoVta: 1,
         Concepto: 1,
-        ImpTotal: parseFloat(total.toFixed(2)),
-        ImpNeto: parseFloat(total.toFixed(2))
+        ImpTotal: parseFloat(venta.total.toFixed(2)),
+        ImpNeto: parseFloat(venta.total.toFixed(2)),
+        Items: (venta.productos || []).map(p => ({
+            Descripcion: p.nombre.substring(0, 100), // AFIP limita los caracteres a veces
+            Cantidad: parseFloat(p.cantidad),
+            PrecioUnitario: parseFloat(p.precio.toFixed(2)),
+            Subtotal: parseFloat((p.precio * p.cantidad).toFixed(2))
+        }))
     };
+
+    // Si hay un cliente asignado y no es el Consumidor Final genérico
+    if (venta.cliente && venta.cliente.cuit && venta.cliente.nombre !== 'Consumidor Final') {
+        const cleanId = venta.cliente.cuit.replace(/\D/g, '');
+        if (cleanId.length > 0) {
+            payload.DocNro = parseInt(cleanId);
+            payload.DocTipo = cleanId.length === 11 ? 80 : 96; // 80: CUIT, 96: DNI
+            payload.ReceptorNombre = venta.cliente.nombre.substring(0, 50);
+            payload.CondicionIVAReceptorId = 5; // 5: Consumidor Final (ajustar si manejas otros IVAs)
+        }
+    }
 
     try {
         const response = await fetch(url, {
@@ -878,5 +895,47 @@ export async function marcarVentaFacturada(docId, arcaData) {
         });
     } catch (error) {
         console.error("Error actualizando estado de facturación en la BD:", error);
+    }
+}
+
+export async function anularFacturaEnArca(cbteNro) {
+    const url = `${ARCA_CONFIG.baseUrl}/invoices/cancel?cuit=${ARCA_CONFIG.cuit}&pto_vta=1&cbte_tipo=11&cbte_nro=${cbteNro}`;
+
+    try {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'X-API-Key': ARCA_CONFIG.apiKey
+            }
+        });
+
+        const textData = await response.text();
+        let parsedData = {};
+        try {
+            parsedData = textData ? JSON.parse(textData) : {};
+        } catch (e) {
+            console.warn("La respuesta de anulación de ARCA no es JSON:", textData);
+            parsedData = { rawResponse: textData };
+        }
+
+        if (!response.ok) {
+            throw new Error(parsedData.detail || 'Error al generar la Nota de Crédito en ARCA');
+        }
+
+        return { success: true, data: parsedData };
+    } catch (error) {
+        console.error("Error ARCA (Anulación):", error);
+        return { success: false, error: error.message };
+    }
+}
+
+export async function marcarVentaAnuladaConNC(docId, notaCreditoData) {
+    try {
+        const docRef = doc(db, 'ventas', docId);
+        await updateDoc(docRef, {
+            'arcaData.notaCredito': notaCreditoData || {}
+        });
+    } catch (error) {
+        console.error("Error actualizando la Nota de Crédito en la BD:", error);
     }
 }

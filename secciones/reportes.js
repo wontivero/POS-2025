@@ -1,6 +1,6 @@
 // secciones/reportes.js
 import { getFirestore, collection, query, where, getDocs, orderBy, runTransaction, doc, getDoc } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
-import { getCollection, getDocumentById, formatCurrency, getTodayDate, generatePDF, printThermalTicket, showConfirmationModal, showAlertModal, normalizeString, facturarEnArca, marcarVentaFacturada } from '../utils.js';
+import { getCollection, getDocumentById, formatCurrency, getTodayDate, generatePDF, printThermalTicket, showConfirmationModal, showAlertModal, normalizeString, facturarEnArca, marcarVentaFacturada, saveDocument, anularFacturaEnArca, marcarVentaAnuladaConNC } from '../utils.js';
 import { getAuth } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-auth.js";
 import { haySesionActiva, getSesionActivaId } from './caja.js';
 import { getCurrentUserRole } from '../app.js';
@@ -244,10 +244,19 @@ async function renderReporteVendedor(ventasParaCalcular) {
 }
 
 async function anularVenta(ventaId) {
-    const confirmado = await showConfirmationModal(
-        "¿Estás seguro de que deseas anular esta venta? El stock de los productos será devuelto al inventario. Luego, serás redirigido para crear la venta corregida.",
-        "Anular Venta"
-    );
+    // Buscamos la venta en el array local para personalizar el mensaje de confirmación
+    const ventaParaAnular = ventas.find(v => v.id === ventaId);
+    if (!ventaParaAnular) {
+        await showAlertModal("No se encontró la venta seleccionada.", "Error");
+        return;
+    }
+
+    let confirmMessage = `¿Estás seguro de que deseas anular esta venta? El stock de los productos será devuelto al inventario. Luego, serás redirigido para crear la venta corregida.`;
+    if (ventaParaAnular.facturadoEnArca) {
+        confirmMessage = `<strong>¡Atención!</strong> Esta venta fue facturada en ARCA/AFIP.<br><br>¿Estás seguro de que deseas anularla? Se generará una <strong>Nota de Crédito</strong> para invalidar la factura original. El stock será devuelto y serás redirigido para crear la venta corregida.`;
+    }
+
+    const confirmado = await showConfirmationModal(confirmMessage, "Anular Venta");
     if (!confirmado) return;
 
     const loadingOverlay = document.getElementById('loadingOverlay');
@@ -257,6 +266,24 @@ async function anularVenta(ventaId) {
         const db = getFirestore();
         const ventaAnulada = await getDocumentById('ventas', ventaId);
         if (!ventaAnulada) throw new Error("No se pudo encontrar la venta para anularla.");
+
+        // --- INICIO: Lógica de Nota de Crédito ---
+        if (ventaAnulada.facturadoEnArca) {
+            // Prevenimos doble anulación en AFIP
+            if (ventaAnulada.arcaData?.notaCredito?.CAE) {
+                throw new Error("Esta venta ya fue anulada con una Nota de Crédito en ARCA/AFIP.");
+            }
+            if (!ventaAnulada.arcaData || !ventaAnulada.arcaData.CbteNro) {
+                throw new Error("La venta está marcada como facturada pero no tiene un número de comprobante de ARCA para anular.");
+            }
+
+            const resultadoNC = await anularFacturaEnArca(ventaAnulada.arcaData.CbteNro);
+            if (!resultadoNC.success) {
+                throw new Error(`Fallo al generar la Nota de Crédito en ARCA: ${resultadoNC.error}`);
+            }
+            await marcarVentaAnuladaConNC(ventaId, resultadoNC.data);
+        }
+        // --- FIN: Lógica de Nota de Crédito ---
 
         const montoEfectivoDevuelto = ventaAnulada.pagos.contado || 0;
         if (montoEfectivoDevuelto > 0 && !haySesionActiva()) {
@@ -899,16 +926,19 @@ export async function init() {
             
             if (confirmado) {
                 const originalHtml = arcaBtn.innerHTML;
-                arcaBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+                arcaBtn.classList.add('btn-conectando-afip');
+                arcaBtn.innerHTML = '<span class="spinner-grow spinner-grow-sm"></span>';
                 arcaBtn.disabled = true;
 
-                const result = await facturarEnArca(venta.total);
+                const result = await facturarEnArca(venta);
                 if (result.success) {
+                    arcaBtn.classList.remove('btn-conectando-afip');
                     await marcarVentaFacturada(venta.id, result.data);
                     venta.facturadoEnArca = true;
                     venta.arcaData = result.data;
                     arcaBtn.outerHTML = `<button class="btn btn-sm btn-success" disabled title="Facturado en ARCA"><i class="fas fa-check-circle"></i></button>`;
                 } else {
+                    arcaBtn.classList.remove('btn-conectando-afip');
                     await showAlertModal('Error al facturar: ' + result.error, 'Error');
                     arcaBtn.innerHTML = originalHtml;
                     arcaBtn.disabled = false;

@@ -426,16 +426,19 @@ function mostrarDetalleTicket(venta) {
             const btnFacturar = document.getElementById('btn-facturar-arca-historial');
             btnFacturar.addEventListener('click', async () => {
                 btnFacturar.disabled = true;
-                btnFacturar.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Procesando...';
+                btnFacturar.classList.add('btn-conectando-afip');
+                btnFacturar.innerHTML = '<span class="spinner-grow spinner-grow-sm me-2"></span>Conectando con AFIP...';
                 
                 const { facturarEnArca, marcarVentaFacturada } = await import('../utils.js');
-                const result = await facturarEnArca(venta.total);
+                const result = await facturarEnArca(venta);
                 
                 if (result.success) {
+                    btnFacturar.classList.remove('btn-conectando-afip');
                     await marcarVentaFacturada(venta.docId, result.data);
                     venta.facturadoEnArca = true;
                     arcaContainer.innerHTML = '<span class="badge bg-info p-2"><i class="fas fa-check-circle"></i> Facturado en ARCA</span>';
                 } else {
+                    btnFacturar.classList.remove('btn-conectando-afip');
                     alert('Error al facturar: ' + result.error);
                     btnFacturar.disabled = false;
                     btnFacturar.innerHTML = '<i class="fas fa-file-invoice"></i> Reintentar Facturar ARCA';
