@@ -5,41 +5,85 @@ body {
 
 /* Agrega esto al final de tu archivo style.css */
 
+/* ==========================================================================
+   MODERNIZACIÓN DE LA SECCIÓN DE VENTAS (UX/UI Premium)
+   ========================================================================== */
+
+/* Tarjetas principales de la sección Ventas */
+#seccion-ventas .card {
+    border-radius: 1.25rem;
+    border: none;
+    box-shadow: 0 8px 25px rgba(0,0,0,0.03);
+}
+
+#seccion-ventas .card-header {
+    border-top-left-radius: 1.25rem !important;
+    border-top-right-radius: 1.25rem !important;
+    border-bottom: 1px solid #f1f3f5;
+    background-color: #ffffff;
+    font-weight: 700;
+}
+
+/* Inputs y campos de texto */
+#seccion-ventas .form-control {
+    border-radius: 0.75rem;
+    background-color: #f8f9fa;
+    border: 1px solid #e9ecef;
+    padding: 0.6rem 1rem;
+    transition: all 0.2s ease;
+}
+
+#seccion-ventas .form-control:focus {
+    background-color: #ffffff;
+    border-color: #86b7fe;
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.15);
+    transform: translateY(-1px);
+}
+
+/* --- Botones de Pago Rápido --- */
 .btn-pago-rapido {
-    position: relative; /* Contenedor para el atajo flotante */
-    overflow: hidden; /* Evita que el atajo se salga del botón */
-    min-height: auto; /* Quitamos la altura mínima fija */
-    padding: 0.75rem 1rem; /* Ajustamos el padding para el nuevo layout */
-    font-weight: 500;
-    transition: transform 0.1s ease-in-out;
-    font-size: 1.1rem; /* Tamaño de fuente base para el botón */
+    position: relative;
+    overflow: hidden;
+    min-height: auto;
+    padding: 0.75rem 1rem;
+    font-weight: 600;
+    font-size: 1.1rem;
+    border-radius: 1rem;
+    border: 1px solid rgba(0,0,0,0.05);
+    box-shadow: 0 4px 10px rgba(0,0,0,0.03);
+    transition: all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+.btn-pago-rapido:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 15px rgba(0,0,0,0.08);
 }
 
 .btn-pago-rapido:active {
     transform: scale(0.97);
 }
 
-/* Nuevo estilo para el atajo de teclado flotante */
 .btn-shortcut-key {
     position: absolute;
     top: 0px;
     left: 0px;
-    padding: 0.1em 0.4em;
+    padding: 0.15em 0.5em;
     font-size: 0.7rem;
     font-weight: bold;
     color: #fff;
-    background-color: #000;
-    border-radius: 3px;
-    border: 1px solid #333;
+    background-color: rgba(0,0,0,0.6);
+    border-bottom-right-radius: 0.5rem;
+    border-top-left-radius: 1rem;
     line-height: 1.5;
+    backdrop-filter: blur(4px);
 }
 
-/* Estilo para el monto dentro del botón, ahora es un badge */
 .btn-pago-rapido .badge {
-    font-size: 0.9em; /* Hacemos el badge un poco más pequeño que el texto principal */
+    font-size: 0.9em;
     padding: 0.4em 0.6em;
-    min-width: 50px; /* Ancho mínimo para que se vea bien incluso con $0 */
+    min-width: 50px;
     text-align: center;
+    border-radius: 0.5rem;
 }
 
 #searchResults .list-group-item-action.active {
@@ -60,47 +104,44 @@ td.precio-venta {
 /* Estilos para el Grid de Acceso Rápido en Ventas */
 .product-card-mini {
     cursor: pointer;
-    transition: all 0.2s ease-in-out;
-    border-left-width: 4px;
+    border-left-width: 5px;
+    border-radius: 1rem;
+    background: #ffffff;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+    border-top: 1px solid #f8f9fa;
+    border-right: 1px solid #f8f9fa;
+    border-bottom: 1px solid #f8f9fa;
+    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
     height: 100%;
 }
 
 .product-card-mini:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    transform: translateY(-5px) scale(1.02);
+    box-shadow: 0 12px 20px rgba(0, 0, 0, 0.08);
 }
 
 .product-card-mini .card-body {
-    padding: 0.4rem;
+    padding: 0.8rem;
 }
 
 .product-card-mini .card-title {
-    font-size: 1.1rem;
-    font-weight: 600;
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #212529;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
 .product-card-mini .card-price {
-    font-size: 1.1rem;
+    font-size: 1.2rem;
+    font-weight: 800;
+    color: #0d6efd !important;
 }
 
-/* Colores de Stock */
-.product-card-mini.stock-ok {
-    border-left-color: #1cc88a;
-    /* Verde */
-}
-
-.product-card-mini.stock-warning {
-    border-left-color: #f6c23e;
-    /* Amarillo */
-}
-
-.product-card-mini.stock-danger {
-    border-left-color: #e74a3b;
-    /* Rojo */
-}
+.product-card-mini.stock-ok { border-left-color: #1cc88a; }
+.product-card-mini.stock-warning { border-left-color: #f6c23e; }
+.product-card-mini.stock-danger { border-left-color: #e74a3b; }
 
 
 /* Estilos para el indicador de estado de caja en la navegación */
@@ -148,23 +189,56 @@ td.precio-venta {
 
 
 
-/* Estilos para mejorar la legibilidad del ticket de venta */
+/* --- El Ticket de Venta --- */
+#ticketItems {
+    background-color: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 1rem;
+    padding: 0.75rem;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
+    min-height: 200px;
+}
+
 .ticket-item {
-    padding-top: 0.2rem !important;
-    padding-bottom: 0.2rem !important;
-    border-bottom: 1px solid #eee;
+    background-color: #ffffff;
+    margin-bottom: 0.5rem;
+    border-radius: 0.75rem;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.02);
+    border: 1px solid #f1f3f5 !important;
+    padding: 0.6rem 0.8rem !important;
+    transition: all 0.2s ease;
+}
+
+.ticket-item:last-child {
+    margin-bottom: 0;
+}
+
+.ticket-item:hover {
+    transform: scale(1.01);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    border-color: #e9ecef !important;
 }
 
 .ticket-item-nombre {
-    font-size: 1.1rem;
-    font-weight: bold;
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #212529;
+    margin-bottom: 0.2rem;
+}
+
+.ticket-item .text-muted {
+    font-size: 0.85rem;
 }
 
 .ticket-item .quantity-input {
     font-size: 1.1rem;
     font-weight: bold;
-    /* Quitamos las flechas por defecto del input numérico para un look más limpio */
+    border-radius: 0.5rem;
+    background-color: #f8f9fa;
+    border: 1px solid #dee2e6;
     -moz-appearance: textfield;
+    height: 34px;
+    padding: 0;
 }
 
 .ticket-item .quantity-input::-webkit-outer-spin-button,
@@ -173,87 +247,45 @@ td.precio-venta {
     margin: 0;
 }
 
-
-/* Estilos para el nuevo diseño del ticket y la animación */
-
-/* Fondo más oscuro para la lista del ticket */
-#ticketItems {
-    background-color: #f8f9fa;
-    /* Un gris muy claro */
-    border: 1px solid #dee2e6;
-    border-radius: .375rem;
+.ticket-item .change-quantity {
+    border-radius: 0.5rem;
+    height: 34px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
-.ticket-item {
-    background-color: transparent;
-    /* Hacemos los items transparentes para que se vea el fondo */
-    padding-top: 0.2rem !important;
-    padding-bottom: 0.2rem !important;
-    border-bottom: 1px solid #e9ecef !important;
-}
-
-.ticket-item:last-child {
-    border-bottom: none !important;
-}
-
-.ticket-item-nombre {
+.ticket-item .text-end {
     font-size: 1.1rem;
+    color: #212529;
 }
 
-.ticket-item .quantity-input {
-    font-size: 1.1rem;
-    font-weight: bold;
-}
-
-
-
-/* Animación de resaltado para el ticket */
 @keyframes highlight-item {
-    from {
-        transform: scale(1.2);
-        box-shadow: 0 4px 15px rgba(25, 135, 84, 0.4);
-        /* Sombra verde */
-        background-color: #6df1b6;
-        /* Verde claro de Bootstrap */
-    }
-
-    to {
-        transform: scale(1);
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-        background-color: transparent
-    }
+    0% { transform: scale(1.05); box-shadow: 0 4px 15px rgba(13, 110, 253, 0.2); border-color: #0d6efd !important; }
+    100% { transform: scale(1); box-shadow: 0 2px 6px rgba(0, 0, 0, 0.02); border-color: #f1f3f5 !important; }
 }
 
 .animate-highlight {
-
-    /* animation: highlight 3.5s ease-out;     */
-    animation: highlight-item 0.51s ease-out;
+    animation: highlight-item 0.4s ease-out;
 }
 
-/* Estilos para el nuevo diseño del ticket de venta */
-
-/* Contenedor principal del ticket */
-#ticketItems {
-    background-color: #f0f7f2;
-    /* Un verde pastel muy claro */
-    border: 1px solid #cce8d4;
-    border-radius: .375rem;
-    padding: 0.5rem;
+/* Total a Pagar gigante */
+#totalVenta {
+    font-size: 3.5rem;
+    font-weight: 900;
+    letter-spacing: -1.5px;
+    color: #198754;
+    display: inline-block; /* Necesario para que funcione el efecto scale */
 }
 
-/* Cada producto individual en el ticket */
-.ticket-item {
-    background-color: #ffffff;
-    /* Fondo blanco para cada item, creando contraste */
-    margin-bottom: 0.5rem;
-    border-radius: .375rem;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-    border: none !important;
-    /* Sobreescribimos los bordes por defecto de list-group */
+/* Animación de "latido" para el total al actualizarse */
+@keyframes bump-total {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.08); color: #0d6efd; }
+    100% { transform: scale(1); color: #198754; }
 }
-
-.ticket-item:last-child {
-    margin-bottom: 0;
+.animate-bump {
+    animation: bump-total 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
 }
 
 /* Añadir esto a tu archivo de estilos */
@@ -511,4 +543,43 @@ body.generic-modal-is-open .modal-backdrop.show {
     position: absolute;
     transform: rotate(-45deg);
     background-color: #fff; /* Debe coincidir con el fondo del modal */
+}
+
+/* --- TOASTS NOTIFICACIONES FLOTANTES --- */
+.custom-toast-container {
+    position: fixed;
+    top: 80px; /* Queda flotando debajo del menú superior */
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    pointer-events: none; /* Evita que el click se bloquee si el mouse pasa por ahí */
+}
+
+.custom-toast {
+    background: rgba(33, 37, 41, 0.95);
+    color: white;
+    padding: 10px 25px;
+    border-radius: 50px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+    backdrop-filter: blur(10px);
+    font-size: 1.05rem;
+    display: flex;
+    align-items: center;
+    opacity: 0;
+    animation: toast-slide-down 0.3s cubic-bezier(0.25, 0.8, 0.25, 1) forwards;
+}
+
+.custom-toast.hide {
+    animation: toast-fade-out 0.3s forwards;
+}
+
+@keyframes toast-slide-down { 
+    from { transform: translateY(-50px); opacity: 0; } 
+    to { transform: translateY(0); opacity: 1; } 
+}
+@keyframes toast-fade-out { 
+    to { opacity: 0; transform: translateY(-20px); } 
 }

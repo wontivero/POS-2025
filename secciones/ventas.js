@@ -2,7 +2,7 @@
 import { init as initProductosModal } from './productos.js';
 import { haySesionActiva, getSesionActivaId, verificarEstadoCaja } from './caja.js';
 import { getFirestore, collection, onSnapshot, query, orderBy, runTransaction, doc, updateDoc, serverTimestamp, getDoc, increment } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
-import { getCollection, saveDocument, formatCurrency, getTodayDate, updateDocument, deleteDocument, getFormattedDateTime, generatePDF, printThermalTicket, showAlertModal, showConfirmationModal, facturarEnArca, marcarVentaFacturada } from '../utils.js';
+import { getCollection, saveDocument, formatCurrency, getTodayDate, updateDocument, deleteDocument, getFormattedDateTime, generatePDF, printThermalTicket, showAlertModal, showConfirmationModal, facturarEnArca, marcarVentaFacturada, showToast } from '../utils.js';
 import { getProductos, getAppConfig, getClientes } from './dataManager.js'; // <-- Importamos getClientes
 import { getActiveUserProfile } from '../userSession.js';
 
@@ -371,7 +371,10 @@ async function handleQuantityManualChange(e) {
 
     // Si la cantidad no es un número válido o es menor a 1, eliminamos el producto
     if (isNaN(newQuantity) || newQuantity < 1) {
-        ticket.splice(index, 1);
+        const removedItem = ticket.splice(index, 1)[0];
+        if (removedItem) {
+            showToast(`Eliminado: <strong>${removedItem.nombre}</strong>`, 'fa-trash-alt', '#dc3545');
+        }
     }
  
     // Si todo es correcto, actualizamos la cantidad y el total
@@ -390,6 +393,11 @@ function updateTotalDisplay() {
     const montoRecargo = Math.round(montoCredito * recargo);
     const totalConRecargo = totalVentaBase + montoRecargo;
     totalVentaSpan.textContent = formatCurrency(totalConRecargo);
+
+    // --- NUEVO: Animación de "Latido" en el Total ---
+    totalVentaSpan.classList.remove('animate-bump');
+    void totalVentaSpan.offsetWidth; // Este truco fuerza al navegador a reiniciar la animación CSS
+    totalVentaSpan.classList.add('animate-bump');
 }
 
 function updateQuickPayButtons() {
@@ -514,6 +522,7 @@ async function addProductToTicket(productId) {
                 item.cantidad++;
                 item.total = item.precio * item.cantidad;
                 item.justChanged = true;
+                showToast(`Actualizado: <strong>${item.cantidad}x ${item.nombre}</strong>`);
 
                 productoEncontradoEnTicket = true;
                 break;
@@ -524,6 +533,7 @@ async function addProductToTicket(productId) {
                 id: producto.id, nombre: producto.nombre, marca: producto.marca || '', precio: producto.venta, costo: producto.costo,
                 cantidad: 1, total: producto.venta, isGeneric: false, justAdded: true
             });
+            showToast(`Agregado: <strong>${producto.nombre}</strong>`);
         }
         productoSearch.value = '';
         searchResults.innerHTML = '';
@@ -562,6 +572,8 @@ async function handleConfirmGenericPrice() {
         genericProfitMargin: genericProductToAdd.genericProfitMargin || 70,
         justAdded: true
     });
+
+    showToast(`Agregado: <strong>${genericProductToAdd.nombre}</strong>`);
 
     genericPriceModal.hide(); // Ocultamos el modal
     genericProductToAdd = null; // Limpiamos la variable temporal
@@ -608,7 +620,10 @@ function changeQuantity(e) {
     }
 
     if (item.cantidad <= 0) {
-        ticket.splice(index, 1);
+        const removedItem = ticket.splice(index, 1)[0];
+        if (removedItem) {
+            showToast(`Eliminado: <strong>${removedItem.nombre}</strong>`, 'fa-trash-alt', '#dc3545');
+        }
     } else {
         item.total = item.cantidad * item.precio;
         // item.justChanged = true;
@@ -619,7 +634,11 @@ function changeQuantity(e) {
 
 function handleTicketItemRemove(e) {
     const index = e.target.closest('.remove-item').dataset.index;
+    const removedItem = ticket[index];
     ticket.splice(index, 1);
+    if (removedItem) {
+        showToast(`Eliminado: <strong>${removedItem.nombre}</strong>`, 'fa-trash-alt', '#dc3545');
+    }
     renderTicket();
 }
 

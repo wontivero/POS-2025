@@ -790,6 +790,33 @@ export function showConfirmationModal(message, title = 'Confirmación', options 
     });
 }
 
+/**
+ * Muestra una notificación flotante (Toast) no invasiva.
+ * @param {string} message Mensaje a mostrar (soporta HTML).
+ * @param {string} icon Clase del icono FontAwesome (por defecto check-circle).
+ * @param {string} color Color HEX para el icono (por defecto verde éxito).
+ */
+export function showToast(message, icon = 'fa-check-circle', color = '#1cc88a') {
+    let container = document.getElementById('custom-toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'custom-toast-container';
+        container.className = 'custom-toast-container';
+        document.body.appendChild(container);
+    }
+
+    const toast = document.createElement('div');
+    toast.className = 'custom-toast';
+    toast.innerHTML = `<i class="fas ${icon} me-2" style="color: ${color}; font-size: 1.2rem;"></i> <span>${message}</span>`;
+    
+    container.appendChild(toast);
+
+    setTimeout(() => {
+        toast.classList.add('hide');
+        setTimeout(() => toast.remove(), 300);
+    }, 2000); // Desaparece rápido en 2 segundos
+}
+
 // AÑADE ESTA FUNCIÓN EN utils.js
 
 /**
