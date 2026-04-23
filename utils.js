@@ -820,15 +820,14 @@ export function normalizeString(str) {
 // --- INTEGRACIÓN ARCA (FACTURACIÓN ELECTRÓNICA) ---
 // =========================================================================
 
-const ARCA_CONFIG = {
-    baseUrl: 'http://localhost:8000',
-    cuit: '20308436609', // Reemplazar con el CUIT real
-    apiKey: 'N7rVA5qHhlNmL1yzMa8TdtOkVwgjKEM6Uat8Wi8SUmA', // Reemplazar con la llave real
-    isProd: false
-};
-
 export async function facturarEnArca(venta) {
-    const url = `${ARCA_CONFIG.baseUrl}/invoices/authorize?cuit=${ARCA_CONFIG.cuit}&prod=${ARCA_CONFIG.isProd}`;
+    const appConfig = getAppConfig();
+    const arcaConfig = appConfig.arca || {};
+    if (!arcaConfig.baseUrl || !arcaConfig.cuit || !arcaConfig.apiKey) {
+        return { success: false, error: "Faltan configurar las credenciales de ARCA en la pestaña Configuración." };
+    }
+
+    const url = `${arcaConfig.baseUrl}/invoices/authorize?cuit=${arcaConfig.cuit}&prod=${arcaConfig.isProd}`;
     const payload = {
         PtoVta: 1,
         Concepto: 1,
@@ -858,7 +857,7 @@ export async function facturarEnArca(venta) {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'X-API-Key': ARCA_CONFIG.apiKey
+                'X-API-Key': arcaConfig.apiKey
             },
             body: JSON.stringify(payload)
         });
@@ -899,13 +898,18 @@ export async function marcarVentaFacturada(docId, arcaData) {
 }
 
 export async function anularFacturaEnArca(cbteNro) {
-    const url = `${ARCA_CONFIG.baseUrl}/invoices/cancel?cuit=${ARCA_CONFIG.cuit}&pto_vta=1&cbte_tipo=11&cbte_nro=${cbteNro}`;
+    const appConfig = getAppConfig();
+    const arcaConfig = appConfig.arca || {};
+    if (!arcaConfig.baseUrl || !arcaConfig.cuit || !arcaConfig.apiKey) {
+        return { success: false, error: "Faltan configurar las credenciales de ARCA en la pestaña Configuración." };
+    }
+    const url = `${arcaConfig.baseUrl}/invoices/cancel?cuit=${arcaConfig.cuit}&pto_vta=1&cbte_tipo=11&cbte_nro=${cbteNro}`;
 
     try {
         const response = await fetch(url, {
             method: 'POST',
             headers: {
-                'X-API-Key': ARCA_CONFIG.apiKey
+                'X-API-Key': arcaConfig.apiKey
             }
         });
 

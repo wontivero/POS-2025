@@ -128,7 +128,28 @@
             <h5 class="mb-0"><i class="fas fa-file-invoice me-2"></i>Facturación Automática ARCA</h5>
         </div>
         <div class="card-body">
-            <p class="text-muted mb-3">Selecciona qué métodos de pago generarán la factura electrónica automáticamente al finalizar la venta.</p>
+            <p class="text-muted mb-3">Configura las credenciales de conexión y selecciona qué métodos de pago generarán la factura electrónica automáticamente.</p>
+            
+            <h6 class="mb-2">Credenciales de API (FastAPI)</h6>
+            <div class="mb-2">
+                <label for="config-arca-baseurl" class="form-label small">URL Base de la API</label>
+                <input type="text" class="form-control form-control-sm" id="config-arca-baseurl" placeholder="http://localhost:8000">
+            </div>
+            <div class="mb-2">
+                <label for="config-arca-cuit" class="form-label small">CUIT Emisor</label>
+                <input type="text" class="form-control form-control-sm" id="config-arca-cuit" placeholder="Ingresa tu CUIT sin guiones">
+            </div>
+            <div class="mb-3">
+                <label for="config-arca-apikey" class="form-label small">API Key</label>
+                <input type="password" class="form-control form-control-sm" id="config-arca-apikey" placeholder="Ingresa tu llave secreta">
+            </div>
+            <div class="form-check form-switch mb-4">
+                <input class="form-check-input" type="checkbox" id="config-arca-isprod">
+                <label class="form-check-label" for="config-arca-isprod">Entorno de Producción (Servidores Reales)</label>
+            </div>
+
+            <hr>
+            <h6 class="mb-3">Auto-Facturación por Método de Pago</h6>
             <div class="form-check form-switch mb-2">
                 <input class="form-check-input" type="checkbox" id="config-arca-auto-contado">
                 <label class="form-check-label" for="config-arca-auto-contado">Efectivo / Contado</label>

@@ -16,6 +16,7 @@ let saveCompanyButton;
 let autoPrintTicketCheck, savePrintingButton;
 let loyaltyPercentageInput, loyaltyPrintCheck, loyaltyExpirationCheck, loyaltyExpirationDaysInput, btnSaveLoyalty; // <-- NUEVO
 let arcaAutoContado, arcaAutoTransferencia, arcaAutoDebito, arcaAutoCredito, btnSaveArca; // <-- NUEVO ARCA
+let arcaBaseUrl, arcaCuit, arcaApiKey, arcaIsProd; // <-- NUEVO ARCA CREDENCIALES
 // --- FIN DE LA MODIFICACIÓN ---
 
 /**
@@ -47,6 +48,13 @@ async function loadConfiguration() {
 
             // Cargar configuración de ARCA
             if (arcaAutoContado) {
+                // Cargar credenciales
+                if (arcaBaseUrl) arcaBaseUrl.value = configData.arca?.baseUrl || 'http://localhost:8000';
+                if (arcaCuit) arcaCuit.value = configData.arca?.cuit || '';
+                if (arcaApiKey) arcaApiKey.value = configData.arca?.apiKey || '';
+                if (arcaIsProd) arcaIsProd.checked = configData.arca?.isProd || false;
+
+                // Cargar auto facturación
                 arcaAutoContado.checked = configData.arca?.autoFacturar?.contado ?? false;
                 arcaAutoTransferencia.checked = configData.arca?.autoFacturar?.transferencia ?? false;
                 arcaAutoDebito.checked = configData.arca?.autoFacturar?.debito ?? false;
@@ -111,6 +119,10 @@ async function saveArcaConfig() {
     try {
         await setDoc(configRef, { 
             arca: {
+                baseUrl: arcaBaseUrl.value.trim(),
+                cuit: arcaCuit.value.trim(),
+                apiKey: arcaApiKey.value.trim(),
+                isProd: arcaIsProd.checked,
                 autoFacturar: {
                     contado: arcaAutoContado.checked,
                     transferencia: arcaAutoTransferencia.checked,
@@ -334,6 +346,11 @@ export async function init() {
     loyaltyExpirationDaysInput = document.getElementById('config-loyalty-expiration-days');
     btnSaveLoyalty = document.getElementById('btn-guardar-loyalty');
     
+    arcaBaseUrl = document.getElementById('config-arca-baseurl');
+    arcaCuit = document.getElementById('config-arca-cuit');
+    arcaApiKey = document.getElementById('config-arca-apikey');
+    arcaIsProd = document.getElementById('config-arca-isprod');
+
     arcaAutoContado = document.getElementById('config-arca-auto-contado');
     arcaAutoTransferencia = document.getElementById('config-arca-auto-transferencia');
     arcaAutoDebito = document.getElementById('config-arca-auto-debito');
