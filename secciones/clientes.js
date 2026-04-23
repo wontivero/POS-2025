@@ -420,9 +420,9 @@ function mostrarDetalleTicket(venta) {
     const arcaContainer = document.getElementById('arca-container-ticket');
     if (arcaContainer) {
         if (venta.facturadoEnArca) {
-            arcaContainer.innerHTML = '<span class="badge bg-info p-2"><i class="fas fa-check-circle"></i> Facturado en ARCA</span>';
+            arcaContainer.innerHTML = '<span class="badge bg-info p-2" title="Facturado en ARCA"><i class="fas fa-check-circle me-2"></i> ARCA</span>';
         } else {
-            arcaContainer.innerHTML = '<button id="btn-facturar-arca-historial" class="btn btn-info text-white"><i class="fas fa-file-invoice"></i> Emitir Factura ARCA</button>';
+            arcaContainer.innerHTML = '<button id="btn-facturar-arca-historial" class="btn btn-info text-white" title="Emitir Factura ARCA"><i class="fas fa-file-invoice me-2"></i> ARCA</button>';
             const btnFacturar = document.getElementById('btn-facturar-arca-historial');
             btnFacturar.addEventListener('click', async () => {
                 btnFacturar.disabled = true;
@@ -436,12 +436,12 @@ function mostrarDetalleTicket(venta) {
                     btnFacturar.classList.remove('btn-conectando-afip');
                     await marcarVentaFacturada(venta.docId, result.data);
                     venta.facturadoEnArca = true;
-                    arcaContainer.innerHTML = '<span class="badge bg-info p-2"><i class="fas fa-check-circle"></i> Facturado en ARCA</span>';
+                    arcaContainer.innerHTML = '<span class="badge bg-info p-2" title="Facturado en ARCA"><i class="fas fa-check-circle me-2"></i> ARCA</span>';
                 } else {
                     btnFacturar.classList.remove('btn-conectando-afip');
                     alert('Error al facturar: ' + result.error);
                     btnFacturar.disabled = false;
-                    btnFacturar.innerHTML = '<i class="fas fa-file-invoice"></i> Reintentar Facturar ARCA';
+                    btnFacturar.innerHTML = '<i class="fas fa-file-invoice me-2"></i> Reintentar ARCA';
                 }
             });
         }

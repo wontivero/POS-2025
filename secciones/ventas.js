@@ -651,6 +651,192 @@ async function handleQuickPayment(e) {
 
 // REEMPLAZA ESTA FUNCIÓN ENTERA EN ventas.js
 
+function startCheckoutProcessUI(montoTotal, willInvoiceARCA) {
+    const modalEl = document.getElementById('confirmacionVentaModal');
+    if (!modalEl) return;
+    
+    const modalBody = modalEl.querySelector('.modal-body');
+    const modalFooter = modalEl.querySelector('.modal-footer');
+    const modalHeader = modalEl.querySelector('.modal-header');
+
+    // Ocultamos la cabecera y el pie mientras procesa
+    if (modalHeader) modalHeader.style.display = 'none';
+    if (modalFooter) modalFooter.style.display = 'none';
+
+    // Le damos un estilo moderno y redondeado a los bordes del modal
+    const modalContent = modalEl.querySelector('.modal-content');
+    if (modalContent) {
+        modalContent.style.borderRadius = '1.5rem';
+        modalContent.style.border = 'none';
+        modalContent.style.boxShadow = '0 15px 35px rgba(0,0,0,0.15)';
+    }
+
+    // Prevenimos que el usuario cierre el modal haciendo clic afuera mientras procesa
+    modalEl.setAttribute('data-bs-backdrop', 'static');
+    modalEl.setAttribute('data-bs-keyboard', 'false');
+
+    modalBody.innerHTML = `
+        <div id="checkout-processing-ui" class="text-center py-5 animate-fade-in">
+            <div class="mb-4">
+                <div class="spinner-border text-primary" style="width: 3.5rem; height: 3.5rem; border-width: 0.35rem;" role="status"></div>
+            </div>
+            <h4 class="fw-bold text-gray-800 mb-2">Procesando Venta</h4>
+            <h2 class="display-4 fw-bold text-primary mb-4">${formatCurrency(montoTotal)}</h2>
+            
+            <div class="text-start bg-light p-4 rounded-4 mx-auto border border-light" style="max-width: 400px;">
+                <div class="checkout-step" id="step-stock" style="margin-bottom: 15px; display: flex; align-items: center; font-size: 1.1rem; color: #495057;">
+                    <div class="step-icon" style="width: 30px; text-align: center; margin-right: 15px;"><div class="spinner-border spinner-border-sm text-primary" role="status"></div></div>
+                    <div class="step-text fw-medium">Preparando ticket y stock...</div>
+                </div>
+                <div class="checkout-step" id="step-caja" style="margin-bottom: ${willInvoiceARCA ? '15px' : '0'}; display: flex; align-items: center; font-size: 1.1rem; color: #adb5bd; transition: color 0.3s;">
+                    <div class="step-icon" style="width: 30px; text-align: center; margin-right: 15px;"><i class="far fa-circle"></i></div>
+                    <div class="step-text fw-medium">Registrando en BD...</div>
+                </div>
+                ${willInvoiceARCA ? `
+                <div class="checkout-step" id="step-afip" style="margin-bottom: 15px; display: flex; align-items: center; font-size: 1.1rem; color: #adb5bd; transition: color 0.3s;">
+                    <div class="step-icon" style="width: 30px; text-align: center; margin-right: 15px;"><i class="far fa-circle"></i></div>
+                    <div class="step-text fw-medium">Conectando con ARCA/AFIP...</div>
+                </div>
+                <div class="checkout-step" id="step-cae" style="display: flex; align-items: center; font-size: 1.1rem; color: #adb5bd; transition: color 0.3s;">
+                    <div class="step-icon" style="width: 30px; text-align: center; margin-right: 15px;"><i class="far fa-circle"></i></div>
+                    <div class="step-text fw-medium">Obteniendo autorización...</div>
+                </div>
+                ` : ''}
+            </div>
+        </div>
+    `;
+
+    const modalInstance = bootstrap.Modal.getOrCreateInstance(modalEl);
+    modalInstance.show();
+}
+
+function updateCheckoutStep(stepId, status) {
+    const stepEl = document.getElementById(stepId);
+    if (!stepEl) return;
+    
+    stepEl.style.color = status === 'pending' ? '#495057' : (status === 'success' ? '#198754' : '#dc3545');
+    
+    const iconEl = stepEl.querySelector('.step-icon');
+    if (status === 'pending') {
+        iconEl.innerHTML = '<div class="spinner-border spinner-border-sm text-primary" role="status"></div>';
+    } else if (status === 'success') {
+        iconEl.innerHTML = '<i class="fas fa-check-circle" style="color: #198754; font-size: 1.2rem;"></i>';
+    } else if (status === 'error') {
+        iconEl.innerHTML = '<i class="fas fa-times-circle" style="color: #dc3545; font-size: 1.2rem;"></i>';
+    }
+}
+
+function setCheckoutSuccessUI(venta, docId) {
+    const modalEl = document.getElementById('confirmacionVentaModal');
+    if (!modalEl) return;
+    
+    // Restauramos la posibilidad de cerrar el modal
+    modalEl.removeAttribute('data-bs-backdrop');
+    modalEl.removeAttribute('data-bs-keyboard');
+
+    const modalBody = modalEl.querySelector('.modal-body');
+    const modalFooter = modalEl.querySelector('.modal-footer');
+
+    const capitalize = s => s.charAt(0).toUpperCase() + s.slice(1);
+    let detallesHtml = '';
+    for (const [metodo, monto] of Object.entries(venta.pagos)) {
+        if (monto > 0 && metodo !== 'recargoCredito') {
+            detallesHtml += `
+                <div class="d-flex justify-content-between mb-2">
+                    <span class="text-muted"><i class="fas fa-check text-success me-2"></i>${capitalize(metodo)}</span>
+                    <span class="fw-bold text-gray-800">${formatCurrency(monto)}</span>
+                </div>
+            `;
+        }
+    }
+
+    modalBody.innerHTML = `
+        <div id="checkout-success-ui" class="text-center py-4 animate-fade-in">
+            <div class="success-checkmark mb-3">
+                <div class="check-icon">
+                    <span class="icon-line line-tip"></span>
+                    <span class="icon-line line-long"></span>
+                    <div class="icon-circle"></div>
+                    <div class="icon-fix"></div>
+                </div>
+            </div>
+            <h2 class="fw-bold text-success mb-1">¡Venta Exitosa!</h2>
+            <p class="text-muted mb-4">Ticket #${venta.ticketId} generado correctamente</p>
+            
+            <div class="bg-light rounded-4 p-4 mx-auto shadow-sm border border-light" style="max-width: 400px;">
+                <p class="text-muted text-uppercase fw-bold mb-2" style="font-size: 0.75rem; letter-spacing: 1px;">Monto Cobrado</p>
+                <h1 class="display-4 fw-bold text-gray-900 mb-4">${formatCurrency(venta.total)}</h1>
+                <hr class="border-secondary opacity-10 mb-4">
+                <div class="text-start">${detallesHtml}</div>
+            </div>
+        </div>
+    `;
+
+    if (modalFooter) {
+        modalFooter.style.display = 'flex';
+        modalFooter.className = 'modal-footer justify-content-center border-0 pt-0 pb-4 flex-wrap gap-2';
+        
+        let arcaBtnHtml = '';
+        if (venta.facturadoEnArca) {
+            arcaBtnHtml = `<span class="badge bg-info p-3 fs-6 rounded-pill shadow-sm" title="Facturado en ARCA"><i class="fas fa-check-circle me-2"></i> ARCA</span>`;
+        } else {
+            arcaBtnHtml = `<button id="btnFacturarArcaModal" class="btn btn-info text-white rounded-pill px-4 py-2 shadow-sm" title="Facturar en ARCA"><i class="fas fa-file-invoice me-2"></i> ARCA</button>`;
+        }
+
+        // Inyectamos los botones modernos
+        modalFooter.innerHTML = `
+            ${arcaBtnHtml}
+            <button id="btnGenerarTicketModal" class="btn btn-outline-danger rounded-pill px-4 py-2 shadow-sm"><i class="fas fa-file-pdf me-2"></i> Ver PDF</button>
+            <button id="btnImprimirTicketModal" class="btn btn-outline-dark rounded-pill px-4 py-2 shadow-sm"><i class="fas fa-print me-2"></i> Imprimir</button>
+            <button id="btnConfirmacionVentaOK" class="btn btn-primary rounded-pill px-4 py-2 fw-bold shadow-sm">Aceptar (<span id="venta-exitosa-countdown">10</span>)</button>
+        `;
+        
+        // Reconectamos los eventos
+        document.getElementById('btnConfirmacionVentaOK').addEventListener('click', () => {
+            const modalInstance = bootstrap.Modal.getInstance(modalEl);
+            if (modalInstance) modalInstance.hide();
+        });
+
+        document.getElementById('btnGenerarTicketModal').addEventListener('click', () => {
+            generatePDF(venta.ticketId, venta);
+        });
+
+        document.getElementById('btnImprimirTicketModal').addEventListener('click', () => {
+            printThermalTicket(venta.ticketId, venta);
+        });
+
+        const btnFacturar = document.getElementById('btnFacturarArcaModal');
+        if (btnFacturar && btnFacturar.tagName === 'BUTTON') {
+            btnFacturar.addEventListener('click', async () => {
+                if (typeof ventaExitosaTimer !== 'undefined' && ventaExitosaTimer) {
+                    clearInterval(ventaExitosaTimer);
+                    const countdown = document.getElementById('venta-exitosa-countdown');
+                    if (countdown) countdown.style.display = 'none';
+                }
+                btnFacturar.classList.add('btn-conectando-afip');
+                btnFacturar.innerHTML = '<span class="spinner-grow spinner-grow-sm me-2"></span>Conectando...';
+                btnFacturar.disabled = true;
+                
+                const result = await facturarEnArca(venta);
+                if (result.success) {
+                    btnFacturar.classList.remove('btn-conectando-afip');
+                    await marcarVentaFacturada(docId, result.data);
+                    venta.facturadoEnArca = true;
+                    venta.arcaData = result.data;
+                    btnFacturar.outerHTML = '<span class="badge bg-info p-3 fs-6 rounded-pill shadow-sm" title="Facturado en ARCA"><i class="fas fa-check-circle me-2"></i> ARCA</span>';
+                } else {
+                    btnFacturar.classList.remove('btn-conectando-afip');
+                    await showAlertModal('Error al facturar: ' + result.error);
+                    btnFacturar.innerHTML = '<i class="fas fa-file-invoice me-2"></i> Reintentar ARCA';
+                    btnFacturar.disabled = false;
+                }
+            });
+        }
+    }
+    
+    startVentaExitosaCountdown();
+}
+
 async function finalizarVenta() {
     if (!haySesionActiva()) {
         await showAlertModal('Operación denegada: No hay una sesión de caja abierta.', 'Caja Cerrada');
@@ -668,18 +854,36 @@ async function finalizarVenta() {
     }
     // -----------------------------------------
 
-    showLoading();
+    const appConfig = getAppConfig();
+    const arcaConfig = appConfig.arca?.autoFacturar || {};
+    const montoContado = parseFloat(txtContado.value) || 0;
+    const montoTransferencia = parseFloat(document.getElementById('txtTransferencia').value) || 0;
+    const montoDebito = parseFloat(document.getElementById('txtDebito').value) || 0;
+    const montoCredito = parseFloat(txtCredito.value) || 0;
+    const recargo = (parseFloat(txtRecargoCredito.value) || 0) / 100;
+    const montoCreditoConRecargo = Math.round(montoCredito * (1 + recargo));
+    const totalConRecargo = totalVentaBase + Math.round(montoCredito * recargo);
+
+    const autoFacturar = (
+        (montoContado > 0 && arcaConfig.contado) ||
+        (montoTransferencia > 0 && arcaConfig.transferencia) ||
+        (montoDebito > 0 && arcaConfig.debito) ||
+        (montoCreditoConRecargo > 0 && arcaConfig.credito)
+    );
+
+    startCheckoutProcessUI(totalConRecargo, autoFacturar);
 
     try {
-        // Obtener configuración de Loyalty desde CACHÉ (Instantáneo, sin red)
         let loyaltyPercentage = 1;
         let loyaltyConfig = { percentage: 1, expirationEnabled: false, expirationDays: 365 };
         
-        const appConfig = getAppConfig();
         if (appConfig && appConfig.loyalty) {
             loyaltyConfig = { ...loyaltyConfig, ...appConfig.loyalty };
             loyaltyPercentage = loyaltyConfig.percentage;
         }
+
+        updateCheckoutStep('step-stock', 'success');
+        updateCheckoutStep('step-caja', 'pending');
 
         await runTransaction(db, async (transaction) => {
             
@@ -829,26 +1033,28 @@ async function finalizarVenta() {
             ventaData = { id: ticketNumber, data: nuevaVenta, docId: newVentaRef.id };
         });
 
-        // --- INICIO DE AUTO-FACTURACIÓN ARCA ---
-        const arcaConfig = appConfig.arca?.autoFacturar || {};
-        const autoFacturar = (
-            (ventaData.data.pagos.contado > 0 && arcaConfig.contado) ||
-            (ventaData.data.pagos.transferencia > 0 && arcaConfig.transferencia) ||
-            (ventaData.data.pagos.debito > 0 && arcaConfig.debito) ||
-            (ventaData.data.pagos.credito > 0 && arcaConfig.credito)
-        );
+        updateCheckoutStep('step-caja', 'success');
 
+        // --- INICIO DE AUTO-FACTURACIÓN ARCA ---
         if (autoFacturar) {
+            updateCheckoutStep('step-afip', 'pending');
             const result = await facturarEnArca(ventaData.data);
             if (result.success) {
+                updateCheckoutStep('step-afip', 'success');
+                updateCheckoutStep('step-cae', 'pending');
                 await marcarVentaFacturada(ventaData.docId, result.data);
                 ventaData.data.facturadoEnArca = true;
                 ventaData.data.arcaData = result.data;
+                updateCheckoutStep('step-cae', 'success');
             } else {
+                updateCheckoutStep('step-afip', 'error');
                 await showAlertModal('La venta se guardó, pero hubo un error al facturar automáticamente en ARCA: ' + result.error, 'Aviso: Error ARCA');
             }
         }
         // --- FIN DE AUTO-FACTURACIÓN ARCA ---
+
+        // Damos un breve respiro para que el usuario vea los tildes verdes
+        await new Promise(r => setTimeout(r, 400));
 
         // --- INICIO DE LA MODIFICACIÓN: Auto-impresión ---
         const printingConfig = appConfig.printing || {};
@@ -857,39 +1063,14 @@ async function finalizarVenta() {
             printThermalTicket(ventaData.id, ventaData.data);
         }
 
-        // --- INICIO DE LA MODIFICACIÓN ---
-        // Preparamos el contenido del modal antes de mostrarlo
-        const detalleContainer = document.getElementById('detalle-venta-exitosa');
-        const totalContainer = document.getElementById('total-venta-exitosa');
-        let detalleHtml = '<ul class="list-group list-group-flush text-start">';
-
-        const capitalize = s => s.charAt(0).toUpperCase() + s.slice(1);
-
-        for (const [metodo, monto] of Object.entries(ventaData.data.pagos)) {
-            // Mostramos solo los métodos de pago con monto mayor a 0
-            if (monto > 0 && metodo !== 'recargoCredito') {
-                detalleHtml += `
-                    <li class="list-group-item d-flex justify-content-between px-0">
-                        <span>${capitalize(metodo)}:</span>
-                        <span class="fw-bold">${formatCurrency(monto)}</span>
-                    </li>
-                `;
-            }
-        }
-        detalleHtml += '</ul>';
-
-        detalleContainer.innerHTML = detalleHtml;
-        totalContainer.textContent = formatCurrency(ventaData.data.total);
-        // --- FIN DE LA MODIFICACIÓN ---
-
-        const modal = new bootstrap.Modal(confirmacionVentaModal);
-        modal.show();
+        // Aplicamos el diseño de éxito moderno al modal que ya está en pantalla
+        setCheckoutSuccessUI(ventaData.data, ventaData.docId);
 
     } catch (e) {
         console.error('Error al finalizar la venta:', e);
+        const modalInstance = bootstrap.Modal.getInstance(document.getElementById('confirmacionVentaModal'));
+        if (modalInstance) modalInstance.hide();
         await showAlertModal(`No se pudo completar la venta: ${e.message}`, 'Error de Venta');
-    } finally {
-        hideLoading();
     }
 }
 
@@ -1175,91 +1356,6 @@ export async function init() {
     txtRecargoCredito.addEventListener('input', handlePaymentChange);
     btnFinalizarVenta.addEventListener('click', finalizarVenta);
     btnsPagoRapido.forEach(btn => btn.addEventListener('click', handleQuickPayment));
-
-    btnGenerarTicketModal.addEventListener('click', () => {
-        if (ventaData) {
-            generatePDF(ventaData.id, ventaData.data);
-        }
-        const modalInstance = bootstrap.Modal.getInstance(confirmacionVentaModal);
-        modalInstance.hide();
-        resetVentas();
-    });
-
-    if (btnImprimirTicketModal) {
-        btnImprimirTicketModal.addEventListener('click', () => {
-            if (ventaData) printThermalTicket(ventaData.id, ventaData.data);
-        });
-    }
-
-    confirmacionVentaModal.addEventListener('shown.bs.modal', () => {
-        const okButton = document.getElementById('btnConfirmacionVentaOK');
-        if (okButton) okButton.focus();
-        startVentaExitosaCountdown();
-
-        // --- INICIO INTEGRACION ARCA ---
-        let btnFacturar = document.getElementById('btnFacturarArcaModal');
-        if (!btnFacturar) {
-            btnFacturar = document.createElement('button');
-            btnFacturar.id = 'btnFacturarArcaModal';
-            btnFacturar.className = 'btn btn-info text-white px-4 py-2 shadow-sm';
-            btnFacturar.innerHTML = '<i class="fas fa-file-invoice"></i> Facturar en ARCA';
-
-            const wrapper = document.createElement('div');
-            wrapper.className = 'w-100 text-center mb-3';
-            wrapper.id = 'arcaWrapperModal';
-            wrapper.appendChild(btnFacturar);
-            
-            const footer = document.querySelector('#confirmacionVentaModal .modal-footer');
-            if (footer) {
-                footer.classList.add('gap-2'); // Mejora la separación visual de los botones a la derecha
-                footer.prepend(wrapper);
-            }
-        }
-
-        if (ventaData && ventaData.data.facturadoEnArca) {
-            btnFacturar.outerHTML = '<span id="btnFacturarArcaModal" class="badge bg-info p-3 fs-6 shadow-sm"><i class="fas fa-check"></i> Facturado en ARCA</span>';
-        } else {
-            if (btnFacturar.tagName !== 'BUTTON') {
-                const newBtn = document.createElement('button');
-                newBtn.id = 'btnFacturarArcaModal';
-                newBtn.className = 'btn btn-info text-white px-4 py-2 shadow-sm';
-                btnFacturar.replaceWith(newBtn);
-                btnFacturar = newBtn;
-            }
-            
-            btnFacturar.disabled = false;
-            btnFacturar.innerHTML = '<i class="fas fa-file-invoice"></i> Facturar en ARCA';
-            
-            btnFacturar.onclick = async () => {
-                if (!ventaData) return;
-                
-                if (typeof ventaExitosaTimer !== 'undefined' && ventaExitosaTimer) {
-                    clearInterval(ventaExitosaTimer);
-                    const countdownElement = document.getElementById('venta-exitosa-countdown');
-                    if (countdownElement) countdownElement.style.display = 'none';
-                }
-
-                btnFacturar.classList.add('btn-conectando-afip');
-                btnFacturar.innerHTML = '<span class="spinner-grow spinner-grow-sm me-2"></span>Conectando con AFIP...';
-                btnFacturar.disabled = true;
-                
-                const result = await facturarEnArca(ventaData.data);
-                if (result.success) {
-                    btnFacturar.classList.remove('btn-conectando-afip');
-                    await marcarVentaFacturada(ventaData.docId, result.data);
-                    ventaData.data.facturadoEnArca = true;
-                    ventaData.data.arcaData = result.data; // <-- INYECTAMOS EL CAE AL INSTANTE
-                    btnFacturar.outerHTML = '<span id="btnFacturarArcaModal" class="badge bg-info p-3 fs-6 shadow-sm"><i class="fas fa-check"></i> Facturado en ARCA</span>';
-                } else {
-                    btnFacturar.classList.remove('btn-conectando-afip');
-                    await showAlertModal('Error al facturar: ' + result.error);
-                    btnFacturar.innerHTML = '<i class="fas fa-file-invoice"></i> Reintentar Facturar';
-                    btnFacturar.disabled = false;
-                }
-            };
-        }
-        // --- FIN INTEGRACION ARCA ---
-    });
 
     confirmacionVentaModal.addEventListener('hidden.bs.modal', () => {
         if (ventaExitosaTimer) {
