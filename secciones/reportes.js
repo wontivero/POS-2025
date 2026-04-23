@@ -243,6 +243,190 @@ async function renderReporteVendedor(ventasParaCalcular) {
     }
 }
 
+let anulacionModalEl = null;
+let anulacionModalInstance = null;
+
+function getAnulacionModal() {
+    if (!anulacionModalEl) {
+        anulacionModalEl = document.createElement('div');
+        anulacionModalEl.className = 'modal fade';
+        anulacionModalEl.id = 'anulacionVentaModal';
+        anulacionModalEl.tabIndex = '-1';
+        anulacionModalEl.setAttribute('data-bs-backdrop', 'static');
+        anulacionModalEl.setAttribute('data-bs-keyboard', 'false');
+        anulacionModalEl.innerHTML = `
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content" style="border-radius: 1.5rem; border: none; box-shadow: 0 15px 35px rgba(0,0,0,0.15);">
+                    <div class="modal-body p-0" id="anulacion-modal-body">
+                    </div>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(anulacionModalEl);
+        anulacionModalInstance = new bootstrap.Modal(anulacionModalEl);
+    }
+    return { el: anulacionModalEl, instance: anulacionModalInstance };
+}
+
+function showAnulacionConfirmUI(venta, onConfirm, onCancel) {
+    const modal = getAnulacionModal();
+    const body = modal.el.querySelector('#anulacion-modal-body');
+    
+    const isFacturada = venta.facturadoEnArca;
+    let alertHtml = '';
+    if (isFacturada) {
+        alertHtml = `
+            <div class="alert alert-warning mb-4 text-start rounded-4 border-0" role="alert">
+                <h6 class="alert-heading fw-bold mb-2 text-dark"><i class="fas fa-exclamation-triangle text-warning me-2"></i>Factura Electrónica ARCA</h6>
+                <p class="mb-0 small text-dark">Esta venta posee una factura electrónica. Al anularla, se conectará con AFIP para emitir automáticamente una <strong>Nota de Crédito</strong>.</p>
+            </div>
+        `;
+    }
+
+    body.innerHTML = `
+        <div class="p-4 p-md-5 text-center animate-fade-in">
+            <div class="mb-4">
+                <div class="rounded-circle bg-danger bg-opacity-10 d-inline-flex align-items-center justify-content-center" style="width: 80px; height: 80px;">
+                    <i class="fas fa-undo-alt text-danger fa-3x"></i>
+                </div>
+            </div>
+            <h3 class="fw-bold text-gray-800 mb-2">Anular Venta #${venta.ticketId}</h3>
+            <p class="text-muted mb-4">¿Estás seguro de que deseas anular esta venta por <strong class="text-gray-900 fs-5">${formatCurrency(venta.total)}</strong>?</p>
+            
+            ${alertHtml}
+
+            <p class="text-muted small mb-4">El stock de los productos será devuelto al inventario y el dinero (si aplica) a la caja activa.</p>
+            
+            <div class="d-flex justify-content-center gap-3">
+                <button id="btn-cancelar-anulacion" class="btn btn-light rounded-pill px-4 py-2 fw-medium text-muted border-0">Cancelar</button>
+                <button id="btn-confirmar-anulacion" class="btn btn-danger rounded-pill px-4 py-2 fw-bold shadow-sm">Sí, anular venta</button>
+            </div>
+        </div>
+    `;
+
+    body.querySelector('#btn-cancelar-anulacion').onclick = () => {
+        modal.instance.hide();
+        if (onCancel) onCancel();
+    };
+    body.querySelector('#btn-confirmar-anulacion').onclick = () => {
+        if (onConfirm) onConfirm();
+    };
+
+    modal.instance.show();
+}
+
+function showAnulacionProgressUI(venta, willCancelARCA, willDevolverDinero) {
+    const modal = getAnulacionModal();
+    const body = modal.el.querySelector('#anulacion-modal-body');
+
+    body.innerHTML = `
+        <div class="p-4 p-md-5 text-center animate-fade-in">
+            <div class="mb-4">
+                <div class="spinner-border text-danger" style="width: 3.5rem; height: 3.5rem; border-width: 0.35rem;" role="status"></div>
+            </div>
+            <h4 class="fw-bold text-gray-800 mb-2">Anulando Venta #${venta.ticketId}</h4>
+            <h2 class="display-5 fw-bold text-danger mb-4">-${formatCurrency(venta.total)}</h2>
+            
+            <div class="text-start bg-light p-4 rounded-4 mx-auto border border-light" style="max-width: 400px;">
+                ${willCancelARCA ? `
+                <div class="anulacion-step" id="step-arca" style="margin-bottom: 15px; display: flex; align-items: center; font-size: 1.1rem; color: #495057;">
+                    <div class="step-icon" style="width: 30px; text-align: center; margin-right: 15px;"><div class="spinner-border spinner-border-sm text-danger" role="status"></div></div>
+                    <div class="step-text fw-medium">Generando Nota de Crédito...</div>
+                </div>
+                ` : ''}
+                <div class="anulacion-step" id="step-stock" style="margin-bottom: 15px; display: flex; align-items: center; font-size: 1.1rem; color: ${!willCancelARCA ? '#495057' : '#adb5bd'}; transition: color 0.3s;">
+                    <div class="step-icon" style="width: 30px; text-align: center; margin-right: 15px;">
+                        ${!willCancelARCA ? '<div class="spinner-border spinner-border-sm text-danger" role="status"></div>' : '<i class="far fa-circle"></i>'}
+                    </div>
+                    <div class="step-text fw-medium">Restaurando stock...</div>
+                </div>
+                ${willDevolverDinero ? `
+                <div class="anulacion-step" id="step-caja" style="margin-bottom: 15px; display: flex; align-items: center; font-size: 1.1rem; color: #adb5bd; transition: color 0.3s;">
+                    <div class="step-icon" style="width: 30px; text-align: center; margin-right: 15px;"><i class="far fa-circle"></i></div>
+                    <div class="step-text fw-medium">Devolviendo efectivo a caja...</div>
+                </div>
+                ` : ''}
+                <div class="anulacion-step" id="step-bd" style="display: flex; align-items: center; font-size: 1.1rem; color: #adb5bd; transition: color 0.3s;">
+                    <div class="step-icon" style="width: 30px; text-align: center; margin-right: 15px;"><i class="far fa-circle"></i></div>
+                    <div class="step-text fw-medium">Anulando comprobante...</div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function updateAnulacionStep(stepId, status) {
+    if (!anulacionModalEl) return;
+    const stepEl = anulacionModalEl.querySelector(`#${stepId}`);
+    if (!stepEl) return;
+    
+    stepEl.style.color = status === 'pending' ? '#495057' : (status === 'success' ? '#198754' : '#dc3545');
+    
+    const iconEl = stepEl.querySelector('.step-icon');
+    if (status === 'pending') {
+        iconEl.innerHTML = '<div class="spinner-border spinner-border-sm text-danger" role="status"></div>';
+    } else if (status === 'success') {
+        iconEl.innerHTML = '<i class="fas fa-check-circle" style="color: #198754; font-size: 1.2rem;"></i>';
+    } else if (status === 'error') {
+        iconEl.innerHTML = '<i class="fas fa-times-circle" style="color: #dc3545; font-size: 1.2rem;"></i>';
+    }
+}
+
+function showAnulacionSuccessUI(venta, onRedirect) {
+    const modal = getAnulacionModal();
+    const body = modal.el.querySelector('#anulacion-modal-body');
+
+    body.innerHTML = `
+        <div class="p-4 p-md-5 text-center animate-fade-in">
+            <div class="danger-checkmark mb-4">
+                <div class="check-icon">
+                    <span class="icon-line line-tip"></span>
+                    <span class="icon-line line-long"></span>
+                    <div class="icon-circle"></div>
+                    <div class="icon-fix"></div>
+                </div>
+            </div>
+            <h2 class="fw-bold text-danger mb-1">¡Venta Anulada!</h2>
+            <p class="text-muted mb-4">El comprobante #${venta.ticketId} fue cancelado exitosamente.</p>
+            
+            <div class="d-flex justify-content-center gap-3 mt-4">
+                <button id="btn-cerrar-anulacion" class="btn btn-light rounded-pill px-4 py-2 fw-medium text-muted border-0 shadow-sm">Cerrar</button>
+                <button id="btn-corregir-venta" class="btn btn-primary rounded-pill px-4 py-2 fw-bold shadow-sm"><i class="fas fa-edit me-2"></i>Ir a corregir venta</button>
+            </div>
+        </div>
+    `;
+
+    body.querySelector('#btn-cerrar-anulacion').onclick = () => {
+        modal.instance.hide();
+    };
+    body.querySelector('#btn-corregir-venta').onclick = () => {
+        modal.instance.hide();
+        if (onRedirect) onRedirect();
+    };
+}
+
+function showAnulacionErrorUI(errorMessage) {
+    const modal = getAnulacionModal();
+    const body = modal.el.querySelector('#anulacion-modal-body');
+
+    body.innerHTML = `
+        <div class="p-4 p-md-5 text-center animate-fade-in">
+            <div class="mb-4">
+                <div class="rounded-circle bg-danger bg-opacity-10 d-inline-flex align-items-center justify-content-center" style="width: 80px; height: 80px;">
+                    <i class="fas fa-times text-danger fa-3x"></i>
+                </div>
+            </div>
+            <h3 class="fw-bold text-gray-800 mb-2">Error al anular</h3>
+            <p class="text-muted mb-4">${errorMessage}</p>
+            
+            <button id="btn-cerrar-error" class="btn btn-secondary rounded-pill px-4 py-2 fw-medium shadow-sm">Cerrar</button>
+        </div>
+    `;
+    body.querySelector('#btn-cerrar-error').onclick = () => {
+        modal.instance.hide();
+    };
+}
+
 async function anularVenta(ventaId) {
     // Buscamos la venta en el array local para personalizar el mensaje de confirmación
     const ventaParaAnular = ventas.find(v => v.id === ventaId);
@@ -251,94 +435,110 @@ async function anularVenta(ventaId) {
         return;
     }
 
-    let confirmMessage = `¿Estás seguro de que deseas anular esta venta? El stock de los productos será devuelto al inventario. Luego, serás redirigido para crear la venta corregida.`;
-    if (ventaParaAnular.facturadoEnArca) {
-        confirmMessage = `<strong>¡Atención!</strong> Esta venta fue facturada en ARCA/AFIP.<br><br>¿Estás seguro de que deseas anularla? Se generará una <strong>Nota de Crédito</strong> para invalidar la factura original. El stock será devuelto y serás redirigido para crear la venta corregida.`;
-    }
-
-    const confirmado = await showConfirmationModal(confirmMessage, "Anular Venta");
-    if (!confirmado) return;
-
-    const loadingOverlay = document.getElementById('loadingOverlay');
-    loadingOverlay.style.display = 'flex';
-
-    try {
-        const db = getFirestore();
+    const db = getFirestore();
+    
+    showAnulacionConfirmUI(ventaParaAnular, async () => {
+        // Acción al confirmar la anulación
         const ventaAnulada = await getDocumentById('ventas', ventaId);
-        if (!ventaAnulada) throw new Error("No se pudo encontrar la venta para anularla.");
-
-        // --- INICIO: Lógica de Nota de Crédito ---
-        if (ventaAnulada.facturadoEnArca) {
-            // Prevenimos doble anulación en AFIP
-            if (ventaAnulada.arcaData?.notaCredito?.CAE) {
-                throw new Error("Esta venta ya fue anulada con una Nota de Crédito en ARCA/AFIP.");
-            }
-            if (!ventaAnulada.arcaData || !ventaAnulada.arcaData.CbteNro) {
-                throw new Error("La venta está marcada como facturada pero no tiene un número de comprobante de ARCA para anular.");
-            }
-
-            const resultadoNC = await anularFacturaEnArca(ventaAnulada.arcaData.CbteNro);
-            if (!resultadoNC.success) {
-                throw new Error(`Fallo al generar la Nota de Crédito en ARCA: ${resultadoNC.error}`);
-            }
-            await marcarVentaAnuladaConNC(ventaId, resultadoNC.data);
+        if (!ventaAnulada) {
+            showAnulacionErrorUI("No se pudo encontrar la venta en la base de datos.");
+            return;
         }
-        // --- FIN: Lógica de Nota de Crédito ---
 
+        const willCancelARCA = ventaAnulada.facturadoEnArca;
         const montoEfectivoDevuelto = ventaAnulada.pagos.contado || 0;
-        if (montoEfectivoDevuelto > 0 && !haySesionActiva()) {
-            throw new Error("No puedes anular una venta con pago en efectivo si no hay una sesión de caja abierta para registrar la devolución.");
+        const willDevolverDinero = montoEfectivoDevuelto > 0;
+
+        if (willDevolverDinero && !haySesionActiva()) {
+            showAnulacionErrorUI("No puedes anular una venta con pago en efectivo si no hay una sesión de caja abierta para registrar la devolución.");
+            return;
         }
 
-        await runTransaction(db, async (transaction) => {
-            const ventaRef = doc(db, 'ventas', ventaId);
-            const ventaDoc = await transaction.get(ventaRef);
-            if (!ventaDoc.exists()) throw new Error("La venta no existe.");
-            const ventaData = ventaDoc.data();
-            if (ventaData.estado === 'anulada') throw new Error("Esta venta ya ha sido anulada.");
+        showAnulacionProgressUI(ventaAnulada, willCancelARCA, willDevolverDinero);
 
-            const productosParaActualizar = [];
-            for (const productoVendido of ventaData.productos) {
-                if (productoVendido.isGeneric) continue;
-                const productoRef = doc(db, 'productos', productoVendido.id);
-                const productoDoc = await transaction.get(productoRef);
-                if (productoDoc.exists()) {
-                    const stockActual = productoDoc.data().stock;
-                    const nuevoStock = stockActual + productoVendido.cantidad;
-                    productosParaActualizar.push({ ref: productoRef, stock: nuevoStock });
+        try {
+            // --- INICIO: Lógica de Nota de Crédito ---
+            if (willCancelARCA) {
+                // Prevenimos doble anulación en AFIP
+                if (ventaAnulada.arcaData?.notaCredito?.CAE) {
+                    throw new Error("Esta venta ya fue anulada con una Nota de Crédito en ARCA/AFIP.");
                 }
+                if (!ventaAnulada.arcaData || !ventaAnulada.arcaData.CbteNro) {
+                    throw new Error("La venta está marcada como facturada pero no tiene un número de comprobante de ARCA para anular.");
+                }
+
+                updateAnulacionStep('step-arca', 'pending');
+                const resultadoNC = await anularFacturaEnArca(ventaAnulada.arcaData.CbteNro);
+                if (!resultadoNC.success) {
+                    updateAnulacionStep('step-arca', 'error');
+                    throw new Error(`Fallo al generar la Nota de Crédito en ARCA: ${resultadoNC.error}`);
+                }
+                updateAnulacionStep('step-arca', 'success');
+                await marcarVentaAnuladaConNC(ventaId, resultadoNC.data);
+            }
+            // --- FIN: Lógica de Nota de Crédito ---
+
+            updateAnulacionStep('step-stock', 'pending');
+
+            await runTransaction(db, async (transaction) => {
+                const ventaRef = doc(db, 'ventas', ventaId);
+                const ventaDoc = await transaction.get(ventaRef);
+                if (!ventaDoc.exists()) throw new Error("La venta no existe.");
+                const ventaData = ventaDoc.data();
+                if (ventaData.estado === 'anulada') throw new Error("Esta venta ya ha sido anulada.");
+
+                const productosParaActualizar = [];
+                for (const productoVendido of ventaData.productos) {
+                    if (productoVendido.isGeneric) continue;
+                    const productoRef = doc(db, 'productos', productoVendido.id);
+                    const productoDoc = await transaction.get(productoRef);
+                    if (productoDoc.exists()) {
+                        const stockActual = productoDoc.data().stock;
+                        const nuevoStock = stockActual + productoVendido.cantidad;
+                        productosParaActualizar.push({ ref: productoRef, stock: nuevoStock });
+                    }
+                }
+
+                for (const producto of productosParaActualizar) {
+                    transaction.update(producto.ref, { stock: producto.stock });
+                }
+                transaction.update(ventaRef, { estado: 'anulada' });
+            });
+
+            updateAnulacionStep('step-stock', 'success');
+
+            if (willDevolverDinero) {
+                updateAnulacionStep('step-caja', 'pending');
+                const egresoData = {
+                    sesionCajaId: getSesionActivaId(),
+                    tipo: 'egreso',
+                    monto: montoEfectivoDevuelto,
+                    concepto: `Devolución por anulación de Venta #${ventaAnulada.ticketId}`,
+                    usuario: auth.currentUser.email,
+                    fecha: new Date()
+                };
+                await saveDocument('caja_movimientos', egresoData);
+                updateAnulacionStep('step-caja', 'success');
             }
 
-            for (const producto of productosParaActualizar) {
-                transaction.update(producto.ref, { stock: producto.stock });
-            }
-            transaction.update(ventaRef, { estado: 'anulada' });
-        });
+            updateAnulacionStep('step-bd', 'pending');
+            await new Promise(r => setTimeout(r, 300)); // Breve respiro visual
+            updateAnulacionStep('step-bd', 'success');
 
-        if (montoEfectivoDevuelto > 0) {
-            const egresoData = {
-                sesionCajaId: getSesionActivaId(),
-                tipo: 'egreso',
-                monto: montoEfectivoDevuelto,
-                concepto: `Devolución por anulación de Venta #${ventaAnulada.ticketId}`,
-                usuario: auth.currentUser.email,
-                fecha: new Date()
-            };
-            await saveDocument('caja_movimientos', egresoData);
+            await new Promise(r => setTimeout(r, 600)); // Tiempo para ver todos los tildes verdes
+
+            await filtrarReporte(); // Refrescamos la tabla de fondo
+
+            showAnulacionSuccessUI(ventaAnulada, () => {
+                sessionStorage.setItem('ventaParaCorregir', JSON.stringify(ventaAnulada.productos));
+                document.querySelector('a[data-section="ventas"]').click();
+            });
+
+        } catch (error) {
+            console.error("Error al anular la venta:", error);
+            showAnulacionErrorUI(error.message);
         }
-
-        await showAlertModal("¡Venta anulada con éxito! El stock ha sido restaurado.", "Proceso completado");
-        await filtrarReporte();
-
-        sessionStorage.setItem('ventaParaCorregir', JSON.stringify(ventaAnulada.productos));
-        document.querySelector('a[data-section="ventas"]').click();
-
-    } catch (error) {
-        console.error("Error al anular la venta:", error);
-        await showAlertModal(`Error: ${error.message}`, "Error en la anulación");
-    } finally {
-        loadingOverlay.style.display = 'none';
-    }
+    });
 }
 
 function renderTablaDetalle(ventasParaMostrar) {
