@@ -818,10 +818,14 @@ function setCheckoutSuccessUI(venta, docId) {
 
         document.getElementById('btnGenerarTicketModal').addEventListener('click', () => {
             generatePDF(venta.ticketId, venta);
+            const modalInstance = bootstrap.Modal.getInstance(modalEl);
+            if (modalInstance) modalInstance.hide();
         });
 
         document.getElementById('btnImprimirTicketModal').addEventListener('click', () => {
             printThermalTicket(venta.ticketId, venta);
+            const modalInstance = bootstrap.Modal.getInstance(modalEl);
+            if (modalInstance) modalInstance.hide();
         });
 
         const btnFacturar = document.getElementById('btnFacturarArcaModal');

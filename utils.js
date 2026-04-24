@@ -458,7 +458,30 @@ export async function generatePDF(ticketId, venta) {
     const splitText = doc.splitTextToSize(disclaimer, pageWidth - (margin * 2));
     doc.text(splitText, margin, y);
 
-    doc.save(`factura-${venta.fecha}-${ticketId}.pdf`);
+    // Crear el PDF asegurando estrictamente el formato application/pdf
+    const pdfData = doc.output('arraybuffer');
+    const pdfBlob = new Blob([pdfData], { type: 'application/pdf' });
+    const pdfUrl = URL.createObjectURL(pdfBlob);
+
+    // Abrir nueva pestaña y forzar el visor interno del navegador
+    const newTab = window.open('', '_blank');
+    if (newTab) {
+        newTab.document.write(`
+            <html>
+                <head><title>Factura-${venta.fecha}-${ticketId}</title></head>
+                <body style="margin:0; padding:0; overflow:hidden;">
+                    <embed src="${pdfUrl}" type="application/pdf" width="100%" height="100%" />
+                </body>
+            </html>
+        `);
+        newTab.document.close();
+    } else {
+        // Fallback: si el bloqueador de popups no deja abrir la pestaña, forzamos la descarga con el nombre correcto
+        const a = document.createElement('a');
+        a.href = pdfUrl;
+        a.download = `factura-${venta.fecha}-${ticketId}.pdf`;
+        a.click();
+    }
 }
 
 /**
