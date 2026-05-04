@@ -160,8 +160,9 @@ export function capitalizeFirstLetter(str) {
     return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
-function getAfipQrUrl(venta, appConfig) {
-    if (!venta.facturadoEnArca || !venta.arcaData || !venta.arcaData.CAE) return null;
+function getAfipQrUrl(venta, appConfig, isNotaCredito = false) {
+    const arcaInfo = isNotaCredito ? venta.arcaData?.notaCredito : venta.arcaData;
+    if (!venta.facturadoEnArca || !arcaInfo || !arcaInfo.CAE) return null;
     const companyInfo = appConfig.companyInfo || {};
     const cuitEmisor = parseInt((companyInfo.cuit || "0").replace(/\D/g, ''));
     
@@ -181,16 +182,15 @@ function getAfipQrUrl(venta, appConfig) {
         ver: 1,
         fecha: venta.fecha,
         cuit: cuitEmisor,
-        // ptoVta: 2,
-        tipoCmp: 11, // Factura C (por defecto)
-        nroCmp: parseInt(venta.arcaData.CbteNro) || 0,
+        tipoCmp: isNotaCredito ? 13 : 11, // 13: Nota de Crédito C, 11: Factura C
+        nroCmp: parseInt(arcaInfo.CbteNro) || 0,
         importe: parseFloat(venta.total.toFixed(2)),
         moneda: "PES",
         ctz: 1,
         tipoDocRec: tipoDocRec,
         nroDocRec: nroDocRec,
         tipoCodAut: "E",
-        codAut: parseInt(venta.arcaData.CAE)
+        codAut: parseInt(arcaInfo.CAE)
     };
 
     const qrBase64 = btoa(JSON.stringify(qrData));
@@ -199,11 +199,12 @@ function getAfipQrUrl(venta, appConfig) {
 
 // ** FUNCIÓN MODIFICADA PARA EL NUEVO LAYOUT **
 // REEMPLAZAR en utils.js
-export async function generatePDF(ticketId, venta) {
+export async function generatePDF(ticketId, venta, isNotaCredito = false) {
     const { jsPDF } = window.jspdf;
     // --- INICIO DE LA MODIFICACIÓN: Obtenemos la config dinámicamente ---
     const appConfig = getAppConfig();
     const companyInfo = appConfig.companyInfo || {}; // Usamos un objeto vacío como fallback
+    const arcaInfo = isNotaCredito ? venta.arcaData?.notaCredito : venta.arcaData;
     const doc = new jsPDF();
     const margin = 10;
     const lineHeight = 5;
@@ -280,9 +281,9 @@ export async function generatePDF(ticketId, venta) {
 
     // --- INICIO DE CARGA DE QR AFIP ---
     let afipQrBase64 = null;
-    if (venta.facturadoEnArca && venta.arcaData && venta.arcaData.CAE) {
+    if (venta.facturadoEnArca && arcaInfo && arcaInfo.CAE) {
         try {
-            const qrUrl = getAfipQrUrl(venta, appConfig);
+            const qrUrl = getAfipQrUrl(venta, appConfig, isNotaCredito);
             if (qrUrl) {
                 const qrImgUrl = `https://quickchart.io/qr?text=${encodeURIComponent(qrUrl)}&size=150`;
                 await new Promise((resolve) => {
@@ -322,7 +323,7 @@ export async function generatePDF(ticketId, venta) {
     if (venta.vendedor && venta.vendedor.nombre) {
         drawText(`Vendedor: ${venta.vendedor.nombre}`, pageWidth - margin, currentY, 9, 'normal', 'right');
     }
-    drawText(`FACTURA N°: ${ticketId}`, pageWidth - margin, currentY + lineHeight * 1.5, 12, 'bold', 'right');
+    drawText(`${isNotaCredito ? 'NOTA DE CRÉDITO' : 'FACTURA'} N°: ${ticketId}`, pageWidth - margin, currentY + lineHeight * 1.5, 12, 'bold', 'right');
     // --- FIN DE LA MODIFICACIÓN ---
 
     y = topY + Math.max(logoHeight, lineHeight * 3) + 10;
@@ -425,19 +426,19 @@ export async function generatePDF(ticketId, venta) {
     // --------------------------------
 
     // --- SECCIÓN AFIP (ARCA) ---
-    if (venta.facturadoEnArca && venta.arcaData && venta.arcaData.CAE) {
+    if (venta.facturadoEnArca && arcaInfo && arcaInfo.CAE) {
         doc.line(margin, y, pageWidth - margin, y);
         y += lineHeight;
         drawText('Comprobante Electrónico AFIP', pageWidth / 2, y, 11, 'bold', 'center');
         y += lineHeight;
         
-        const cbtNro = venta.arcaData.CbteNro.toString().padStart(8, '0');
-        drawText(`Factura Nro: 0001-${cbtNro}`, pageWidth / 2, y, 10, 'normal', 'center');
+        const cbtNro = arcaInfo.CbteNro.toString().padStart(8, '0');
+        drawText(`${isNotaCredito ? 'NC Nro' : 'Factura Nro'}: 0001-${cbtNro}`, pageWidth / 2, y, 10, 'normal', 'center');
         y += lineHeight;
         
-        const vtoStr = venta.arcaData.CAEFchVto || '';
+        const vtoStr = arcaInfo.CAEFchVto || '';
         const vtoFormat = vtoStr.length === 8 ? `${vtoStr.substring(6,8)}/${vtoStr.substring(4,6)}/${vtoStr.substring(0,4)}` : vtoStr;
-        drawText(`CAE: ${venta.arcaData.CAE}  Vto: ${vtoFormat}`, pageWidth / 2, y, 10, 'normal', 'center');
+        drawText(`CAE: ${arcaInfo.CAE}  Vto: ${vtoFormat}`, pageWidth / 2, y, 10, 'normal', 'center');
         y += lineHeight;
 
         if (afipQrBase64) {
@@ -490,15 +491,16 @@ export async function generatePDF(ticketId, venta) {
  * @param {string} ticketId - El número/ID del ticket.
  * @param {object} venta - El objeto de la venta.
  */
-export async function printThermalTicket(ticketId, venta) {
+export async function printThermalTicket(ticketId, venta, isNotaCredito = false) {
     const appConfig = getAppConfig();
     const companyInfo = appConfig.companyInfo || {};
+    const arcaInfo = isNotaCredito ? venta.arcaData?.notaCredito : venta.arcaData;
 
     // --- INICIO DE CARGA DE QR AFIP ---
     let afipQrBase64 = '';
-    if (venta.facturadoEnArca && venta.arcaData && venta.arcaData.CAE) {
+    if (venta.facturadoEnArca && arcaInfo && arcaInfo.CAE) {
         try {
-            const qrUrl = getAfipQrUrl(venta, appConfig);
+            const qrUrl = getAfipQrUrl(venta, appConfig, isNotaCredito);
             if (qrUrl) {
                 const qrImgUrl = `https://quickchart.io/qr?text=${encodeURIComponent(qrUrl)}&size=150`;
                 await new Promise((resolve) => {
@@ -586,7 +588,7 @@ export async function printThermalTicket(ticketId, venta) {
         </div>
         <hr>
         <p>Fecha: ${venta.timestamp}</p>
-        <p>Ticket N°: ${ticketId}</p>
+        <p>${isNotaCredito ? 'NOTA DE CRÉDITO N°' : 'Ticket N°'}: ${ticketId}</p>
         ${venta.vendedor?.nombre ? `<p>Vendedor: ${venta.vendedor.nombre}</p>` : ''}
         ${(venta.cliente?.nombre && venta.cliente.nombre !== 'Consumidor Final') ? `<hr><p>Cliente: ${venta.cliente.nombre}</p>${venta.cliente.cuit ? `<p>CUIT/DNI: ${venta.cliente.cuit}</p>` : ''}` : ''}
         <hr>
@@ -651,15 +653,15 @@ export async function printThermalTicket(ticketId, venta) {
         html += `<hr><div class="center"><p>Sumaste: ${venta.loyalty.puntosGanados} pts.</p><p>Saldo: ${venta.loyalty.puntosTotalSnapshot} pts.</p></div>`;
     }
 
-    if (venta.facturadoEnArca && venta.arcaData && venta.arcaData.CAE) {
-        const cbtNro = venta.arcaData.CbteNro.toString().padStart(8, '0');
-        const vtoStr = venta.arcaData.CAEFchVto || '';
+    if (venta.facturadoEnArca && arcaInfo && arcaInfo.CAE) {
+        const cbtNro = arcaInfo.CbteNro.toString().padStart(8, '0');
+        const vtoStr = arcaInfo.CAEFchVto || '';
         const vtoFormat = vtoStr.length === 8 ? `${vtoStr.substring(6,8)}/${vtoStr.substring(4,6)}/${vtoStr.substring(0,4)}` : vtoStr;
         
         html += `<hr><div class="center">
             <p><strong>Comprobante AFIP</strong></p>
-            <p>Factura N°: 0001-${cbtNro}</p>
-            <p>CAE: ${venta.arcaData.CAE}</p>
+            <p>${isNotaCredito ? 'NC N°' : 'Factura N°'}: 0001-${cbtNro}</p>
+            <p>CAE: ${arcaInfo.CAE}</p>
             <p>Vto CAE: ${vtoFormat}</p>
             ${afipQrBase64 ? `<p><img src="${afipQrBase64}" style="width:120px; height:120px; margin-top:5px;" /></p>` : ''}
         </div>`;
@@ -953,7 +955,16 @@ export async function anularFacturaEnArca(cbteNro) {
     if (!arcaConfig.baseUrl || !arcaConfig.cuit || !arcaConfig.apiKey) {
         return { success: false, error: "Faltan configurar las credenciales de ARCA en la pestaña Configuración." };
     }
-    const url = `${arcaConfig.baseUrl}/invoices/cancel?cuit=${arcaConfig.cuit}&pto_vta=1&cbte_tipo=11&cbte_nro=${cbteNro}`;
+    
+    // Limpiamos el CUIT para asegurarnos de que no viajen guiones
+    const cleanCuitEmisor = arcaConfig.cuit.replace(/\D/g, '');
+    if (!cleanCuitEmisor) {
+        return { success: false, error: "El CUIT emisor configurado no es válido." };
+    }
+    
+    // Quitamos la barra final de la URL si existe y agregamos el parámetro &prod=
+    const baseUrl = arcaConfig.baseUrl.replace(/\/+$/, '');
+    const url = `${baseUrl}/invoices/cancel?cuit=${cleanCuitEmisor}&prod=${arcaConfig.isProd}&pto_vta=2&cbte_tipo=11&cbte_nro=${cbteNro}`;
 
     try {
         const response = await fetch(url, {
@@ -973,7 +984,11 @@ export async function anularFacturaEnArca(cbteNro) {
         }
 
         if (!response.ok) {
-            throw new Error(parsedData.detail || 'Error al generar la Nota de Crédito en ARCA');
+            let errorMsg = 'Error al generar la Nota de Crédito en ARCA';
+            if (parsedData.detail) {
+                errorMsg = typeof parsedData.detail === 'string' ? parsedData.detail : JSON.stringify(parsedData.detail);
+            }
+            throw new Error(errorMsg);
         }
 
         return { success: true, data: parsedData };

@@ -375,6 +375,14 @@ function updateAnulacionStep(stepId, status) {
 function showAnulacionSuccessUI(venta, onRedirect) {
     const modal = getAnulacionModal();
     const body = modal.el.querySelector('#anulacion-modal-body');
+    
+    let ncBtnHtml = '';
+    if (venta.arcaData && venta.arcaData.notaCredito) {
+        ncBtnHtml = `
+            <button id="btn-pdf-nc" class="btn btn-outline-secondary rounded-pill px-3 py-2 fw-bold shadow-sm" title="Ver PDF A4"><i class="fas fa-file-pdf me-2"></i>PDF NC</button>
+            <button id="btn-imprimir-nc" class="btn btn-outline-dark rounded-pill px-3 py-2 fw-bold shadow-sm" title="Imprimir Ticket Térmico"><i class="fas fa-print me-2"></i>Ticket NC</button>
+        `;
+    }
 
     body.innerHTML = `
         <div class="p-4 p-md-5 text-center animate-fade-in">
@@ -389,9 +397,10 @@ function showAnulacionSuccessUI(venta, onRedirect) {
             <h2 class="fw-bold text-danger mb-1">¡Venta Anulada!</h2>
             <p class="text-muted mb-4">El comprobante #${venta.ticketId} fue cancelado exitosamente.</p>
             
-            <div class="d-flex justify-content-center gap-3 mt-4">
-                <button id="btn-cerrar-anulacion" class="btn btn-light rounded-pill px-4 py-2 fw-medium text-muted border-0 shadow-sm">Cerrar</button>
-                <button id="btn-corregir-venta" class="btn btn-primary rounded-pill px-4 py-2 fw-bold shadow-sm"><i class="fas fa-edit me-2"></i>Ir a corregir venta</button>
+            <div class="d-flex justify-content-center flex-wrap gap-2 mt-4">
+                ${ncBtnHtml}
+                <button id="btn-cerrar-anulacion" class="btn btn-light rounded-pill px-3 py-2 fw-medium text-muted border-0 shadow-sm">Cerrar</button>
+                <button id="btn-corregir-venta" class="btn btn-primary rounded-pill px-3 py-2 fw-bold shadow-sm"><i class="fas fa-edit me-2"></i>Ir a corregir venta</button>
             </div>
         </div>
     `;
@@ -403,6 +412,15 @@ function showAnulacionSuccessUI(venta, onRedirect) {
         modal.instance.hide();
         if (onRedirect) onRedirect();
     };
+    
+    if (venta.arcaData && venta.arcaData.notaCredito) {
+        body.querySelector('#btn-imprimir-nc').onclick = () => {
+            printThermalTicket(venta.ticketId, venta, true);
+        };
+        body.querySelector('#btn-pdf-nc').onclick = () => {
+            generatePDF(venta.ticketId, venta, true);
+        };
+    }
 }
 
 function showAnulacionErrorUI(errorMessage) {
@@ -475,6 +493,10 @@ async function anularVenta(ventaId) {
                 }
                 updateAnulacionStep('step-arca', 'success');
                 await marcarVentaAnuladaConNC(ventaId, resultadoNC.data);
+                
+                // Inyectamos la NC en el objeto local para la pantalla de éxito
+                ventaAnulada.arcaData = ventaAnulada.arcaData || {};
+                ventaAnulada.arcaData.notaCredito = resultadoNC.data;
             }
             // --- FIN: Lógica de Nota de Crédito ---
 
@@ -566,7 +588,14 @@ function renderTablaDetalle(ventasParaMostrar) {
 
         let arcaBtnHtml = '';
         if (isAnulada) {
-            arcaBtnHtml = `<button class="btn btn-sm btn-outline-secondary" disabled title="Venta Anulada"><i class="fas fa-ban"></i></button>`;
+            if (venta.arcaData && venta.arcaData.notaCredito) {
+                arcaBtnHtml = `
+                    <button class="btn btn-sm btn-outline-danger btn-pdf-nc" data-id="${venta.id}" title="Ver PDF Nota de Crédito"><i class="fas fa-file-pdf"></i> NC</button>
+                    <button class="btn btn-sm btn-outline-dark btn-print-nc" data-id="${venta.id}" title="Imprimir Ticket Nota de Crédito"><i class="fas fa-print"></i> NC</button>
+                `;
+            } else {
+                arcaBtnHtml = `<button class="btn btn-sm btn-outline-secondary" disabled title="Venta Anulada"><i class="fas fa-ban"></i></button>`;
+            }
         } else if (venta.facturadoEnArca) {
             arcaBtnHtml = `<button class="btn btn-sm btn-success" disabled title="Facturado en ARCA"><i class="fas fa-check-circle"></i></button>`;
         } else {
@@ -1026,6 +1055,8 @@ export async function init() {
         const thermalBtn = e.target.closest('.btn-print-thermal');
         const anularBtn = e.target.closest('.btn-anular-venta');
         const arcaBtn = e.target.closest('.btn-facturar-arca');
+        const pdfNcBtn = e.target.closest('.btn-pdf-nc');
+        const printNcBtn = e.target.closest('.btn-print-nc');
 
         if (detalleBtn) {
             const ventaId = detalleBtn.dataset.id;
@@ -1111,6 +1142,14 @@ export async function init() {
             const ventaId = thermalBtn.dataset.id;
             const venta = ventas.find(v => v.id === ventaId);
             if (venta) printThermalTicket(venta.ticketId, venta);
+        } else if (pdfNcBtn) {
+            const ventaId = pdfNcBtn.dataset.id;
+            const venta = ventas.find(v => v.id === ventaId);
+            if (venta) generatePDF(venta.ticketId, venta, true);
+        } else if (printNcBtn) {
+            const ventaId = printNcBtn.dataset.id;
+            const venta = ventas.find(v => v.id === ventaId);
+            if (venta) printThermalTicket(venta.ticketId, venta, true);
         } else if (anularBtn) {
             const ventaId = anularBtn.dataset.id;
             anularVenta(ventaId);
