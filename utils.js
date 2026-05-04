@@ -181,7 +181,7 @@ function getAfipQrUrl(venta, appConfig) {
         ver: 1,
         fecha: venta.fecha,
         cuit: cuitEmisor,
-        ptoVta: 1,
+        // ptoVta: 2,
         tipoCmp: 11, // Factura C (por defecto)
         nroCmp: parseInt(venta.arcaData.CbteNro) || 0,
         importe: parseFloat(venta.total.toFixed(2)),
@@ -879,7 +879,7 @@ export async function facturarEnArca(venta) {
 
     const url = `${arcaConfig.baseUrl}/invoices/authorize?cuit=${arcaConfig.cuit}&prod=${arcaConfig.isProd}`;
     const payload = {
-        PtoVta: 1,
+        // PtoVta: 2,
         Concepto: 1,
         ImpTotal: parseFloat(venta.total.toFixed(2)),
         ImpNeto: parseFloat(venta.total.toFixed(2)),
