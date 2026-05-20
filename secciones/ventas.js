@@ -296,8 +296,13 @@ function initEditPriceModalListeners() {
                 newPriceForTicket = newVenta;
 
                 try {
+                    const productoEnTicket = ticket.find(p => p.id === currentEditingProductId);
                     const productRef = doc(db, "productos", currentEditingProductId);
                     await updateDoc(productRef, { costo: newCosto, venta: newVenta, fechaUltimoCambioPrecio: serverTimestamp() });
+                    const { logProducto } = await import('../utils.js');
+                    if (productoEnTicket) {
+                        await logProducto(currentEditingProductId, productoEnTicket.nombre, 'edición', `Desde Ventas (Permanente). Venta: $${productoEnTicket.precio} -> $${newVenta} | Costo: $${productoEnTicket.costo} -> $${newCosto}`);
+                    }
                     console.log("Producto actualizado en la base de datos.");
                 } catch (error) {
                     console.error("Error al actualizar el producto en la base de datos: ", error);
@@ -309,6 +314,12 @@ function initEditPriceModalListeners() {
                 if (isNaN(newPriceForTicket) || newPriceForTicket < 0) {
                     showAlertModal('Por favor, ingresa un precio válido para esta venta.');
                     return;
+                }
+
+                const productoEnTicket = ticket.find(p => p.id === currentEditingProductId);
+                if (productoEnTicket && productoEnTicket.precio !== newPriceForTicket) {
+                    const { logProducto } = await import('../utils.js');
+                    await logProducto(currentEditingProductId, productoEnTicket.nombre, 'edición', `Desde Ventas (Temporal). Venta: $${productoEnTicket.precio} -> $${newPriceForTicket}`);
                 }
             }
 

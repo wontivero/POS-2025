@@ -468,6 +468,9 @@ async function guardarTodoEnBD() {
         const batch = writeBatch(db);
         const nuevasCategorias = { marcas: new Set(), colores: new Set(), rubros: new Set() };
 
+        const { getAuth } = await import("https://www.gstatic.com/firebasejs/9.6.1/firebase-auth.js");
+        const userEmail = getAuth().currentUser ? getAuth().currentUser.email : 'Sistema';
+
         for (const p of productosEnPreparacion) {
             const productoData = {
                 codigo: p.codigo, nombre: p.nombre, nombre_lowercase: p.nombre.toLowerCase(),
@@ -479,15 +482,29 @@ async function guardarTodoEnBD() {
                 fechaUltimoCambioPrecio: Timestamp.now()
             };
 
+            let docRef;
+            let actionType = 'creación';
+            let detailsMsg = `Venta: $${p.venta}, Costo: $${p.costo}`;
+
             if (p.status === 'editar') {
-                // Si el estado es 'editar', usamos UPDATE en el ID existente.
-                const docRef = doc(db, "productos", p.id);
+                docRef = doc(db, "productos", p.id);
                 batch.update(docRef, productoData);
+                actionType = 'edición';
+                detailsMsg = `Edición desde Carga. Venta: $${p.venta}, Costo: $${p.costo}`;
             } else { // 'nuevo'
-                // Si el estado es 'nuevo', usamos SET en una nueva referencia.
-                const newDocRef = doc(collection(db, "productos"));
-                batch.set(newDocRef, productoData);
+                docRef = doc(collection(db, "productos"));
+                batch.set(docRef, productoData);
             }
+
+            const logRef = doc(collection(db, 'productos_logs'));
+            batch.set(logRef, {
+                productoId: p.status === 'editar' ? p.id : docRef.id,
+                productoNombre: p.nombre,
+                accion: actionType,
+                detalles: detailsMsg,
+                usuario: userEmail,
+                fecha: new Date()
+            });
 
             // Recolectamos las categorías para asegurar que existan
             if (p.marca) nuevasCategorias.marcas.add(p.marca);

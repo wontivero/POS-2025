@@ -83,6 +83,7 @@ function renderProductRows(productos) {
             <td>${p.stock || 0}</td>
             <td>${ultimaActualizacion}</td>
             <td>
+                <button class="btn btn-secondary btn-sm btn-historial-producto" data-id="${p.id}" data-nombre="${p.nombre}" title="Ver Historial"><i class="fas fa-history"></i></button>
                 <button class="btn btn-warning btn-sm btn-editar-producto" data-id="${p.id}" title="Editar"><i class="fas fa-edit"></i></button>
                 <button class="btn btn-info btn-sm btn-duplicar-producto" data-id="${p.id}" title="Duplicar"><i class="fas fa-copy"></i></button>
                 <button class="btn btn-danger btn-sm btn-eliminar-producto" data-id="${p.id}" title="Eliminar"><i class="fas fa-trash-alt"></i></button>
@@ -232,12 +233,32 @@ async function handleFormSubmit(e) {
     saveButton.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Guardando...`;
 
     try {
-        await saveDocument('productos', productoData, isNew ? null : id);
+        let oldProducto = null;
+        if (!isNew) {
+            oldProducto = listaCompletaProductos.find(p => p.id === id);
+        }
+        
+        const savedId = await saveDocument('productos', productoData, isNew ? null : id);
         if (isNew) {
             await addUniqueItem('marcas', productoData.marca);
             await addUniqueItem('colores', productoData.color);
             await addUniqueItem('rubros', productoData.rubro);
         }
+        
+        import('../utils.js').then(async ({ logProducto }) => {
+            let detalles = [];
+            if (isNew) {
+                detalles.push(`Venta: $${productoData.venta}, Costo: $${productoData.costo}`);
+            } else if (oldProducto) {
+                if (oldProducto.venta !== productoData.venta) detalles.push(`Venta: $${oldProducto.venta} -> $${productoData.venta}`);
+                if (oldProducto.costo !== productoData.costo) detalles.push(`Costo: $${oldProducto.costo} -> $${productoData.costo}`);
+                if (oldProducto.stock !== productoData.stock) detalles.push(`Stock: ${oldProducto.stock} -> ${productoData.stock}`);
+            }
+            if (detalles.length > 0 || isNew) {
+                await logProducto(savedId || id, productoData.nombre, isNew ? 'creación' : 'edición', detalles.join(' | '));
+            }
+        });
+
         if (productoModal) productoModal.hide();
         await showAlertModal(`Producto ${isNew ? 'creado' : 'actualizado'} correctamente.`);
     } catch (e) {
@@ -271,7 +292,12 @@ async function handleDelete(e) {
     const confirmado = await showConfirmationModal('¿Estás seguro de que deseas eliminar este producto?');
     if (confirmado) {
         try {
+            const prodToDelete = listaCompletaProductos.find(p => p.id === id);
             await deleteDocument('productos', id);
+            if (prodToDelete) {
+                const { logProducto } = await import('../utils.js');
+                await logProducto(id, prodToDelete.nombre, 'eliminación', 'Producto eliminado del sistema');
+            }
             await showAlertModal('Producto eliminado.');
         } catch (e) {
             console.error('Error al eliminar el producto:', e);
@@ -335,9 +361,13 @@ async function handleActualizacionMasiva() {
     if (!confirmado) return;
 
     const batch = writeBatch(db);
+    const { getAuth } = await import("https://www.gstatic.com/firebasejs/9.6.1/firebase-auth.js");
+    const userEmail = getAuth().currentUser ? getAuth().currentUser.email : 'Sistema';
+
     productosFiltradosActuales.forEach(p => {
         const docRef = doc(db, 'productos', p.id);
         let updateData = {};
+        let detailsMsg = '';
         if (field === 'costo') {
             const oldCost = p.costo || 0;
             let newCost = type === 'percentage' ? oldCost * (1 + amount / 100) : oldCost + amount;
@@ -348,14 +378,26 @@ async function handleActualizacionMasiva() {
                 const newSalePrice = newCost * (1 + profitPercentage);
                 updateData.venta = roundUpToNearest50(newSalePrice);
             }
+            detailsMsg = `Costo modificado (Masivo): $${oldCost} -> $${newCost}`;
         } else {
             const oldSalePrice = p.venta || 0;
             let newSalePrice = type === 'percentage' ? oldSalePrice * (1 + amount / 100) : oldSalePrice + amount;
             newSalePrice = newSalePrice < 0 ? 0 : newSalePrice;
             updateData.venta = roundUpToNearest50(newSalePrice);
+            detailsMsg = `Venta modificada (Masiva): $${oldSalePrice} -> $${updateData.venta}`;
         }
         updateData.fechaUltimoCambioPrecio = Timestamp.now();
         batch.update(docRef, updateData);
+
+        const logRef = doc(collection(db, 'productos_logs'));
+        batch.set(logRef, {
+            productoId: p.id,
+            productoNombre: p.nombre,
+            accion: 'actualización masiva',
+            detalles: detailsMsg,
+            usuario: userEmail,
+            fecha: new Date()
+        });
     });
 
     try {
@@ -602,6 +644,99 @@ function resetProductoModal() {
     if (productoCodigo) productoCodigo.classList.remove('is-invalid');
 }
 
+// --- LÓGICA DEL MODAL DEL HISTORIAL DE PRECIOS ---
+let historialModalInstance = null;
+
+async function showHistorialModal(productoId, productoNombre) {
+    let modalEl = document.getElementById('historialProductoModal');
+    if (!modalEl) {
+        modalEl = document.createElement('div');
+        modalEl.className = 'modal fade';
+        modalEl.id = 'historialProductoModal';
+        modalEl.innerHTML = `
+            <div class="modal-dialog modal-lg modal-dialog-scrollable">
+                <div class="modal-content" style="border-radius: 1rem;">
+                    <div class="modal-header bg-light">
+                        <h5 class="modal-title fw-bold"><i class="fas fa-history me-2 text-primary"></i>Historial: <span id="historial-prod-nombre" class="text-primary"></span></h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-hover table-striped mb-0 text-sm">
+                                <thead class="table-light sticky-top">
+                                    <tr>
+                                        <th>Fecha</th>
+                                        <th>Usuario</th>
+                                        <th>Acción</th>
+                                        <th>Detalles</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="historial-tbody">
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modalEl);
+    }
+    
+    if (!historialModalInstance) {
+        historialModalInstance = new bootstrap.Modal(modalEl);
+    }
+
+    document.getElementById('historial-prod-nombre').textContent = productoNombre;
+    const tbody = document.getElementById('historial-tbody');
+    tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4"><div class="spinner-border text-primary"></div> Cargando registros...</td></tr>';
+    
+    historialModalInstance.show();
+
+    try {
+        const q = query(collection(db, 'productos_logs'), where('productoId', '==', productoId));
+        const snapshot = await getDocs(q);
+        
+        let logs = [];
+        snapshot.forEach(doc => logs.push(doc.data()));
+        
+        logs.sort((a, b) => {
+            const dateA = a.fecha?.toDate ? a.fecha.toDate() : new Date(a.fecha);
+            const dateB = b.fecha?.toDate ? b.fecha.toDate() : new Date(b.fecha);
+            return dateB - dateA;
+        });
+
+        tbody.innerHTML = '';
+
+        if (logs.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center py-3 text-muted">No hay registros para este producto.</td></tr>';
+            return;
+        }
+
+        logs.forEach(log => {
+            const date = log.fecha?.toDate ? log.fecha.toDate() : new Date(log.fecha);
+            const dateStr = date.toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' });
+            
+            let badgeColor = 'bg-secondary';
+            if (log.accion === 'creación') badgeColor = 'bg-success';
+            if (log.accion === 'edición') badgeColor = 'bg-warning text-dark';
+            if (log.accion === 'eliminación') badgeColor = 'bg-danger';
+            if (log.accion === 'actualización masiva') badgeColor = 'bg-info text-dark';
+
+            tbody.innerHTML += `
+                <tr>
+                    <td class="text-nowrap">${dateStr}</td>
+                    <td><span class="small fw-bold">${log.usuario.split('@')[0]}</span></td>
+                    <td><span class="badge ${badgeColor}">${log.accion.toUpperCase()}</span></td>
+                    <td class="small">${log.detalles || '-'}</td>
+                </tr>
+            `;
+        });
+    } catch (e) {
+        console.error("Error fetching logs", e);
+        tbody.innerHTML = '<tr><td colspan="4" class="text-center py-3 text-danger">Error al cargar el historial.</td></tr>';
+    }
+}
+
 export function init() {
     tablaProductosBody = document.getElementById('tabla-productos');
     tablaProductosHead = document.getElementById('tablaProductosHead');
@@ -687,6 +822,7 @@ export function init() {
             if (e.target.closest('.btn-eliminar-producto')) handleDelete(e);
             if (e.target.closest('.btn-editar-producto')) handleEdit(e);
             if (e.target.closest('.btn-duplicar-producto')) handleDuplicate(e);
+            if (e.target.closest('.btn-historial-producto')) showHistorialModal(e.target.closest('.btn-historial-producto').dataset.id, e.target.closest('.btn-historial-producto').dataset.nombre);
         });
     }
     if (tablaProductosHead) tablaProductosHead.addEventListener('click', handleSort);

@@ -15,6 +15,28 @@ let logoCache = {
 };
 
 /**
+ * Registra en el historial cualquier cambio realizado sobre un producto.
+ */
+export const logProducto = async (productoId, productoNombre, accion, detalles) => {
+    try {
+        const { getAuth } = await import("https://www.gstatic.com/firebasejs/9.6.1/firebase-auth.js");
+        const auth = getAuth();
+        const userEmail = auth.currentUser ? auth.currentUser.email : 'Sistema';
+        const logData = {
+            productoId: productoId || 'Desconocido',
+            productoNombre: productoNombre || 'Desconocido',
+            accion, 
+            detalles, 
+            usuario: userEmail,
+            fecha: new Date()
+        };
+        await addDoc(collection(db, 'productos_logs'), logData);
+    } catch (e) {
+        console.error("Error al registrar log de producto:", e);
+    }
+};
+
+/**
  * Obtiene todos los documentos de una colección de Firestore.
  * @param {string} collectionName - El nombre de la colección.
  * @returns {Promise<Array>} - Una promesa que resuelve con los documentos y sus IDs.
