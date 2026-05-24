@@ -19,7 +19,7 @@ let tableContainer;
 
 // --- Elementos del DOM ---
 let tablaProductosBody, tablaProductosHead, btnNuevoProducto, productoModalEl, productoModal, formProducto, modalProductoLabel, btnExportarProductos;
-let filtroProductos, filtroMarca, filtroColor, filtroRubro, filtroStockMin, filtroStockMax, filtroVentaMin, filtroVentaMax, btnAplicarFiltros, btnLimpiarFiltros;
+let filtroProductos, filtroMarca, filtroColor, filtroRubro, filtroStockMin, filtroStockMax, filtroVentaMin, filtroVentaMax, filtroWeb, btnAplicarFiltros, btnLimpiarFiltros;
 let updateField, updateTypePercentage, updateTypeFixed, updateAmount, btnAplicarActualizacionMasiva;
 let filtroFechaActDesde, filtroFechaActHasta;
 let datalistMarcasFiltro, datalistColoresFiltro, datalistRubrosFiltro;
@@ -77,8 +77,10 @@ function renderProductRows(productos) {
             porcentajeGanancia = '100%+';
         }
 
+        const cloudIcon = p.publicarEnWeb ? `<i class="fas fa-cloud text-primary ms-2" title="Sincronizado con Tiendanube"></i>` : '';
+
         rowsHtml += `<tr class="${c}" data-id="${p.id}">
-            <td>${p.nombre || 'N/A'}</td>
+            <td>${p.nombre || 'N/A'}${cloudIcon}</td>
             <td><code>${p.codigo || 'N/A'}</code></td>
             <td>${capitalizeFirstLetter(p.marca) || 'N/A'}</td>
             <td>${capitalizeFirstLetter(p.color) || 'N/A'}</td>
@@ -172,6 +174,11 @@ function aplicarFiltrosYRenderizar() {
     if (fechaHastaStr) {
         const fechaHasta = new Date(fechaHastaStr + 'T23:59:59');
         productosFiltrados = productosFiltrados.filter(p => p.fechaUltimoCambioPrecio && p.fechaUltimoCambioPrecio.toDate() <= fechaHasta);
+    }
+    
+    if (filtroWeb && filtroWeb.value !== 'todos') {
+        const estadoWeb = filtroWeb.value;
+        productosFiltrados = productosFiltrados.filter(p => estadoWeb === 'publicados' ? p.publicarEnWeb === true : !p.publicarEnWeb);
     }
 
     productosFiltradosActuales = sortProducts(productosFiltrados, currentSortColumn, currentSortDirection);
@@ -859,6 +866,7 @@ export function init() {
     filtroStockMax = document.getElementById('filtro-stock-max');
     filtroVentaMin = document.getElementById('filtro-venta-min');
     filtroVentaMax = document.getElementById('filtro-venta-max');
+    filtroWeb = document.getElementById('filtro-web');
     filtroFechaActDesde = document.getElementById('filtro-fecha-act-desde');
     filtroFechaActHasta = document.getElementById('filtro-fecha-act-hasta');
     btnAplicarFiltros = document.getElementById('btnAplicarFiltros');
@@ -962,6 +970,7 @@ export function init() {
     if (filtroMarca) filtroMarca.addEventListener('input', aplicarFiltrosYRenderizar);
     if (filtroColor) filtroColor.addEventListener('input', aplicarFiltrosYRenderizar);
     if (filtroRubro) filtroRubro.addEventListener('input', aplicarFiltrosYRenderizar);
+    if (filtroWeb) filtroWeb.addEventListener('change', aplicarFiltrosYRenderizar);
     if (btnAplicarFiltros) btnAplicarFiltros.addEventListener('click', aplicarFiltrosYRenderizar);
     if (btnLimpiarFiltros) {
         btnLimpiarFiltros.addEventListener('click', () => {
@@ -973,6 +982,7 @@ export function init() {
             if (filtroStockMax) filtroStockMax.value = '';
             if (filtroVentaMin) filtroVentaMin.value = '';
             if (filtroVentaMax) filtroVentaMax.value = '';
+            if (filtroWeb) filtroWeb.value = 'todos';
             if (filtroFechaActDesde) filtroFechaActDesde.value = '';
             if (filtroFechaActHasta) filtroFechaActHasta.value = '';
             aplicarFiltrosYRenderizar();
