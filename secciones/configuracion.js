@@ -1,5 +1,5 @@
 // secciones/configuracion.js
-import { getFirestore, doc, getDoc, setDoc, collection, getDocs, addDoc, deleteDoc, updateDoc, query, where } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
+import { getFirestore, doc, getDoc, setDoc, collection, getDocs, addDoc, deleteDoc, updateDoc, query, where, orderBy, writeBatch } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
 import { showAlertModal, showConfirmationModal } from '../utils.js';
 
 const db = getFirestore();
@@ -17,6 +17,9 @@ let autoPrintTicketCheck, savePrintingButton;
 let loyaltyPercentageInput, loyaltyPrintCheck, loyaltyExpirationCheck, loyaltyExpirationDaysInput, btnSaveLoyalty; // <-- NUEVO
 let arcaAutoContado, arcaAutoTransferencia, arcaAutoDebito, arcaAutoCredito, btnSaveArca; // <-- NUEVO ARCA
 let arcaBaseUrl, arcaCuit, arcaApiKey, arcaIsProd; // <-- NUEVO ARCA CREDENCIALES
+let webCategoriaNombreInput, webCategoriaPadreSelect, btnAddWebCategoria, btnCancelEditCategoria, webCategoriasTableBody; // <-- NUEVO CATEGORÍAS WEB
+let editingCategoriaId = null;
+let editingCategoriaOldRuta = null;
 // --- FIN DE LA MODIFICACIÓN ---
 
 /**
@@ -318,6 +321,124 @@ async function handleDeleteUser(userId, userEmail) {
     }
 }
 
+/**
+ * Carga y renderiza la lista de Categorías Web E-commerce.
+ */
+async function loadAndRenderWebCategorias() {
+    if (!webCategoriasTableBody) return;
+    
+    const snapshot = await getDocs(collection(db, 'categorias_web'));
+    
+    let categorias = [];
+    snapshot.forEach(doc => {
+        const data = doc.data();
+        categorias.push({
+            id: doc.id,
+            nombre: data.nombre,
+            ruta: data.ruta || data.nombre
+        });
+    });
+    
+    // Ordenamos alfabéticamente por la ruta completa
+    categorias.sort((a, b) => a.ruta.localeCompare(b.ruta));
+    
+    webCategoriasTableBody.innerHTML = '';
+    if (webCategoriaPadreSelect) {
+        webCategoriaPadreSelect.innerHTML = '<option value="">-- Ninguna (Categoría Principal) --</option>';
+    }
+
+    categorias.forEach(cat => {
+        if (webCategoriaPadreSelect) {
+            webCategoriaPadreSelect.innerHTML += `<option value="${cat.ruta}">${cat.ruta}</option>`;
+        }
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${cat.ruta}</td>
+            <td class="text-end">
+                <button class="btn btn-sm btn-warning btn-edit-categoria" data-id="${cat.id}" data-nombre="${cat.nombre}" data-ruta="${cat.ruta}" title="Editar">
+                    <i class="fas fa-edit"></i>
+                </button>
+                <button class="btn btn-sm btn-danger btn-delete-categoria" data-id="${cat.id}" data-nombre="${cat.ruta}">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </td>
+        `;
+        webCategoriasTableBody.appendChild(row);
+    });
+}
+
+/**
+ * Cancela el modo edición de categorías.
+ */
+function cancelEditCategoria() {
+    editingCategoriaId = null;
+    editingCategoriaOldRuta = null;
+    if (webCategoriaNombreInput) webCategoriaNombreInput.value = '';
+    if (webCategoriaPadreSelect) webCategoriaPadreSelect.value = '';
+    if (btnAddWebCategoria) {
+        btnAddWebCategoria.innerHTML = '<i class="fas fa-plus me-2"></i>Agregar Categoría';
+        btnAddWebCategoria.classList.replace('btn-success', 'btn-primary');
+    }
+    if (btnCancelEditCategoria) btnCancelEditCategoria.style.display = 'none';
+}
+
+/**
+ * Agrega una nueva categoría web.
+ */
+async function handleAddWebCategoria() {
+    const nombre = webCategoriaNombreInput.value.trim();
+    const padreRuta = webCategoriaPadreSelect ? webCategoriaPadreSelect.value : '';
+    if (!nombre) {
+        showAlertModal("Ingresa el nombre de la categoría.", "Error");
+        return;
+    }
+    
+    const ruta = padreRuta ? `${padreRuta} > ${nombre}` : nombre;
+    
+    try {
+        if (editingCategoriaId) {
+            // Actualizar existente
+            const q = query(collection(db, 'categorias_web'), where('ruta', '==', ruta));
+            const snap = await getDocs(q);
+            const duplicate = snap.docs.find(d => d.id !== editingCategoriaId);
+            if (duplicate) return showAlertModal("Esta categoría ya existe.", "Aviso");
+
+            const batch = writeBatch(db);
+            batch.update(doc(db, 'categorias_web', editingCategoriaId), { nombre, ruta });
+
+            // Actualizar rutas de las subcategorías si cambió la ruta padre
+            if (editingCategoriaOldRuta && editingCategoriaOldRuta !== ruta) {
+                const allCatsSnap = await getDocs(collection(db, 'categorias_web'));
+                allCatsSnap.forEach(d => {
+                    const childData = d.data();
+                    if (childData.ruta && childData.ruta.startsWith(editingCategoriaOldRuta + ' > ')) {
+                        const childNuevaRuta = childData.ruta.replace(editingCategoriaOldRuta + ' > ', ruta + ' > ');
+                        batch.update(doc(db, 'categorias_web', d.id), { ruta: childNuevaRuta });
+                    }
+                });
+            }
+            
+            await batch.commit();
+            cancelEditCategoria();
+            await loadAndRenderWebCategorias();
+            showAlertModal("Categoría actualizada correctamente.", "Éxito");
+        } else {
+            // Crear nueva
+            const q = query(collection(db, 'categorias_web'), where('ruta', '==', ruta));
+            const snap = await getDocs(q);
+            if (!snap.empty) return showAlertModal("Esta categoría ya existe.", "Aviso");
+            
+            await addDoc(collection(db, 'categorias_web'), { nombre, ruta });
+            webCategoriaNombreInput.value = '';
+            await loadAndRenderWebCategorias();
+            showAlertModal("Categoría agregada correctamente.", "Éxito");
+        }
+    } catch (e) {
+        console.error("Error al agregar categoría:", e);
+        showAlertModal("Error al guardar la categoría.", "Error");
+    }
+}
+
 export async function init() {
     commissionInput = document.getElementById('config-commission-percentage');
     saveCommissionButton = document.getElementById('btn-guardar-comision');
@@ -356,6 +477,12 @@ export async function init() {
     arcaAutoDebito = document.getElementById('config-arca-auto-debito');
     arcaAutoCredito = document.getElementById('config-arca-auto-credito');
     btnSaveArca = document.getElementById('btn-guardar-arca');
+    
+    webCategoriaNombreInput = document.getElementById('web-categoria-nombre');
+    webCategoriaPadreSelect = document.getElementById('web-categoria-padre');
+    btnAddWebCategoria = document.getElementById('btn-add-web-categoria');
+    btnCancelEditCategoria = document.getElementById('btn-cancel-edit-categoria');
+    webCategoriasTableBody = document.getElementById('web-categorias-table-body');
 
     if (savePrintingButton) {
         savePrintingButton.addEventListener('click', savePrintingConfig);
@@ -385,10 +512,48 @@ export async function init() {
             }
         });
     }
+    
+    if (btnAddWebCategoria) {
+        btnAddWebCategoria.addEventListener('click', handleAddWebCategoria);
+    }
+    
+    if (btnCancelEditCategoria) {
+        btnCancelEditCategoria.addEventListener('click', cancelEditCategoria);
+    }
+    
+    if (webCategoriasTableBody) {
+        webCategoriasTableBody.addEventListener('click', async (e) => {
+            const btnDelete = e.target.closest('.btn-delete-categoria');
+            const btnEdit = e.target.closest('.btn-edit-categoria');
+            
+            if (btnDelete && await showConfirmationModal(`¿Eliminar la categoría <strong>${btnDelete.dataset.nombre}</strong>?`)) {
+                await deleteDoc(doc(db, 'categorias_web', btnDelete.dataset.id));
+                loadAndRenderWebCategorias();
+            } else if (btnEdit) {
+                editingCategoriaId = btnEdit.dataset.id;
+                editingCategoriaOldRuta = btnEdit.dataset.ruta;
+                webCategoriaNombreInput.value = btnEdit.dataset.nombre;
+                
+                const parts = editingCategoriaOldRuta.split(' > ');
+                parts.pop();
+                const parentRuta = parts.join(' > ');
+                
+                if (webCategoriaPadreSelect) webCategoriaPadreSelect.value = parentRuta;
+                
+                if (btnAddWebCategoria) {
+                    btnAddWebCategoria.innerHTML = '<i class="fas fa-save me-2"></i>Actualizar';
+                    btnAddWebCategoria.classList.replace('btn-primary', 'btn-success');
+                }
+                if (btnCancelEditCategoria) btnCancelEditCategoria.style.display = 'block';
+                webCategoriaNombreInput.focus();
+            }
+        });
+    }
     // --- FIN DE LA MODIFICACIÓN ---
 
     await loadConfiguration();
     await loadAndRenderUsers();
+    await loadAndRenderWebCategorias();
 }
 
 function toggleExpirationInput() {

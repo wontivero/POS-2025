@@ -348,6 +348,51 @@
                                 Producto Destacado (Mostrar en acceso rápido de ventas)
                             </label>
                         </div>
+
+                        <!-- INICIO DATOS E-COMMERCE -->
+                        <h6 class="mt-4 mb-3 text-primary border-bottom pb-2"><i class="fas fa-globe me-2"></i>Datos E-commerce (Tiendanube)</h6>
+                        <div class="row bg-light p-3 rounded mb-3 border mx-0">
+                            <div class="col-md-12 mb-3">
+                                <div class="form-check form-switch form-switch-lg">
+                                    <input class="form-check-input" type="checkbox" id="producto-publicar-web" role="switch">
+                                    <label class="form-check-label ms-2 fw-bold text-dark" for="producto-publicar-web">Sincronizar y publicar en Tiendanube</label>
+                                </div>
+                            </div>
+                            <div id="producto-ecommerce-fields" class="row mx-0 w-100 px-0" style="display: none;">
+                            <div class="col-md-6 mb-3">
+                                <label for="producto-categoria-web" class="form-label text-muted small">Categoría Web</label>
+                                <select class="form-select" id="producto-categoria-web">
+                                    <option value="">-- Seleccionar --</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="producto-peso" class="form-label text-muted small">Peso (gramos)</label>
+                                <input type="number" class="form-control text-end" id="producto-peso" step="1" min="0" placeholder="500">
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label for="producto-alto" class="form-label text-muted small">Alto (cm)</label>
+                                <input type="number" class="form-control text-end" id="producto-alto" step="1" min="0" placeholder="0">
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label for="producto-ancho" class="form-label text-muted small">Ancho (cm)</label>
+                                <input type="number" class="form-control text-end" id="producto-ancho" step="1" min="0" placeholder="0">
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label for="producto-profundidad" class="form-label text-muted small">Profundidad (cm)</label>
+                                <input type="number" class="form-control text-end" id="producto-profundidad" step="1" min="0" placeholder="0">
+                            </div>
+                            <div class="col-md-12 mb-2">
+                                <label for="producto-descripcion-web" class="form-label text-muted small">Descripción Larga</label>
+                                <textarea class="form-control" id="producto-descripcion-web" rows="2" placeholder="Describe los detalles, materiales o usos del producto..."></textarea>
+                            </div>
+                            <div class="col-md-12 mb-3">
+                                <label for="producto-imagenes" class="form-label text-muted small">Imágenes del Producto <i class="fas fa-images text-info"></i></label>
+                                <input type="file" class="form-control" id="producto-imagenes" accept="image/png, image/jpeg, image/webp" multiple>
+                                <div id="producto-imagenes-preview" class="d-flex flex-wrap gap-2 mt-2"></div>
+                            </div>
+                            </div>
+                        </div>
+                        <!-- FIN DATOS E-COMMERCE -->
                     </div>
 
 

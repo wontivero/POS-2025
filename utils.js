@@ -1,8 +1,9 @@
 // utils.js
-import { db } from './firebase.js';
+import { db, storage } from './firebase.js';
 import {
     collection, addDoc, getDocs, runTransaction, doc, query, orderBy, where, updateDoc, deleteDoc, getDoc
 } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
+import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-storage.js";
 import { getAppConfig } from './secciones/dataManager.js'; // <-- IMPORTAMOS EL GETTER
  /**
  * Variable global para cachear el logo y evitar recargas de red en cada ticket.
@@ -113,6 +114,29 @@ export const getDocumentById = async (collectionName, docId) => {
     } else {
         console.log("No existe el documento!");
         return null;
+    }
+};
+
+/**
+ * Sube una imagen de producto a Firebase Storage.
+ */
+export const uploadProductImage = async (file, productId, index) => {
+    const fileExtension = file.name.split('.').pop();
+    const fileName = `img_${Date.now()}_${index}.${fileExtension}`;
+    const storageRef = ref(storage, `productos/${productId}/${fileName}`);
+    const snapshot = await uploadBytesResumable(storageRef, file);
+    return await getDownloadURL(snapshot.ref);
+};
+
+/**
+ * Elimina una imagen de producto de Firebase Storage usando su URL.
+ */
+export const deleteProductImage = async (imageUrl) => {
+    try {
+        const storageRef = ref(storage, imageUrl);
+        await deleteObject(storageRef);
+    } catch (e) {
+        console.warn("Error al borrar la imagen de storage o no existía:", e);
     }
 };
 

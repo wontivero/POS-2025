@@ -10,6 +10,12 @@ let productoEnEdicionId = null;
 let form, prodCodigo, prodNombre, prodMarca, prodColor, prodRubro, prodCosto, prodGanancia, prodVenta, prodStock, prodStockMinimo, prodGenerico, prodDestacado;
 let btnAgregar, btnAgregarYDuplicar, btnGuardarTodo, btnLimpiarFormulario; // <-- Añádelo aquí
 let grillaBody, contadorProductos, grillaVaciaMsg;
+let prodPublicarWeb, prodDescripcionWeb, prodPeso, prodCategoriaWeb; 
+let prodAlto, prodAncho, prodProfundidad; // <-- Dimensiones E-commerce
+let prodImagenesInput, prodImagenesPreview;
+let currentSelectedFiles = []; // Para almacenar las imágenes a subir temporalmente
+let currentExistingImages = []; // Para imágenes que ya estaban en el producto al editar
+let prodEcommerceFields;
 let datalistMarcas, datalistColores, datalistRubros;
 
 export async function init() {
@@ -26,6 +32,16 @@ export async function init() {
     prodStockMinimo = document.getElementById('prod-stock-minimo');
     prodGenerico = document.getElementById('prod-generico');
     prodDestacado = document.getElementById('prod-destacado');
+    prodPublicarWeb = document.getElementById('prod-publicar-web');
+    prodDescripcionWeb = document.getElementById('prod-descripcion-web');
+    prodPeso = document.getElementById('prod-peso');
+    prodCategoriaWeb = document.getElementById('prod-categoria-web');
+    prodAlto = document.getElementById('prod-alto');
+    prodAncho = document.getElementById('prod-ancho');
+    prodProfundidad = document.getElementById('prod-profundidad');
+    prodImagenesInput = document.getElementById('prod-imagenes');
+    prodImagenesPreview = document.getElementById('prod-imagenes-preview');
+    prodEcommerceFields = document.getElementById('prod-ecommerce-fields');
     btnAgregar = document.getElementById('btn-agregar-a-grilla');
     btnAgregarYDuplicar = document.getElementById('btn-agregar-y-duplicar');
     btnGuardarTodo = document.getElementById('btn-guardar-todo');
@@ -58,6 +74,23 @@ export async function init() {
 
     // Carga inicial de datos desde el caché
     actualizarDatalistsCarga();
+
+    // Cargar Categorías Web desde Firestore
+    if (prodCategoriaWeb) {
+        try {
+            const { orderBy } = await import("https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js");
+            const catSnap = await getDocs(query(collection(db, 'categorias_web'), orderBy('nombre')));
+            prodCategoriaWeb.innerHTML = '<option value="">-- Seleccionar Categoría --</option>';
+            catSnap.forEach(doc => {
+                const catData = doc.data();
+                const nombreMostrar = catData.ruta || catData.nombre;
+                const opt = document.createElement('option');
+                opt.value = nombreMostrar;
+                opt.textContent = nombreMostrar;
+                prodCategoriaWeb.appendChild(opt);
+            });
+        } catch (e) { console.error("Error al cargar categorías web", e); }
+    }
 
     // --- FIN DE LA NUEVA LÓGICA DE DATOS ---
 
@@ -102,6 +135,78 @@ function setupEventListeners() {
     prodCosto.addEventListener('input', calcularPrecioVenta);
     prodGanancia.addEventListener('input', calcularPrecioVenta);
     prodVenta.addEventListener('input', calcularMargen);
+    
+    if (prodPublicarWeb && prodEcommerceFields) {
+        prodPublicarWeb.addEventListener('change', (e) => {
+            prodEcommerceFields.style.display = e.target.checked ? 'flex' : 'none';
+        });
+    }
+
+    if (prodImagenesInput) {
+        prodImagenesInput.addEventListener('change', handleImagenesSelection);
+    }
+}
+
+function handleImagenesSelection(e) {
+    const files = Array.from(e.target.files);
+    // Agregamos los nuevos archivos
+    currentSelectedFiles = [...currentSelectedFiles, ...files];
+    renderImagenesPreview();
+    // Limpiamos el input para permitir seleccionar la misma imagen si la borraron
+    prodImagenesInput.value = '';
+}
+
+function renderImagenesPreview() {
+    if (!prodImagenesPreview) return;
+    prodImagenesPreview.innerHTML = '';
+
+    // Renderizar imágenes existentes (de edición)
+    currentExistingImages.forEach((url, index) => {
+        const div = document.createElement('div');
+        div.className = 'position-relative border rounded p-1 bg-white';
+        div.style.width = '80px';
+        div.style.height = '80px';
+        div.innerHTML = `
+            <img src="${url}" class="w-100 h-100 object-fit-cover rounded">
+            <button type="button" class="btn btn-sm btn-danger position-absolute top-0 start-100 translate-middle rounded-circle" style="width:24px;height:24px;padding:0;line-height:1;" data-existing-index="${index}">&times;</button>
+        `;
+        div.querySelector('button').addEventListener('click', () => {
+            currentExistingImages.splice(index, 1);
+            renderImagenesPreview();
+        });
+        prodImagenesPreview.appendChild(div);
+    });
+
+    // Renderizar nuevos archivos locales
+    currentSelectedFiles.forEach((file, index) => {
+        const div = document.createElement('div');
+        div.className = 'position-relative border rounded p-1 bg-white';
+        div.style.width = '80px';
+        div.style.height = '80px';
+        
+        const img = document.createElement('img');
+        img.className = 'w-100 h-100 object-fit-cover rounded';
+        
+        // Leemos el archivo local para la previsualización
+        const reader = new FileReader();
+        reader.onload = (e) => img.src = e.target.result;
+        reader.readAsDataURL(file);
+
+        div.appendChild(img);
+
+        const btnRemove = document.createElement('button');
+        btnRemove.type = 'button';
+        btnRemove.className = 'btn btn-sm btn-danger position-absolute top-0 start-100 translate-middle rounded-circle';
+        btnRemove.style = 'width:24px;height:24px;padding:0;line-height:1;';
+        btnRemove.innerHTML = '&times;';
+        btnRemove.addEventListener('click', () => {
+            currentSelectedFiles.splice(index, 1);
+            renderImagenesPreview();
+        });
+        
+        div.appendChild(btnRemove);
+        prodImagenesPreview.appendChild(div);
+    });
 }
 
 
@@ -285,6 +390,15 @@ async function agregarProductoAGrilla(duplicarDespues = false) {
         isGeneric: prodGenerico.checked,
         
         isFeatured: prodDestacado.checked,
+        publicarEnWeb: prodPublicarWeb ? prodPublicarWeb.checked : false,
+        descripcionWeb: prodDescripcionWeb ? prodDescripcionWeb.value.trim() : '',
+        peso: parseInt(prodPeso ? prodPeso.value : 0) || 0,
+        alto: parseInt(prodAlto ? prodAlto.value : 0) || 0,
+        ancho: parseInt(prodAncho ? prodAncho.value : 0) || 0,
+        profundidad: parseInt(prodProfundidad ? prodProfundidad.value : 0) || 0,
+        categoriaWeb: prodCategoriaWeb ? prodCategoriaWeb.value : '',
+        nuevasImagenes: [...currentSelectedFiles], // Guardamos los archivos para la fila
+        imagenesExistentes: [...currentExistingImages] // Guardamos las URLs que se mantienen
     };
 
     const indexExistente = productosEnPreparacion.findIndex(p => p.id === productoParaGrilla.id);
@@ -309,6 +423,9 @@ function limpiarFormulario() {
     form.classList.remove('duplicando');
     modoFormulario = 'nuevo';
     productoEnEdicionId = null;
+    currentSelectedFiles = [];
+    currentExistingImages = [];
+    renderImagenesPreview();
     prodCodigo.focus();
 }
 
@@ -324,6 +441,26 @@ function poblarFormulario(producto, modoDuplicar = false) {
     prodStockMinimo.value = producto.stockMinimo;
     prodGenerico.checked = producto.isGeneric;
     prodDestacado.checked = producto.isFeatured;
+    if (prodPublicarWeb) prodPublicarWeb.checked = producto.publicarEnWeb || false;
+    if (prodEcommerceFields) {
+        prodEcommerceFields.style.display = producto.publicarEnWeb ? 'flex' : 'none';
+    }
+    if (prodDescripcionWeb) prodDescripcionWeb.value = producto.descripcionWeb || '';
+    if (prodPeso) prodPeso.value = producto.peso || 0;
+    if (prodAlto) prodAlto.value = producto.alto || 0;
+    if (prodAncho) prodAncho.value = producto.ancho || 0;
+    if (prodProfundidad) prodProfundidad.value = producto.profundidad || 0;
+    if (prodCategoriaWeb) {
+        if (producto.categoriaWeb && !Array.from(prodCategoriaWeb.options).some(o => o.value === producto.categoriaWeb)) {
+            const opt = document.createElement('option');
+            opt.value = producto.categoriaWeb; opt.textContent = producto.categoriaWeb;
+            prodCategoriaWeb.appendChild(opt);
+        }
+        prodCategoriaWeb.value = producto.categoriaWeb || '';
+    }
+    currentSelectedFiles = producto.nuevasImagenes || [];
+    currentExistingImages = producto.imagenesExistentes || producto.imagenes || [];
+    renderImagenesPreview();
     if (producto.costo > 0) {
         prodGanancia.value = ((producto.venta - producto.costo) / producto.costo * 100).toFixed(2);
     } else {
@@ -469,6 +606,7 @@ async function guardarTodoEnBD() {
         const nuevasCategorias = { marcas: new Set(), colores: new Set(), rubros: new Set() };
 
         const { getAuth } = await import("https://www.gstatic.com/firebasejs/9.6.1/firebase-auth.js");
+        const { uploadProductImage } = await import('../utils.js');
         const userEmail = getAuth().currentUser ? getAuth().currentUser.email : 'Sistema';
 
         for (const p of productosEnPreparacion) {
@@ -479,7 +617,15 @@ async function guardarTodoEnBD() {
                 stockMinimo: p.stockMinimo, isGeneric: p.isGeneric,
                 isFeatured: p.isFeatured,
                 genericProfitMargin: p.isGeneric ? p.ganancia : 0,
-                fechaUltimoCambioPrecio: Timestamp.now()
+                fechaUltimoCambioPrecio: Timestamp.now(),
+                publicarEnWeb: p.publicarEnWeb || false,
+                descripcionWeb: p.descripcionWeb || '',
+                peso: p.peso || 0,
+                alto: p.alto || 0,
+                ancho: p.ancho || 0,
+                profundidad: p.profundidad || 0,
+                categoriaWeb: p.categoriaWeb || '',
+                imagenes: p.imagenesExistentes || []
             };
 
             let docRef;
@@ -493,8 +639,17 @@ async function guardarTodoEnBD() {
                 detailsMsg = `Edición desde Carga. Venta: $${p.venta}, Costo: $${p.costo}`;
             } else { // 'nuevo'
                 docRef = doc(collection(db, "productos"));
-                batch.set(docRef, productoData);
             }
+
+            // Subir nuevas imágenes al Storage
+            if (p.nuevasImagenes && p.nuevasImagenes.length > 0) {
+                for (let i = 0; i < p.nuevasImagenes.length; i++) {
+                    const downloadUrl = await uploadProductImage(p.nuevasImagenes[i], p.status === 'editar' ? p.id : docRef.id, i);
+                    productoData.imagenes.push(downloadUrl);
+                }
+            }
+
+            batch.set(docRef, productoData, { merge: true });
 
             const logRef = doc(collection(db, 'productos_logs'));
             batch.set(logRef, {

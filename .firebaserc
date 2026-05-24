@@ -1,0 +1,7 @@
+{
+  "projects": {
+    "default": "cajadiaria-infotech-stage",
+    "stage": "cajadiaria-infotech-stage",
+    "prod": "cajadiaria-infotech"
+  }
+}
