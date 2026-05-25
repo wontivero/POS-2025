@@ -20,6 +20,7 @@ let arcaBaseUrl, arcaCuit, arcaApiKey, arcaIsProd; // <-- NUEVO ARCA CREDENCIALE
 let webCategoriaNombreInput, webCategoriaPadreSelect, btnAddWebCategoria, btnCancelEditCategoria, webCategoriasTableBody; // <-- NUEVO CATEGORÍAS WEB
 let editingCategoriaId = null;
 let editingCategoriaOldRuta = null;
+let tnUrlInput, saveTnConfigButton; // <-- NUEVO TIENDANUBE
 // --- FIN DE LA MODIFICACIÓN ---
 
 /**
@@ -47,6 +48,11 @@ async function loadConfiguration() {
                     toggleExpirationInput();
                 }
                 if (loyaltyExpirationDaysInput) loyaltyExpirationDaysInput.value = configData.loyalty?.expirationDays || 365;
+            }
+
+            // Cargar configuración de Tiendanube
+            if (tnUrlInput) {
+                tnUrlInput.value = configData.tiendanube?.storeUrl || '';
             }
 
             // Cargar configuración de ARCA
@@ -112,6 +118,20 @@ async function loadConfiguration() {
     } catch (error) {
         console.error("Error al cargar la configuración de comisión:", error);
         showAlertModal("No se pudo cargar la configuración de comisión.", "Error");
+    }
+}
+
+/**
+ * Guarda la configuración de Tiendanube.
+ */
+async function saveTnConfig() {
+    try {
+        const storeUrl = tnUrlInput.value.trim();
+        await setDoc(configRef, { tiendanube: { storeUrl } }, { merge: true });
+        showAlertModal("Configuración de Tiendanube guardada.", "Éxito");
+    } catch (error) {
+        console.error(error);
+        showAlertModal("Error al guardar configuración de Tiendanube.", "Error");
     }
 }
 
@@ -483,6 +503,9 @@ export async function init() {
     btnAddWebCategoria = document.getElementById('btn-add-web-categoria');
     btnCancelEditCategoria = document.getElementById('btn-cancel-edit-categoria');
     webCategoriasTableBody = document.getElementById('web-categorias-table-body');
+    
+    tnUrlInput = document.getElementById('config-tn-url');
+    saveTnConfigButton = document.getElementById('btn-guardar-tn-config');
 
     if (savePrintingButton) {
         savePrintingButton.addEventListener('click', savePrintingConfig);
@@ -491,6 +514,7 @@ export async function init() {
     if (btnSaveLoyalty) btnSaveLoyalty.addEventListener('click', saveLoyaltyConfig);
     if (btnSaveArca) btnSaveArca.addEventListener('click', saveArcaConfig);
     if (loyaltyExpirationCheck) loyaltyExpirationCheck.addEventListener('change', toggleExpirationInput);
+    if (saveTnConfigButton) saveTnConfigButton.addEventListener('click', saveTnConfig);
 
     saveCommissionButton.addEventListener('click', saveCommissionPercentage);
     if (saveCompanyButton) {

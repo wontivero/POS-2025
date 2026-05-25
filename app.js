@@ -2,7 +2,7 @@
 
 import { signOut } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-auth.js";
 import { auth, db } from './firebase.js';
-import { getDocs, collection, query, where, doc, updateDoc } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
+import { getDocs, collection, query, where, doc, updateDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
 import { 
     initProductosListener, 
     initMarcasListener, 
@@ -12,7 +12,7 @@ import {
     initClientesListener // <-- IMPORTAMOS EL OYENTE DE CLIENTES
 } from './secciones/dataManager.js';
 import { sessionManager, setActiveUserProfile } from './userSession.js';
-import { showAlertModal, showConfirmationModal } from './utils.js';
+import { showAlertModal, showConfirmationModal, showToast } from './utils.js';
 
 let currentUserRole = null; // Variable global para guardar el rol del usuario
 let activeUser = null; // Para almacenar el objeto del usuario activo
@@ -323,7 +323,54 @@ async function initializeApp() {
         }
     });
 
+    initPedidosWebGlobalListener();
     loadSection(currentSection);
+}
+
+function initPedidosWebGlobalListener() {
+    // Escuchamos solo los pedidos que están pendientes de preparación
+    const q = query(collection(db, 'pedidos_web'), where('estado', '==', 'pendiente'));
+    let isFirstLoad = true;
+    
+    onSnapshot(q, (snapshot) => {
+        const badge = document.getElementById('badge-pedidos-web');
+        const count = snapshot.size;
+        
+        if (badge) {
+            badge.textContent = count;
+            badge.style.display = count > 0 ? 'inline-block' : 'none';
+            if (count > 0) badge.classList.add('animate-bump'); // Pequeño salto visual
+            setTimeout(() => badge.classList.remove('animate-bump'), 300);
+        }
+
+        // Si no es la primera carga y hay un documento nuevo, hacemos sonar la alarma
+        if (!isFirstLoad) {
+            const hasNewOrders = snapshot.docChanges().some(change => change.type === "added");
+            if (hasNewOrders) {
+                playNotificationSound();
+                showToast("¡Nueva Venta Web! Tienes un pedido pendiente de armar.", "fa-bell", "#e74a3b");
+            }
+        }
+        isFirstLoad = false;
+    });
+}
+
+function playNotificationSound() {
+    try {
+        // Generamos un tono de "campanita de mostrador" sintéticamente para no depender de archivos MP3 externos
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const oscillator = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+        oscillator.type = 'sine';
+        oscillator.frequency.setValueAtTime(880, audioCtx.currentTime); // Tono A5
+        oscillator.frequency.exponentialRampToValueAtTime(1760, audioCtx.currentTime + 0.1);
+        gainNode.gain.setValueAtTime(1, audioCtx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+        oscillator.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+        oscillator.start();
+        oscillator.stop(audioCtx.currentTime + 0.5);
+    } catch (e) { console.warn("No se pudo reproducir el sonido", e); }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
