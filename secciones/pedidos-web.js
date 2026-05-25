@@ -1,12 +1,13 @@
 // secciones/pedidos-web.js
 import { getFirestore, collection, query, onSnapshot, doc, updateDoc, orderBy } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
-import { formatCurrency, showConfirmationModal, showAlertModal } from '../utils.js';
+import { formatCurrency, showConfirmationModal, showAlertModal, facturarEnArca, generatePDF } from '../utils.js';
 import { getAppConfig } from './dataManager.js';
 
 const db = getFirestore();
 let pedidos = [];
 let colPendientes, colPreparacion, colFinalizados;
 let countPendientes, countPreparacion, countFinalizados;
+let tablaArchivadosBody, countArchivados;
 let modalDetalleEl, modalDetalle;
 
 export async function init() {
@@ -17,6 +18,9 @@ export async function init() {
     countPendientes = document.getElementById('count-pendientes');
     countPreparacion = document.getElementById('count-preparacion');
     countFinalizados = document.getElementById('count-finalizados');
+    
+    tablaArchivadosBody = document.getElementById('tabla-pedidos-archivados');
+    countArchivados = document.getElementById('count-archivados');
 
     crearModalHTML();
     modalDetalleEl = document.getElementById('modalDetallePedido');
@@ -62,7 +66,11 @@ function renderKanban() {
     colPreparacion.innerHTML = '';
     colFinalizados.innerHTML = '';
 
-    let cPend = 0, cPrep = 0, cFin = 0;
+    let cPend = 0, cPrep = 0, cFin = 0, cArch = 0;
+    let archivadosHtml = '';
+
+    const appConfig = getAppConfig();
+    const tnStoreUrl = appConfig.tiendanube?.storeUrl || 'https://admin.tiendanube.com';
 
     pedidos.forEach(pedido => {
         const card = crearTarjetaPedido(pedido);
@@ -74,15 +82,78 @@ function renderKanban() {
         } else if (estado === 'preparacion') {
             colPreparacion.appendChild(card);
             cPrep++;
-        } else {
+        } else if (estado === 'finalizado') {
             colFinalizados.appendChild(card);
             cFin++;
+        } else if (estado === 'archivado') {
+            cArch++;
+            const isPaid = pedido.pagos?.estado === 'paid';
+            const isSyncedTN = pedido.pagos?.sincronizadoTN !== false;
+            
+            let badgePago = '<span class="badge bg-danger"><i class="fas fa-clock me-1"></i>Pendiente</span>';
+            if (isPaid) {
+                badgePago = isSyncedTN 
+                    ? '<span class="badge bg-success bg-opacity-10 text-success border border-success"><i class="fas fa-check me-1"></i>Pagado</span>' 
+                    : '<span class="badge bg-warning text-dark border border-warning" title="Pago local. Falta confirmar en TN"><i class="fas fa-exclamation-triangle me-1"></i>Falta en TN</span>';
+            }
+            
+            let fechaStr = 'N/A';
+            if (pedido.fecha) {
+                const d = pedido.fecha.toDate ? pedido.fecha.toDate() : new Date(pedido.fecha);
+                fechaStr = d.toLocaleDateString('es-AR', { day: '2-digit', month: 'short', hour: '2-digit', minute:'2-digit' });
+            }
+            
+            const adminUrl = `${tnStoreUrl.replace(/\/$/, '')}/admin/orders/${pedido.tnOrderId}`;
+            const btnPdfHtml = pedido.facturadoEnArca 
+                ? `<button class="btn btn-sm btn-outline-danger shadow-sm rounded-pill ms-1 btn-pdf-web" data-id="${pedido.id}" title="Descargar Factura PDF"><i class="fas fa-file-pdf"></i></button>`
+                : '';
+            
+            archivadosHtml += `
+                <tr>
+                    <td class="ps-4 fw-bold text-dark">#${pedido.numeroOrden}</td>
+                    <td class="text-muted small">${fechaStr}</td>
+                    <td class="fw-medium">${pedido.cliente?.nombre || 'Desconocido'}</td>
+                    <td class="small"><span class="badge bg-light text-dark border">${pedido.envio?.tipo || 'Envío'}</span></td>
+                    <td class="fw-bold text-dark">${formatCurrency(pedido.pagos?.total || 0)}</td>
+                    <td>${badgePago}</td>
+                    <td class="pe-4 text-end">
+                        <button class="btn btn-sm btn-outline-primary btn-ver-detalle shadow-sm rounded-pill px-3" data-id="${pedido.id}">
+                            <i class="fas fa-eye me-1"></i>Ver
+                        </button>
+                        ${btnPdfHtml}
+                        <a href="${adminUrl}" target="_blank" class="btn btn-sm btn-outline-secondary shadow-sm rounded-pill ms-1" title="Abrir en Tiendanube">
+                            <i class="fas fa-external-link-alt"></i>
+                        </a>
+                    </td>
+                </tr>
+            `;
         }
     });
 
     countPendientes.textContent = cPend;
     countPreparacion.textContent = cPrep;
     countFinalizados.textContent = cFin;
+    
+    if (countArchivados) countArchivados.textContent = cArch;
+    if (tablaArchivadosBody) {
+        if (cArch === 0) {
+            tablaArchivadosBody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-5"><i class="fas fa-box-open fa-3x mb-3 text-light"></i><br>Aún no hay pedidos entregados.</td></tr>';
+        } else {
+            tablaArchivadosBody.innerHTML = archivadosHtml;
+            tablaArchivadosBody.querySelectorAll('.btn-ver-detalle').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const p = pedidos.find(x => x.id === e.currentTarget.dataset.id);
+                    if (p) abrirDetalle(p);
+                });
+            });
+            tablaArchivadosBody.querySelectorAll('.btn-pdf-web').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const p = pedidos.find(x => x.id === e.currentTarget.dataset.id);
+                    if (p) imprimirFacturaWeb(p);
+                });
+            });
+        }
+    }
 }
 
 function crearTarjetaPedido(pedido) {
@@ -142,6 +213,38 @@ function crearTarjetaPedido(pedido) {
     return div;
 }
 
+function imprimirFacturaWeb(pedido) {
+    // Adaptamos la estructura del pedido web para que funcione con el generador de PDF de ventas locales
+    const ventaAdaptada = {
+        fecha: pedido.fecha,
+        timestamp: pedido.fecha && pedido.fecha.toDate ? pedido.fecha.toDate().toLocaleString('es-AR') : new Date().toLocaleString('es-AR'),
+        vendedor: { nombre: 'Venta Web (Tiendanube)' },
+        cliente: {
+            nombre: pedido.cliente?.nombre || 'Consumidor Final',
+            cuit: pedido.cliente?.dni || '',
+            domicilio: pedido.envio?.direccion || ''
+        },
+        productos: (pedido.productos || []).map(p => ({
+            nombre: p.nombre,
+            marca: p.sku ? `(SKU: ${p.sku})` : '',
+            color: '',
+            cantidad: p.cantidad,
+            precio: p.precio
+        })),
+        pagos: {
+            contado: pedido.pagos?.metodo === 'cash' ? (pedido.pagos?.total || 0) : 0,
+            transferencia: pedido.pagos?.metodo !== 'cash' ? (pedido.pagos?.total || 0) : 0,
+            debito: 0,
+            credito: 0,
+            recargoCredito: 0
+        },
+        total: pedido.pagos?.total || 0,
+        facturadoEnArca: pedido.facturadoEnArca,
+        arcaData: pedido.arcaData
+    };
+    generatePDF(`W${pedido.numeroOrden}`, ventaAdaptada);
+}
+
 function abrirDetalle(pedido) {
     const appConfig = getAppConfig();
     const tnStoreUrl = appConfig.tiendanube?.storeUrl || 'https://admin.tiendanube.com';
@@ -189,6 +292,19 @@ function abrirDetalle(pedido) {
             </div>
         `;
     }
+
+    let arcaHtml = '';
+    if (pedido.facturadoEnArca && pedido.arcaData) {
+        const cbtNro = pedido.arcaData.CbteNro.toString().padStart(8, '0');
+        arcaHtml = `<div class="mt-4 p-3 bg-light rounded-4 border border-info shadow-sm d-flex justify-content-between align-items-center">
+            <div>
+                <h6 class="text-info fw-bold mb-2"><i class="fas fa-file-invoice me-2"></i>Factura Electrónica ARCA</h6>
+                <div class="small text-muted mb-1"><strong>CAE:</strong> <span class="text-dark">${pedido.arcaData.CAE}</span></div>
+                <div class="small text-muted"><strong>N° Comprobante:</strong> <span class="text-dark">0001-${cbtNro}</span></div>
+            </div>
+            <button class="btn btn-danger shadow-sm rounded-pill px-3 fw-bold" id="btn-descargar-pdf-web"><i class="fas fa-file-pdf me-2"></i>Ver PDF</button>
+        </div>`;
+    }
     
     document.getElementById('detalle-body').innerHTML = `
         <div class="row">
@@ -224,29 +340,84 @@ function abrirDetalle(pedido) {
             </div>
         </div>
         ${alertaFaltaTNHtml}
+        ${arcaHtml}
     `;
 
     let footerHtml = `<button type="button" class="btn btn-light rounded-pill px-4 fw-bold text-muted" data-bs-dismiss="modal">Cerrar</button>`;
     
     if (!isPaid) {
-        footerHtml = `<button type="button" class="btn btn-outline-success rounded-pill px-4 me-auto fw-bold" id="btn-marcar-pagado"><i class="fas fa-hand-holding-usd me-2"></i>Recibí el Pago</button>` + footerHtml;
+        footerHtml = `<button type="button" class="btn btn-outline-success rounded-pill px-4 ms-2 fw-bold" id="btn-marcar-pagado"><i class="fas fa-hand-holding-usd me-2"></i>Recibí el Pago</button>` + footerHtml;
+    }
+    if (!pedido.facturadoEnArca) {
+        footerHtml = `<button type="button" class="btn btn-info text-white rounded-pill px-4 fw-bold me-auto shadow-sm" id="btn-facturar-arca-web"><i class="fas fa-file-invoice me-2"></i>Emitir Factura</button>` + footerHtml;
     }
 
     const estado = pedido.estado || 'pendiente';
     if (estado === 'pendiente') {
         footerHtml += `<button type="button" class="btn btn-warning text-dark rounded-pill px-5 fw-bold shadow-sm" id="btn-mover-preparacion"><i class="fas fa-box-open me-2"></i>Empezar a Preparar</button>`;
     } else if (estado === 'preparacion') {
+        footerHtml += `<button type="button" class="btn btn-outline-secondary rounded-pill px-3 ms-2" id="btn-revertir-estado" title="Devolver a pendientes"><i class="fas fa-undo"></i></button>`;
         footerHtml += `<button type="button" class="btn btn-primary rounded-pill px-5 fw-bold shadow-sm" id="btn-mover-finalizado"><i class="fas fa-check-double me-2"></i>Marcar como Despachado</button>`;
     } else if (estado === 'finalizado') {
-        footerHtml += `<button type="button" class="btn btn-outline-secondary rounded-pill px-3 ms-2" id="btn-revertir-estado" title="Devolver a pendientes"><i class="fas fa-undo"></i></button>`;
+        footerHtml += `<button type="button" class="btn btn-outline-secondary rounded-pill px-3 ms-2" id="btn-revertir-estado" title="Devolver a preparación"><i class="fas fa-undo"></i></button>`;
+        footerHtml += `<button type="button" class="btn btn-success rounded-pill px-5 fw-bold shadow-sm ms-auto" id="btn-mover-archivado"><i class="fas fa-clipboard-check me-2"></i>Entregado al Cliente (Archivar)</button>`;
+    } else if (estado === 'archivado') {
+        footerHtml += `<button type="button" class="btn btn-outline-secondary rounded-pill px-3 ms-2" id="btn-revertir-estado" title="Desarchivar (Devolver a despachados)"><i class="fas fa-undo"></i></button>`;
     }
 
     document.getElementById('detalle-footer').innerHTML = footerHtml;
 
+    // Listener para Facturar en ARCA
+    document.getElementById('btn-facturar-arca-web')?.addEventListener('click', async () => {
+        const confirmado = await showConfirmationModal(`¿Generar Factura Electrónica (ARCA) por <strong>${formatCurrency(pedido.pagos?.total || 0)}</strong> para este pedido web?`);
+        if (!confirmado) return;
+
+        const btnFacturar = document.getElementById('btn-facturar-arca-web');
+        const originalHtml = btnFacturar.innerHTML;
+        btnFacturar.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Facturando...';
+        btnFacturar.disabled = true;
+
+        // Adaptamos el pedido web al formato que espera nuestra función de ARCA
+        const ventaAdaptada = {
+            total: pedido.pagos?.total || 0,
+            productos: pedido.productos || [],
+            cliente: {
+                nombre: pedido.cliente?.nombre || 'Consumidor Final',
+                cuit: pedido.cliente?.dni || '' // Usamos el DNI/CUIT de TN
+            }
+        };
+
+        const result = await facturarEnArca(ventaAdaptada);
+        if (result.success) {
+            await updateDoc(doc(db, 'pedidos_web', pedido.id), {
+                facturadoEnArca: true,
+                arcaData: result.data
+            });
+            modalDetalle.hide();
+            showAlertModal('¡Factura electrónica generada con éxito!', 'ARCA / AFIP');
+        } else {
+            btnFacturar.innerHTML = originalHtml;
+            btnFacturar.disabled = false;
+            showAlertModal('Error al facturar en ARCA: ' + result.error, 'Error de Facturación');
+        }
+    });
+    
+    document.getElementById('btn-descargar-pdf-web')?.addEventListener('click', () => {
+        imprimirFacturaWeb(pedido);
+    });
+
     document.getElementById('btn-marcar-pagado')?.addEventListener('click', () => marcarComoPagado(pedido.id, pedido.numeroOrden));
     document.getElementById('btn-mover-preparacion')?.addEventListener('click', () => cambiarEstado(pedido.id, 'preparacion', modalDetalle));
     document.getElementById('btn-mover-finalizado')?.addEventListener('click', () => cambiarEstado(pedido.id, 'finalizado', modalDetalle));
-    document.getElementById('btn-revertir-estado')?.addEventListener('click', () => cambiarEstado(pedido.id, 'pendiente', modalDetalle));
+    document.getElementById('btn-mover-archivado')?.addEventListener('click', () => cambiarEstado(pedido.id, 'archivado', modalDetalle));
+    
+    document.getElementById('btn-revertir-estado')?.addEventListener('click', () => {
+        let revertTo = 'pendiente';
+        if (estado === 'preparacion') revertTo = 'pendiente';
+        else if (estado === 'finalizado') revertTo = 'preparacion';
+        else if (estado === 'archivado') revertTo = 'finalizado';
+        cambiarEstado(pedido.id, revertTo, modalDetalle);
+    });
 
     modalDetalle.show();
 }

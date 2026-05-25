@@ -442,7 +442,7 @@ function handleNuevoMovimiento(tipo) {
     movimientoTipoInput.value = tipo;
     movimientoMontoInput.value = '';
     movimientoConceptoInput.value = '';
-    movimientoCajaModal.show(); r
+    movimientoCajaModal.show();
 }
 
 function actualizarEstadoCajaNav() {

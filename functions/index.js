@@ -217,6 +217,21 @@ exports.actualizarPedidoTiendanube = onDocumentUpdated(
                 if (resFulfill.ok) logger.info(`✅ Orden ${docNuevo.tnOrderId} marcada como DESPACHADA en TN.`);
                 else logger.error(`❌ Error marcando envío en TN:`, await resFulfill.text());
             }
+            
+            // 3. Si el pedido se marca como ARCHIVADO (Entregado al cliente / Finalizado)
+            if (docViejo.estado !== 'archivado' && docNuevo.estado === 'archivado') {
+                const urlArchivar = `https://api.tiendanube.com/v1/${userId}/orders/${docNuevo.tnOrderId}`;
+                const bodyArchivar = {
+                    shipping_status: "delivered",
+                    status: "closed"
+                };
+                
+                logger.info(`Archivando y marcando como entregado en TN... URL: ${urlArchivar}`);
+                const resArchivar = await fetch(urlArchivar, { method: 'PUT', headers, body: JSON.stringify(bodyArchivar) });
+                
+                if (resArchivar.ok) logger.info(`✅ Orden ${docNuevo.tnOrderId} archivada exitosamente (delivered/closed).`);
+                else logger.error(`❌ Error archivando orden en TN:`, await resArchivar.text());
+            }
         } catch (error) {
             logger.error("Error conectando con TN API Orders", error);
         }
