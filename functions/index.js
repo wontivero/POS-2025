@@ -1,5 +1,5 @@
 const { onDocumentWritten, onDocumentUpdated } = require("firebase-functions/v2/firestore");
-const { onRequest } = require("firebase-functions/v2/https");
+const { onRequest, onCall } = require("firebase-functions/v2/https");
 const { defineSecret } = require("firebase-functions/params");
 const logger = require("firebase-functions/logger");
 const admin = require("firebase-admin");
@@ -383,5 +383,38 @@ exports.webhookTiendanube = onRequest({ secrets: [TIENDANUBE_TOKEN, TIENDANUBE_U
     } catch (error) {
         logger.error("Error en Webhook TN", error);
         res.status(500).send("Internal Server Error");
+    }
+});
+
+// ========================================================
+// BACKUP INTELIGENTE: Descarga TODAS las colecciones dinámicamente
+// ========================================================
+exports.generarBackupUniversal = onCall({ timeoutSeconds: 300, memory: "512Mi" }, async (request) => {
+    try {
+        const db = admin.firestore();
+        // listCollections() solo está disponible en el SDK de Servidor (Admin)
+        const collections = await db.listCollections();
+        
+        const backupData = {
+            metadata: {
+                fechaGeneracion: new Date().toISOString(),
+                sistema: "POS 2025",
+                version: "2.0 (Dinámico)"
+            },
+            data: {}
+        };
+        
+        for (const col of collections) {
+            const snapshot = await col.get();
+            backupData.data[col.id] = [];
+            snapshot.forEach(docSnap => {
+                backupData.data[col.id].push({ id: docSnap.id, ...docSnap.data() });
+            });
+        }
+        
+        return backupData;
+    } catch (error) {
+        logger.error("Error generando backup universal", error);
+        throw new Error("No se pudo generar el backup");
     }
 });

@@ -1,6 +1,8 @@
 // secciones/configuracion.js
 import { getFirestore, doc, getDoc, setDoc, collection, getDocs, addDoc, deleteDoc, updateDoc, query, where, orderBy, writeBatch } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
 import { showAlertModal, showConfirmationModal } from '../utils.js';
+import { functions } from '../firebase.js';
+import { httpsCallable } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-functions.js";
 
 const db = getFirestore();
 
@@ -21,6 +23,7 @@ let webCategoriaNombreInput, webCategoriaPadreSelect, btnAddWebCategoria, btnCan
 let editingCategoriaId = null;
 let editingCategoriaOldRuta = null;
 let tnUrlInput, saveTnConfigButton; // <-- NUEVO TIENDANUBE
+let btnGenerarBackup; // <-- NUEVO BACKUP
 // --- FIN DE LA MODIFICACIÓN ---
 
 /**
@@ -459,6 +462,42 @@ async function handleAddWebCategoria() {
     }
 }
 
+/**
+ * Genera un backup completo de la base de datos y lo descarga como archivo JSON.
+ */
+async function generarBackupCompleto() {
+    const btn = btnGenerarBackup;
+    const originalHtml = btn.innerHTML;
+    
+    try {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Generando...';
+        
+        // Llamamos a nuestro Robot (Cloud Function) que es capaz de leer TODAS las colecciones dinámicamente
+        const generarBackupUniversal = httpsCallable(functions, 'generarBackupUniversal');
+        const result = await generarBackupUniversal();
+        const backupData = result.data;
+
+        const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `backup_pos2025_${new Date().toISOString().slice(0,10)}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        showAlertModal('Backup generado y descargado con éxito. Por favor guárdalo en un lugar seguro (ej: Google Drive).', 'Backup Exitoso');
+    } catch (error) {
+        console.error("Error al generar el backup:", error);
+        showAlertModal('Ocurrió un error al generar el backup.', 'Error');
+    } finally {
+        btn.innerHTML = originalHtml;
+        btn.disabled = false;
+    }
+}
+
 export async function init() {
     commissionInput = document.getElementById('config-commission-percentage');
     saveCommissionButton = document.getElementById('btn-guardar-comision');
@@ -506,6 +545,7 @@ export async function init() {
     
     tnUrlInput = document.getElementById('config-tn-url');
     saveTnConfigButton = document.getElementById('btn-guardar-tn-config');
+    btnGenerarBackup = document.getElementById('btn-generar-backup');
 
     if (savePrintingButton) {
         savePrintingButton.addEventListener('click', savePrintingConfig);
@@ -515,6 +555,7 @@ export async function init() {
     if (btnSaveArca) btnSaveArca.addEventListener('click', saveArcaConfig);
     if (loyaltyExpirationCheck) loyaltyExpirationCheck.addEventListener('change', toggleExpirationInput);
     if (saveTnConfigButton) saveTnConfigButton.addEventListener('click', saveTnConfig);
+    if (btnGenerarBackup) btnGenerarBackup.addEventListener('click', generarBackupCompleto);
 
     saveCommissionButton.addEventListener('click', saveCommissionPercentage);
     if (saveCompanyButton) {
