@@ -769,6 +769,13 @@ function resetProductoModal() {
     if(productoImagenesInput) productoImagenesInput.value = '';
     renderModalImagenesPreview();
     if (productoImagenUrlInput) productoImagenUrlInput.value = '';
+    
+    // Volver a la primera pestaña de forma automática
+    const firstTabEl = document.querySelector('#productoModalTabs button[data-bs-target="#general-pane"]');
+    if (firstTabEl && window.bootstrap) {
+        const tab = new bootstrap.Tab(firstTabEl);
+        tab.show();
+    }
 }
 
 // --- LÓGICA DEL MODAL DEL HISTORIAL DE PRECIOS ---
