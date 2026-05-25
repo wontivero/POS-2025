@@ -10,9 +10,10 @@ let productoEnEdicionId = null;
 let form, prodCodigo, prodNombre, prodMarca, prodColor, prodRubro, prodCosto, prodGanancia, prodVenta, prodStock, prodStockMinimo, prodGenerico, prodDestacado;
 let btnAgregar, btnAgregarYDuplicar, btnGuardarTodo, btnLimpiarFormulario; // <-- Añádelo aquí
 let grillaBody, contadorProductos, grillaVaciaMsg;
-let prodPublicarWeb, prodDescripcionWeb, prodPeso, prodCategoriaWeb; 
+let prodPublicarWeb, prodPeso, prodCategoriaWeb;
+let quillCarga;
 let prodAlto, prodAncho, prodProfundidad; // <-- Dimensiones E-commerce
-let prodImagenesInput, prodImagenesPreview;
+let prodImagenesInput, prodImagenesPreview, prodImagenUrlInput, btnAddImagenUrl;
 let currentSelectedFiles = []; // Para almacenar las imágenes a subir temporalmente
 let currentExistingImages = []; // Para imágenes que ya estaban en el producto al editar
 let prodEcommerceFields;
@@ -33,7 +34,6 @@ export async function init() {
     prodGenerico = document.getElementById('prod-generico');
     prodDestacado = document.getElementById('prod-destacado');
     prodPublicarWeb = document.getElementById('prod-publicar-web');
-    prodDescripcionWeb = document.getElementById('prod-descripcion-web');
     prodPeso = document.getElementById('prod-peso');
     prodCategoriaWeb = document.getElementById('prod-categoria-web');
     prodAlto = document.getElementById('prod-alto');
@@ -41,6 +41,8 @@ export async function init() {
     prodProfundidad = document.getElementById('prod-profundidad');
     prodImagenesInput = document.getElementById('prod-imagenes');
     prodImagenesPreview = document.getElementById('prod-imagenes-preview');
+    prodImagenUrlInput = document.getElementById('prod-imagen-url');
+    btnAddImagenUrl = document.getElementById('btn-add-imagen-url');
     prodEcommerceFields = document.getElementById('prod-ecommerce-fields');
     btnAgregar = document.getElementById('btn-agregar-a-grilla');
     btnAgregarYDuplicar = document.getElementById('btn-agregar-y-duplicar');
@@ -92,6 +94,15 @@ export async function init() {
         } catch (e) { console.error("Error al cargar categorías web", e); }
     }
 
+    // Inicializar Editor de Texto Enriquecido (Quill)
+    if (document.getElementById('prod-descripcion-web-editor') && !quillCarga) {
+        quillCarga = new Quill('#prod-descripcion-web-editor', {
+            theme: 'snow',
+            modules: { toolbar: [['bold', 'italic', 'underline'], [{ 'list': 'ordered'}, { 'list': 'bullet' }], ['clean']] },
+            placeholder: 'Describe los detalles, materiales o usos del producto...'
+        });
+    }
+
     // --- FIN DE LA NUEVA LÓGICA DE DATOS ---
 
 
@@ -135,7 +146,7 @@ function setupEventListeners() {
     prodCosto.addEventListener('input', calcularPrecioVenta);
     prodGanancia.addEventListener('input', calcularPrecioVenta);
     prodVenta.addEventListener('input', calcularMargen);
-    
+
     if (prodPublicarWeb && prodEcommerceFields) {
         prodPublicarWeb.addEventListener('change', (e) => {
             prodEcommerceFields.style.display = e.target.checked ? 'flex' : 'none';
@@ -145,6 +156,31 @@ function setupEventListeners() {
     if (prodImagenesInput) {
         prodImagenesInput.addEventListener('change', handleImagenesSelection);
     }
+    if (btnAddImagenUrl) {
+        btnAddImagenUrl.addEventListener('click', handleAddImagenUrl);
+    }
+    if (prodImagenUrlInput) {
+        prodImagenUrlInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                e.stopPropagation(); // Evitamos saltar al próximo campo
+                handleAddImagenUrl();
+            }
+        });
+    }
+}
+
+async function handleAddImagenUrl() {
+    const url = prodImagenUrlInput.value.trim();
+    if (url && (url.startsWith('http://') || url.startsWith('https://'))) {
+        currentExistingImages.push(url);
+        renderImagenesPreview();
+        prodImagenUrlInput.value = '';
+    } else if (url) {
+        const { showAlertModal } = await import('../utils.js');
+        await showAlertModal('Por favor ingresa un link válido que comience con http:// o https://');
+    }
+
 }
 
 function handleImagenesSelection(e) {
@@ -183,10 +219,10 @@ function renderImagenesPreview() {
         div.className = 'position-relative border rounded p-1 bg-white';
         div.style.width = '80px';
         div.style.height = '80px';
-        
+
         const img = document.createElement('img');
         img.className = 'w-100 h-100 object-fit-cover rounded';
-        
+
         // Leemos el archivo local para la previsualización
         const reader = new FileReader();
         reader.onload = (e) => img.src = e.target.result;
@@ -203,7 +239,7 @@ function renderImagenesPreview() {
             currentSelectedFiles.splice(index, 1);
             renderImagenesPreview();
         });
-        
+
         div.appendChild(btnRemove);
         prodImagenesPreview.appendChild(div);
     });
@@ -388,10 +424,10 @@ async function agregarProductoAGrilla(duplicarDespues = false) {
         stock: parseInt(prodStock.value) || 0,
         stockMinimo: parseInt(prodStockMinimo.value) || 0,
         isGeneric: prodGenerico.checked,
-        
+
         isFeatured: prodDestacado.checked,
         publicarEnWeb: prodPublicarWeb ? prodPublicarWeb.checked : false,
-        descripcionWeb: prodDescripcionWeb ? prodDescripcionWeb.value.trim() : '',
+        descripcionWeb: quillCarga ? (quillCarga.root.innerHTML === '<p><br></p>' ? '' : quillCarga.root.innerHTML) : '',
         peso: parseInt(prodPeso ? prodPeso.value : 0) || 0,
         alto: parseInt(prodAlto ? prodAlto.value : 0) || 0,
         ancho: parseInt(prodAncho ? prodAncho.value : 0) || 0,
@@ -426,6 +462,8 @@ function limpiarFormulario() {
     currentSelectedFiles = [];
     currentExistingImages = [];
     renderImagenesPreview();
+    if (quillCarga) quillCarga.root.innerHTML = '';
+    if (prodImagenUrlInput) prodImagenUrlInput.value = '';
     prodCodigo.focus();
 }
 
@@ -445,7 +483,7 @@ function poblarFormulario(producto, modoDuplicar = false) {
     if (prodEcommerceFields) {
         prodEcommerceFields.style.display = producto.publicarEnWeb ? 'flex' : 'none';
     }
-    if (prodDescripcionWeb) prodDescripcionWeb.value = producto.descripcionWeb || '';
+    if (quillCarga) quillCarga.root.innerHTML = producto.descripcionWeb || '';
     if (prodPeso) prodPeso.value = producto.peso || 0;
     if (prodAlto) prodAlto.value = producto.alto || 0;
     if (prodAncho) prodAncho.value = producto.ancho || 0;
@@ -708,7 +746,7 @@ async function guardarTodoEnBD() {
 async function addUniqueItem(collectionName, itemName) {
     if (!itemName) return;
     const itemNormalizado = normalizeString(itemName);
-    
+
     // OPTIMIZACIÓN: Revisar caché primero
     if (collectionName === 'marcas' && getMarcas().some(m => normalizeString(m) === itemNormalizado)) return;
     if (collectionName === 'colores' && getColores().some(c => normalizeString(c) === itemNormalizado)) return;
