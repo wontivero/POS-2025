@@ -117,6 +117,127 @@
                 </table>
             </div>
         </div>
+
+        <div class="card shadow-sm mt-5 mb-5">
+            <div class="card-header bg-success text-white">
+                <h4 class="mb-0"><i class="fas fa-rocket me-2"></i>Guía de Pase a Producción</h4>
+            </div>
+            <div class="card-body p-4">
+                <h5 class="card-title mb-3"><i class="fas fa-cogs me-2"></i>Preparando tu POS 2025 para el Entorno Real</h5>
+                <p class="card-text text-muted mb-4">Estos son los pasos cruciales para desplegar tu sistema POS 2025 a un entorno de producción, asegurando que se conecte con tus servicios reales (Tiendanube, ARCA, Firebase de Producción).</p>
+
+                <ol class="list-group list-group-numbered">
+                    <li class="list-group-item d-flex justify-content-between align-items-start">
+                        <div class="ms-2 me-auto">
+                            <div class="fw-bold"><i class="fas fa-server me-2"></i>1. Conexión Automática a Base de Datos de Producción (Firebase)</div>
+                            Tu sistema ya está configurado para cambiar automáticamente al entorno de producción de Firebase.
+                            <br><small class="text-muted">No necesitas hacer nada con el código <code>firebase.js</code>. Cuando subas los archivos a tu servidor web (por ejemplo, Firebase Hosting, Vercel, etc.) y dejes de usar <code>localhost</code> o <code>127.0.0.1</code>, el sistema detectará automáticamente que está en producción y se conectará a la base de datos <code>cajadiaria-infotech</code>.</small>
+                        </div>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-start">
+                        <div class="ms-2 me-auto">
+                            <div class="fw-bold"><i class="fas fa-cloud-upload-alt me-2"></i>2. Despliegue de Cloud Functions a Producción</div>
+                            Las "Cloud Functions" (los robots que sincronizan con Tiendanube y generan backups) deben ser desplegadas en tu proyecto de Firebase de producción.
+                            <br><small class="text-muted">Abre tu terminal, navega hasta la carpeta <code>POS 2025</code> y ejecuta los siguientes comandos:</small>
+                            <pre class="bg-dark text-white p-2 rounded mt-2"><code>firebase use cajadiaria-infotech
+cd functions
+firebase deploy --only functions</code></pre>
+                            <br><small class="text-muted">Al finalizar, la consola de Firebase te mostrará la URL del <code>webhookTiendanube</code>. ¡Cópiala, la necesitarás en el paso 4!</small>
+                        </div>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-start">
+                        <div class="ms-2 me-auto">
+                            <div class="fw-bold"><i class="fas fa-sliders-h me-2"></i>3. Configuración de Tiendanube y ARCA (Desde tu POS 2025)</div>
+                            Una vez que tu POS 2025 esté corriendo en el entorno de producción (o en el stage, si quieres probar primero), debes ingresar las credenciales correctas.
+                            <br><small class="text-muted">Accede a tu POS 2025 (desde tu dominio o tu URL de stage), ve a la sección <strong>"Configuración"</strong> y completa los siguientes datos:</small>
+                            <ul>
+                                <li><strong class="text-primary">Integración Tiendanube:</strong>
+                                    <ul>
+                                        <li><strong>URL Base de la Tienda:</strong> La URL completa de tu tienda (ej: <code>https://mitienda.mitiendanube.com</code>).</li>
+                                        <li><strong>ID de la Tienda (User ID) y Token:</strong> Obtenidos mediante la instalación de tu App privada.</li>
+                                    </ul>
+                                    <details class="mt-2 mb-2 p-3 border rounded bg-light">
+                                        <summary class="fw-bold text-secondary" style="cursor:pointer;"><i class="fas fa-key me-1"></i> ¿Cómo obtener el Token y el ID ahora?</summary>
+                                        <ol class="small mt-2 mb-0 ps-3">
+                                            <li>Ingresa al <strong>Portal de Socios</strong> de Tiendanube y ten a mano el <strong>App ID</strong> (Client ID) y <strong>Client Secret</strong> de tu aplicación.</li>
+                                            <li>Inicia sesión en la tienda de Tiendanube de producción.</li>
+                                            <li>En otra pestaña, abre la URL: <br><code>https://www.tiendanube.com/apps/TU_APP_ID/authorize</code></li>
+                                            <li>Acepta los permisos. Serás redirigido a una página. Mira la barra de direcciones y copia el valor de <code>?code=...</code> <br><span class="text-danger fw-bold small">¡OJO! Este código caduca en minutos y sirve UNA SOLA VEZ. Úsalo rápido.</span></li>
+                                            <li>Para obtener el token, puedes usar la <strong>Consola del Navegador</strong> (F12 > Pestaña Console) pegando este código (JavaScript):
+                                                <pre class="bg-dark text-white p-2 rounded mt-2 mb-2" style="font-size: 0.9em;"><code>fetch("https://www.tiendanube.com/apps/authorize/token", {
+  headers: { "Content-Type": "application/x-www-form-urlencoded" },
+  body: "client_id=TU_APP_ID&client_secret=TU_CLIENT_SECRET&grant_type=authorization_code&code=EL_CODE",
+  method: "POST"
+}).then(r => r.json()).then(console.log);</code></pre>
+                                                O si prefieres usar una terminal (como <strong>Cloud Shell</strong> o Bash), usa este comando (cURL):
+                                                <pre class="bg-dark text-white p-2 rounded mt-2" style="font-size: 0.9em;"><code>curl -X POST "https://www.tiendanube.com/apps/authorize/token" \
+-H "Content-Type: application/x-www-form-urlencoded" \
+-d "client_id=TU_APP_ID&client_secret=TU_CLIENT_SECRET&grant_type=authorization_code&code=EL_CODE"</code></pre>
+                                            </li>
+                                            <li>La respuesta será un texto/JSON. Copia el <code>access_token</code> (Token) y el <code>user_id</code> (ID de Tienda) y pégalos en la Configuración del POS.</li>
+                                        </ol>
+                                        <div class="alert alert-warning mt-3 mb-0 py-2 px-3 small border-0 shadow-sm">
+                                            <i class="fas fa-exclamation-triangle me-2"></i><strong>¿Te da error "invalid_grant"?</strong><br>Significa que el código (code) expiró, escribiste mal un dato o ya lo usaste. Repite desde el paso 3 para generar uno <strong>nuevo</strong> y canjéalo inmediatamente.
+                                        </div>
+                                    </details>
+                                </li>
+                                <li><strong class="text-info">Facturación Automática ARCA:</strong>
+                                    <ul>
+                                        <li><strong>URL Base de la API:</strong> La URL de tu servicio ARCA (ej: <code>https://tu-api-arca.com</code>).</li>
+                                        <li><strong>CUIT Emisor:</strong> Tu CUIT.</li>
+                                        <li><strong>API Key:</strong> Tu llave secreta para ARCA.</li>
+                                        <li><strong class="text-danger">Importante:</strong> Asegúrate de marcar "Entorno de Producción (Servidores Reales)".</li>
+                                        <li>Configura los métodos de pago para auto-facturar según tu preferencia.</li>
+                                    </ul>
+                                </li>
+                            </ul>
+                            <br><small class="text-muted">No olvides hacer clic en <strong>"Guardar"</strong> en cada sección después de completar los datos.</small>
+                        </div>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-start">
+                        <div class="ms-2 me-auto">
+                            <div class="fw-bold"><i class="fas fa-webhook me-2"></i>4. Conectar Tiendanube con tu POS (Configuración de Webhooks)</div>
+                            Debes decirle a tu tienda de Tiendanube que avise a tu POS 2025 cuando haya un nuevo evento. Al usar una app privada, los webhooks se registran mediante la API.
+                            <br><small class="text-muted">Abre tu <strong>Cloud Shell</strong> (o cualquier terminal) y ejecuta estos dos comandos. Reemplaza <code>TU_ID_DE_TIENDA</code>, <code>TU_TOKEN</code> y <code>LA_URL_DEL_WEBHOOK</code> (la que obtuviste en el Paso 2):</small>
+                            <div class="mt-2">
+                                <strong class="small">1. Registrar evento de Orden Creada (order/created):</strong>
+                                <pre class="bg-dark text-white p-2 rounded mt-1 mb-2" style="font-size: 0.9em;"><code>curl -X POST "https://api.tiendanube.com/v1/TU_ID_DE_TIENDA/webhooks" \
+-H "Authentication: bearer TU_TOKEN" \
+-H "Content-Type: application/json" \
+-d '{"event": "order/created", "url": "LA_URL_DEL_WEBHOOK"}'</code></pre>
+                                <strong class="small">2. Registrar evento de Orden Pagada (order/paid):</strong>
+                                <pre class="bg-dark text-white p-2 rounded mt-1 mb-2" style="font-size: 0.9em;"><code>curl -X POST "https://api.tiendanube.com/v1/TU_ID_DE_TIENDA/webhooks" \
+-H "Authentication: bearer TU_TOKEN" \
+-H "Content-Type: application/json" \
+-d '{"event": "order/paid", "url": "LA_URL_DEL_WEBHOOK"}'</code></pre>
+                            </div>
+                            <small class="text-muted">Si la consola te responde con un JSON que contiene un <code>"id"</code>, ¡el webhook se registró exitosamente!</small>
+                        </div>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-start">
+                        <div class="ms-2 me-auto">
+                            <div class="fw-bold"><i class="fas fa-check-circle me-2"></i>5. ¡Verifica Todo!</div>
+                            Una vez completados todos los pasos, es crucial realizar una verificación exhaustiva.
+                            <br><small class="text-muted">Realiza una venta de prueba en tu Tiendanube, verifica que aparezca en tu sección de "Pedidos Web" en el POS, que el stock se haya descontado, y que, si configuraste la auto-facturación, se haya generado la factura en ARCA/AFIP.</small>
+                            <br><small class="text-danger fw-bold">No te saltes este paso. Una pequeña prueba puede ahorrarte muchos dolores de cabeza.</small>
+                        </div>
+                    </li>
+                </ol>
+
+                <hr class="my-4">
+
+                <h5 class="card-title mb-3"><i class="fas fa-sync-alt me-2"></i>¿Cómo funciona la sincronización? (Reglas de Oro)</h5>
+                <div class="alert alert-info border-0 shadow-sm mb-4">
+                    <ul class="mb-0">
+                        <li class="mb-2"><strong>De POS a Tiendanube (Productos):</strong> Funciona automáticamente mediante un "robot" interno de Firebase. Cuando creas o editas un producto en el POS, el cambio viaja instantáneamente a la nube. No necesitas webhooks para esto.</li>
+                        <li class="mb-2"><strong>De Tiendanube a POS (Ventas):</strong> Utiliza los Webhooks que configuraste en el paso 4. Cuando alguien compra en tu web, Tiendanube "toca el timbre" del POS enviando los datos para descontar el stock y avisarte de la nueva orden.</li>
+                        <li><strong class="text-danger">⚠️ REGLA DE ORO:</strong> El POS 2025 es tu "fuente de la verdad". <strong>NUNCA edites precios, stock o nombres directamente en el panel administrador de Tiendanube</strong>. Esos cambios NO viajarán de vuelta al POS, y la próxima vez que guardes el producto en el POS, sobrescribirá lo que habías cambiado en la web. Todo debe ser administrado siempre desde tu sistema POS.</li>
+                    </ul>
+                </div>
+
+                <p class="card-text text-muted">¡Felicitaciones! Tu POS 2025 estará listo para operar en un entorno de producción, con todas las integraciones y automatizaciones activas.</p>
+            </div>
+        </div>
     </div>
 </body>
 </html>

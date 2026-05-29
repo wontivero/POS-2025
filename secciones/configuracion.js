@@ -1,6 +1,6 @@
 // secciones/configuracion.js
 import { getFirestore, doc, getDoc, setDoc, collection, getDocs, addDoc, deleteDoc, updateDoc, query, where, orderBy, writeBatch } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
-import { showAlertModal, showConfirmationModal } from '../utils.js';
+import { showAlertModal, showConfirmationModal, showToast } from '../utils.js';
 import { functions } from '../firebase.js';
 import { httpsCallable } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-functions.js";
 
@@ -22,7 +22,7 @@ let arcaBaseUrl, arcaCuit, arcaApiKey, arcaIsProd; // <-- NUEVO ARCA CREDENCIALE
 let webCategoriaNombreInput, webCategoriaPadreSelect, btnAddWebCategoria, btnCancelEditCategoria, webCategoriasTableBody; // <-- NUEVO CATEGORÍAS WEB
 let editingCategoriaId = null;
 let editingCategoriaOldRuta = null;
-let tnUrlInput, saveTnConfigButton; // <-- NUEVO TIENDANUBE
+let tnUrlInput, tnUserIdInput, tnTokenInput, saveTnConfigButton; // <-- NUEVO TIENDANUBE
 let btnGenerarBackup; // <-- NUEVO BACKUP
 // --- FIN DE LA MODIFICACIÓN ---
 
@@ -56,6 +56,12 @@ async function loadConfiguration() {
             // Cargar configuración de Tiendanube
             if (tnUrlInput) {
                 tnUrlInput.value = configData.tiendanube?.storeUrl || '';
+            }
+            if (tnUserIdInput) {
+                tnUserIdInput.value = configData.tiendanube?.userId || '';
+            }
+            if (tnTokenInput) {
+                tnTokenInput.value = configData.tiendanube?.token || '';
             }
 
             // Cargar configuración de ARCA
@@ -128,13 +134,21 @@ async function loadConfiguration() {
  * Guarda la configuración de Tiendanube.
  */
 async function saveTnConfig() {
+    const originalHtml = saveTnConfigButton.innerHTML;
+    saveTnConfigButton.disabled = true;
+    saveTnConfigButton.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Guardando...';
     try {
         const storeUrl = tnUrlInput.value.trim();
-        await setDoc(configRef, { tiendanube: { storeUrl } }, { merge: true });
-        showAlertModal("Configuración de Tiendanube guardada.", "Éxito");
+        const userId = tnUserIdInput.value.trim();
+        const token = tnTokenInput.value.trim();
+        await setDoc(configRef, { tiendanube: { storeUrl, userId, token } }, { merge: true });
+        showToast("Configuración de Tiendanube guardada.");
     } catch (error) {
         console.error(error);
         showAlertModal("Error al guardar configuración de Tiendanube.", "Error");
+    } finally {
+        saveTnConfigButton.disabled = false;
+        saveTnConfigButton.innerHTML = originalHtml;
     }
 }
 
@@ -142,6 +156,9 @@ async function saveTnConfig() {
  * Guarda la configuración de facturación automática ARCA.
  */
 async function saveArcaConfig() {
+    const originalHtml = btnSaveArca.innerHTML;
+    btnSaveArca.disabled = true;
+    btnSaveArca.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Guardando...';
     try {
         await setDoc(configRef, { 
             arca: {
@@ -157,10 +174,13 @@ async function saveArcaConfig() {
                 }
             } 
         }, { merge: true });
-        showAlertModal("Configuración de facturación automática ARCA guardada.", "Éxito");
+        showToast("Configuración de facturación automática ARCA guardada.");
     } catch (error) {
         console.error(error);
         showAlertModal("Error al guardar configuración de ARCA.", "Error");
+    } finally {
+        btnSaveArca.disabled = false;
+        btnSaveArca.innerHTML = originalHtml;
     }
 }
 
@@ -174,12 +194,19 @@ async function saveCommissionPercentage() {
         return;
     }
 
+    const originalHtml = saveCommissionButton.innerHTML;
+    saveCommissionButton.disabled = true;
+    saveCommissionButton.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Guardando...';
+
     try {
         await setDoc(configRef, { commissionPercentage: newValue }, { merge: true });
-        showAlertModal("Porcentaje de comisión guardado correctamente.", "Éxito");
+        showToast("Porcentaje de comisión guardado correctamente.");
     } catch (error) {
         console.error("Error al guardar la configuración de comisión:", error);
         showAlertModal("No se pudo guardar la configuración.", "Error");
+    } finally {
+        saveCommissionButton.disabled = false;
+        saveCommissionButton.innerHTML = originalHtml;
     }
 }
 
@@ -188,16 +215,22 @@ async function saveCommissionPercentage() {
  */
 async function savePrintingConfig() {
     const autoPrint = autoPrintTicketCheck.checked;
+    const originalHtml = savePrintingButton.innerHTML;
+    savePrintingButton.disabled = true;
+    savePrintingButton.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Guardando...';
 
     try {
         // Usamos { merge: true } para no sobreescribir otras configuraciones
         await setDoc(configRef, { printing: { 
             autoPrintTicket: autoPrint
         } }, { merge: true });
-        showAlertModal("Configuración de impresión guardada.", "Éxito");
+        showToast("Configuración de impresión guardada.");
     } catch (error) {
         console.error("Error al guardar la configuración de impresión:", error);
         showAlertModal("Error al guardar la configuración de impresión.", "Error");
+    } finally {
+        savePrintingButton.disabled = false;
+        savePrintingButton.innerHTML = originalHtml;
     }
 }
 
@@ -210,6 +243,10 @@ async function saveLoyaltyConfig() {
     const expirationEnabled = loyaltyExpirationCheck.checked;
     const expirationDays = parseInt(loyaltyExpirationDaysInput.value) || 365;
 
+    const originalHtml = btnSaveLoyalty.innerHTML;
+    btnSaveLoyalty.disabled = true;
+    btnSaveLoyalty.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Guardando...';
+
     try {
         await setDoc(configRef, { loyalty: { 
             percentage,
@@ -217,10 +254,13 @@ async function saveLoyaltyConfig() {
             expirationEnabled,
             expirationDays
         } }, { merge: true });
-        showAlertModal("Configuración de puntos guardada.", "Éxito");
+        showToast("Configuración de puntos guardada.");
     } catch (error) {
         console.error(error);
         showAlertModal("Error al guardar configuración de puntos.", "Error");
+    } finally {
+        btnSaveLoyalty.disabled = false;
+        btnSaveLoyalty.innerHTML = originalHtml;
     }
 }
 
@@ -238,13 +278,20 @@ async function saveCompanyInfo() {
         logoUrl: companyLogoInput.value,
     };
 
+    const originalHtml = saveCompanyButton.innerHTML;
+    saveCompanyButton.disabled = true;
+    saveCompanyButton.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Guardando...';
+
     try {
         // Usamos { merge: true } para no sobreescribir el porcentaje de comisión
         await setDoc(configRef, { companyInfo: companyData }, { merge: true });
-        showAlertModal("Datos de la empresa guardados correctamente.", "Éxito");
+        showToast("Datos de la empresa guardados correctamente.");
     } catch (error) {
         console.error("Error al guardar los datos de la empresa:", error);
         showAlertModal("No se pudieron guardar los datos de la empresa.", "Error");
+    } finally {
+        saveCompanyButton.disabled = false;
+        saveCompanyButton.innerHTML = originalHtml;
     }
 }
 
@@ -291,22 +338,31 @@ async function handleAddUser() {
         return;
     }
 
+    const originalHtml = btnAddUser.innerHTML;
+    btnAddUser.disabled = true;
+    btnAddUser.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Agregando...';
+
     // Verificar si el usuario ya existe
     const q = query(collection(db, "usuarios"), where("email", "==", email));
     const querySnapshot = await getDocs(q);
     if (!querySnapshot.empty) {
         showAlertModal(`El email "${email}" ya está registrado.`, "Usuario Existente");
+        btnAddUser.disabled = false;
+        btnAddUser.innerHTML = originalHtml;
         return;
     }
 
     try {
         await addDoc(collection(db, 'usuarios'), { email, rol });
-        showAlertModal("Usuario agregado correctamente.", "Éxito");
+        showToast("Usuario agregado correctamente.");
         userEmailInput.value = '';
         await loadAndRenderUsers(); // Recargar la tabla
     } catch (error) {
         console.error("Error al agregar usuario:", error);
         showAlertModal("No se pudo agregar el usuario.", "Error");
+    } finally {
+        btnAddUser.disabled = false;
+        btnAddUser.innerHTML = originalHtml;
     }
 }
 
@@ -418,13 +474,17 @@ async function handleAddWebCategoria() {
     
     const ruta = padreRuta ? `${padreRuta} > ${nombre}` : nombre;
     
+    const originalHtml = btnAddWebCategoria.innerHTML;
+    btnAddWebCategoria.disabled = true;
+    btnAddWebCategoria.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Guardando...';
+
     try {
         if (editingCategoriaId) {
             // Actualizar existente
             const q = query(collection(db, 'categorias_web'), where('ruta', '==', ruta));
             const snap = await getDocs(q);
             const duplicate = snap.docs.find(d => d.id !== editingCategoriaId);
-            if (duplicate) return showAlertModal("Esta categoría ya existe.", "Aviso");
+            if (duplicate) { showAlertModal("Esta categoría ya existe.", "Aviso"); return; }
 
             const batch = writeBatch(db);
             batch.update(doc(db, 'categorias_web', editingCategoriaId), { nombre, ruta });
@@ -444,21 +504,24 @@ async function handleAddWebCategoria() {
             await batch.commit();
             cancelEditCategoria();
             await loadAndRenderWebCategorias();
-            showAlertModal("Categoría actualizada correctamente.", "Éxito");
+            showToast("Categoría actualizada correctamente.");
         } else {
             // Crear nueva
             const q = query(collection(db, 'categorias_web'), where('ruta', '==', ruta));
             const snap = await getDocs(q);
-            if (!snap.empty) return showAlertModal("Esta categoría ya existe.", "Aviso");
+            if (!snap.empty) { showAlertModal("Esta categoría ya existe.", "Aviso"); return; }
             
             await addDoc(collection(db, 'categorias_web'), { nombre, ruta });
             webCategoriaNombreInput.value = '';
             await loadAndRenderWebCategorias();
-            showAlertModal("Categoría agregada correctamente.", "Éxito");
+            showToast("Categoría agregada correctamente.");
         }
     } catch (e) {
         console.error("Error al agregar categoría:", e);
         showAlertModal("Error al guardar la categoría.", "Error");
+    } finally {
+        btnAddWebCategoria.disabled = false;
+        btnAddWebCategoria.innerHTML = originalHtml;
     }
 }
 
@@ -544,6 +607,8 @@ export async function init() {
     webCategoriasTableBody = document.getElementById('web-categorias-table-body');
     
     tnUrlInput = document.getElementById('config-tn-url');
+    tnUserIdInput = document.getElementById('config-tn-userid');
+    tnTokenInput = document.getElementById('config-tn-token');
     saveTnConfigButton = document.getElementById('btn-guardar-tn-config');
     btnGenerarBackup = document.getElementById('btn-generar-backup');
 

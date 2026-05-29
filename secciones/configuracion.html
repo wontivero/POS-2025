@@ -128,10 +128,20 @@
             <h5 class="mb-0"><i class="fas fa-globe me-2"></i>Integración Tiendanube</h5>
         </div>
         <div class="card-body">
-            <p class="text-muted mb-3">Configura la URL de tu tienda para generar enlaces directos de administración a tus pedidos.</p>
-            <div class="mb-3">
-                <label for="config-tn-url" class="form-label small">URL Base de la Tienda (Ej: https://tiendainfotechdev.mitiendanube.com)</label>
-                <input type="text" class="form-control" id="config-tn-url" placeholder="https://mitienda.mitiendanube.com">
+            <p class="text-muted mb-3">Configura las credenciales y URL de tu tienda para sincronizar productos y pedidos.</p>
+            <div class="row">
+                <div class="col-md-12 mb-3">
+                    <label for="config-tn-url" class="form-label small">URL Base de la Tienda (Ej: https://tiendainfotechdev.mitiendanube.com)</label>
+                    <input type="text" class="form-control" id="config-tn-url" placeholder="https://mitienda.mitiendanube.com">
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label for="config-tn-userid" class="form-label small">ID de la Tienda (User ID)</label>
+                    <input type="text" class="form-control" id="config-tn-userid" placeholder="Ej: 1234567">
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label for="config-tn-token" class="form-label small">Token de Acceso (Access Token)</label>
+                    <input type="password" class="form-control" id="config-tn-token" placeholder="Ej: bearer...">
+                </div>
             </div>
             <button class="btn btn-success" id="btn-guardar-tn-config"><i class="fas fa-save me-2"></i>Guardar Configuración Tiendanube</button>
         </div>

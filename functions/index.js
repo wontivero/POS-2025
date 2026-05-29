@@ -8,23 +8,34 @@ if (!admin.apps.length) {
     admin.initializeApp();
 }
 
-const TIENDANUBE_TOKEN = defineSecret("TIENDANUBE_TOKEN");
-const TIENDANUBE_USER_ID = defineSecret("TIENDANUBE_USER_ID");
 const GEMINI_API_KEY = defineSecret("GEMINI_API_KEY");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
+
+// Helper para obtener la configuración de Tiendanube desde Firestore
+async function getTiendanubeConfig() {
+    const configDoc = await admin.firestore().collection('app_settings').doc('main').get();
+    if (configDoc.exists) {
+        const tnConfig = configDoc.data().tiendanube || {};
+        return {
+            token: tnConfig.token,
+            userId: tnConfig.userId
+        };
+    }
+    return { token: null, userId: null };
+}
 
 exports.sincronizarTiendanube = onDocumentWritten(
     {
         document: "productos/{productoId}",
-        secrets: [TIENDANUBE_TOKEN, TIENDANUBE_USER_ID],
         timeoutSeconds: 60 // Le damos más tiempo de ejecución por las imágenes
     },
     async (event) => {
-        const token = TIENDANUBE_TOKEN.value();
-        const userId = TIENDANUBE_USER_ID.value();
+        const tnConfig = await getTiendanubeConfig();
+        const token = tnConfig.token;
+        const userId = tnConfig.userId;
 
         if (!token || !userId) {
-            logger.error("Credenciales de Tiendanube no configuradas.");
+            logger.error("Credenciales de Tiendanube no configuradas en Firestore (Configuración -> Integración Tiendanube).");
             return;
         }
 
@@ -182,15 +193,15 @@ exports.sincronizarTiendanube = onDocumentWritten(
 // ========================================================
 exports.actualizarPedidoTiendanube = onDocumentUpdated(
     {
-        document: "pedidos_web/{pedidoId}",
-        secrets: [TIENDANUBE_TOKEN, TIENDANUBE_USER_ID]
+        document: "pedidos_web/{pedidoId}"
     },
     async (event) => {
         const docNuevo = event.data.after.data();
         const docViejo = event.data.before.data();
 
-        const token = TIENDANUBE_TOKEN.value();
-        const userId = TIENDANUBE_USER_ID.value();
+        const tnConfig = await getTiendanubeConfig();
+        const token = tnConfig.token;
+        const userId = tnConfig.userId;
 
         if (!token || !userId || !docNuevo.tnOrderId) return;
 
@@ -243,8 +254,12 @@ exports.actualizarPedidoTiendanube = onDocumentUpdated(
 // ========================================================
 // WEBHOOK: Recibe ventas desde Tiendanube y descuenta stock
 // ========================================================
-exports.webhookTiendanube = onRequest({ secrets: [TIENDANUBE_TOKEN, TIENDANUBE_USER_ID] }, async (req, res) => {
+exports.webhookTiendanube = onRequest(async (req, res) => {
     logger.info("Webhook recibido! Body:", req.body);
+
+    const tnConfig = await getTiendanubeConfig();
+    const token = tnConfig.token;
+    const myStoreId = String(tnConfig.userId);
 
     // 1. Verificamos que sea un evento de creación o pago
     const event = req.headers['x-linkedstore-webhook-event'] || req.body.event;
@@ -256,8 +271,7 @@ exports.webhookTiendanube = onRequest({ secrets: [TIENDANUBE_TOKEN, TIENDANUBE_U
 
     // 2. Por seguridad, verificamos que el aviso venga de TU tienda
     const storeId = String(req.headers['x-linkedstore-id'] || req.body.store_id);
-    const myStoreId = String(TIENDANUBE_USER_ID.value());
-    if (storeId !== myStoreId) {
+    if (!tnConfig.userId || storeId !== myStoreId) {
         logger.warn(`Tienda incorrecta. Recibido: ${storeId}, Esperado: ${myStoreId}`);
         res.status(403).send("Tienda no autorizada");
         return;
@@ -285,8 +299,6 @@ exports.webhookTiendanube = onRequest({ secrets: [TIENDANUBE_TOKEN, TIENDANUBE_U
     }
 
     try {
-        const token = TIENDANUBE_TOKEN.value();
-
         // 5. Vamos a Tiendanube a buscar qué compraron exactamente en esa orden
         const apiUrl = `https://api.tiendanube.com/v1/${myStoreId}/orders/${orderId}`;
         const response = await fetch(apiUrl, { headers: { "Authentication": `bearer ${token}`, "User-Agent": "Sincronizador POS 2025 (wontivero@gmail.com)" } });

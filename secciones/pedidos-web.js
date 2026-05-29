@@ -1,6 +1,6 @@
 // secciones/pedidos-web.js
 import { getFirestore, collection, query, onSnapshot, doc, updateDoc, orderBy } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
-import { formatCurrency, showConfirmationModal, showAlertModal, facturarEnArca, generatePDF } from '../utils.js';
+import { formatCurrency, showConfirmationModal, showAlertModal, facturarEnArca, generatePDF, showToast } from '../utils.js';
 import { getAppConfig } from './dataManager.js';
 
 const db = getFirestore();
@@ -365,48 +365,112 @@ function abrirDetalle(pedido) {
         footerHtml += `<button type="button" class="btn btn-outline-secondary rounded-pill px-3 ms-2" id="btn-revertir-estado" title="Desarchivar (Devolver a despachados)"><i class="fas fa-undo"></i></button>`;
     }
 
-    document.getElementById('detalle-footer').innerHTML = footerHtml;
+    // INYECTAMOS UN CONTENEDOR DUAL (Botones Normales + Barra de Confirmación Oculta)
+    document.getElementById('detalle-footer').innerHTML = `
+        <div id="footer-actions" class="w-100 d-flex flex-wrap align-items-center gap-2">
+            ${footerHtml}
+        </div>
+        <div id="footer-confirmation" class="w-100 d-none justify-content-between align-items-center bg-light p-3 rounded border shadow-sm animate-fade-in">
+            <span id="inline-confirm-msg" class="text-dark fw-bold"></span>
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-light border fw-bold" id="btn-inline-cancel">Cancelar</button>
+                <button type="button" class="btn btn-success fw-bold shadow-sm" id="btn-inline-confirm">Confirmar</button>
+            </div>
+        </div>
+    `;
 
-    // Listener para Facturar en ARCA
-    document.getElementById('btn-facturar-arca-web')?.addEventListener('click', async () => {
-        const confirmado = await showConfirmationModal(`¿Generar Factura Electrónica (ARCA) por <strong>${formatCurrency(pedido.pagos?.total || 0)}</strong> para este pedido web?`);
-        if (!confirmado) return;
+    // MOTOR DE CONFIRMACIÓN INLINE (Súper Profesional UX)
+    const showInlineConfirm = (msg, confirmAction, btnClass = 'btn-success', btnText = 'Confirmar') => {
+        const actionsDiv = document.getElementById('footer-actions');
+        const confirmDiv = document.getElementById('footer-confirmation');
+        
+        document.getElementById('inline-confirm-msg').innerHTML = msg;
+        const btnConfirm = document.getElementById('btn-inline-confirm');
+        const btnCancel = document.getElementById('btn-inline-cancel');
+        
+        btnConfirm.className = `btn fw-bold shadow-sm ${btnClass}`;
+        btnConfirm.innerHTML = `<i class="fas fa-check me-2"></i>${btnText}`;
 
-        const btnFacturar = document.getElementById('btn-facturar-arca-web');
-        const originalHtml = btnFacturar.innerHTML;
-        btnFacturar.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Facturando...';
-        btnFacturar.disabled = true;
+        actionsDiv.classList.add('d-none');
+        confirmDiv.classList.remove('d-none');
+        confirmDiv.classList.add('d-flex');
 
-        // Adaptamos el pedido web al formato que espera nuestra función de ARCA
-        const ventaAdaptada = {
-            total: pedido.pagos?.total || 0,
-            productos: pedido.productos || [],
-            cliente: {
-                nombre: pedido.cliente?.nombre || 'Consumidor Final',
-                cuit: pedido.cliente?.dni || '' // Usamos el DNI/CUIT de TN
-            }
+        btnCancel.onclick = () => {
+            confirmDiv.classList.add('d-none');
+            confirmDiv.classList.remove('d-flex');
+            actionsDiv.classList.remove('d-none');
         };
 
-        const result = await facturarEnArca(ventaAdaptada);
-        if (result.success) {
-            await updateDoc(doc(db, 'pedidos_web', pedido.id), {
-                facturadoEnArca: true,
-                arcaData: result.data
-            });
-            modalDetalle.hide();
-            showAlertModal('¡Factura electrónica generada con éxito!', 'ARCA / AFIP');
-        } else {
-            btnFacturar.innerHTML = originalHtml;
-            btnFacturar.disabled = false;
-            showAlertModal('Error al facturar en ARCA: ' + result.error, 'Error de Facturación');
-        }
+        btnConfirm.onclick = async () => {
+            btnConfirm.disabled = true;
+            btnCancel.disabled = true;
+            btnConfirm.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Procesando...';
+            await confirmAction();
+        };
+    };
+
+    // Listener para Facturar en ARCA
+    document.getElementById('btn-facturar-arca-web')?.addEventListener('click', () => {
+        showInlineConfirm(
+            `<i class="fas fa-file-invoice me-2 text-info fs-5"></i>¿Emitir Factura Electrónica por <strong>${formatCurrency(pedido.pagos?.total || 0)}</strong>?`,
+            async () => {
+                const ventaAdaptada = {
+                    total: pedido.pagos?.total || 0,
+                    productos: pedido.productos || [],
+                    cliente: { nombre: pedido.cliente?.nombre || 'Consumidor Final', cuit: pedido.cliente?.dni || '' }
+                };
+                const result = await facturarEnArca(ventaAdaptada);
+                if (result.success) {
+                    await updateDoc(doc(db, 'pedidos_web', pedido.id), { facturadoEnArca: true, arcaData: result.data });
+                    
+                    // Actualizar el objeto local y re-renderizar el modal sin cerrarlo
+                    pedido.facturadoEnArca = true;
+                    pedido.arcaData = result.data;
+                    abrirDetalle(pedido);
+
+                    showToast('¡Factura electrónica generada con éxito!');
+                } else {
+                    document.getElementById('btn-inline-cancel').click();
+                    document.getElementById('btn-inline-cancel').disabled = false;
+                    showToast('Error ARCA: ' + result.error, 'fa-times-circle', '#dc3545');
+                }
+            },
+            'btn-info text-white',
+            'Emitir Factura'
+        );
     });
     
     document.getElementById('btn-descargar-pdf-web')?.addEventListener('click', () => {
         imprimirFacturaWeb(pedido);
     });
 
-    document.getElementById('btn-marcar-pagado')?.addEventListener('click', () => marcarComoPagado(pedido.id, pedido.numeroOrden));
+    // Listener para Recibir el Pago
+    document.getElementById('btn-marcar-pagado')?.addEventListener('click', () => {
+        showInlineConfirm(
+            `<i class="fas fa-hand-holding-usd me-2 text-success fs-5"></i>¿Confirmás el pago de <strong>${formatCurrency(pedido.pagos?.total || 0)}</strong>?`,
+            async () => {
+                try {
+                    await updateDoc(doc(db, 'pedidos_web', pedido.id), { 'pagos.estado': 'paid', 'pagos.sincronizadoTN': false });
+                    
+                    // Actualizar el objeto local y re-renderizar el modal sin cerrarlo
+                    pedido.pagos = pedido.pagos || {};
+                    pedido.pagos.estado = 'paid';
+                    pedido.pagos.sincronizadoTN = false;
+                    abrirDetalle(pedido);
+
+                    showToast('Pago local registrado. Recuerda actualizar Tiendanube.', 'fa-exclamation-triangle', '#f6c23e');
+                } catch (e) {
+                    console.error(e);
+                    document.getElementById('btn-inline-cancel').click();
+                    document.getElementById('btn-inline-cancel').disabled = false;
+                    showToast('Error al registrar pago', 'fa-times-circle', '#dc3545');
+                }
+            },
+            'btn-success',
+            'Confirmar Pago'
+        );
+    });
+
     document.getElementById('btn-mover-preparacion')?.addEventListener('click', () => cambiarEstado(pedido.id, 'preparacion', modalDetalle));
     document.getElementById('btn-mover-finalizado')?.addEventListener('click', () => cambiarEstado(pedido.id, 'finalizado', modalDetalle));
     document.getElementById('btn-mover-archivado')?.addEventListener('click', () => cambiarEstado(pedido.id, 'archivado', modalDetalle));
@@ -426,28 +490,13 @@ async function cambiarEstado(id, nuevoEstado, modalInstance) {
     try {
         await updateDoc(doc(db, 'pedidos_web', id), { estado: nuevoEstado });
         if (modalInstance) modalInstance.hide();
+        showToast(`Estado del pedido actualizado a: ${nuevoEstado}`);
     } catch (e) {
         console.error(e);
         showAlertModal('Error al cambiar el estado del pedido.');
     }
 }
 
-async function marcarComoPagado(id, numeroOrden) {
-    const confirmado = await showConfirmationModal(`¿Confirmás que el cliente ya te pagó el pedido <strong>#${numeroOrden}</strong>?`);
-    if (!confirmado) return;
-    
-    try {
-        await updateDoc(doc(db, 'pedidos_web', id), { 
-            'pagos.estado': 'paid',
-            'pagos.sincronizadoTN': false
-        });
-        modalDetalle.hide();
-        showAlertModal('¡Excelente! El pedido fue marcado como pagado localmente en POS 2025.<br><br><small class="text-muted">Aparecerá un aviso visual para recordar registrar el pago en Tiendanube.</small>', 'Pago Local Registrado');
-    } catch (e) {
-        console.error(e);
-        showAlertModal('Error al registrar el pago.');
-    }
-}
 
 function imprimirTicketArmado(pedido) {
     const appConfig = getAppConfig();
