@@ -360,7 +360,6 @@ async function handleFormSubmit(e) {
     } catch (e) {
         console.error('Error al guardar el producto:', e);
         await showAlertModal('Ocurrió un error al guardar el producto.');
-    } finally {
         saveButton.disabled = false;
         saveButton.innerHTML = originalButtonContent;
     }
@@ -761,6 +760,7 @@ function resetProductoModal() {
     modalProductoLabel.textContent = 'Nuevo Producto';
     const saveButton = document.getElementById('btnGuardarProducto');
     if (saveButton) saveButton.textContent = 'Crear Producto';
+        if (saveButton) saveButton.disabled = false;
     if (quillModal) quillModal.root.innerHTML = '';
     const genericProfitFields = document.getElementById('generic-profit-fields');
     if (genericProfitFields) genericProfitFields.style.display = 'none';
