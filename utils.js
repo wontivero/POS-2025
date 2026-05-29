@@ -393,7 +393,13 @@ export async function generatePDF(ticketId, venta, isNotaCredito = false) {
         drawText(`Nombre: ${venta.cliente.nombre}`, margin, y, 10);
         y += lineHeight;
         if (venta.cliente.cuit) { drawText(`CUIT/DNI: ${venta.cliente.cuit}`, margin, y, 10); y += lineHeight; }
-        if (venta.cliente.domicilio) { drawText(`Domicilio: ${venta.cliente.domicilio}`, margin, y, 10); y += lineHeight; }
+        if (venta.cliente.domicilio) { 
+            doc.setFont(font, 'normal');
+            doc.setFontSize(10);
+            const splitDomicilio = doc.splitTextToSize(`Domicilio: ${venta.cliente.domicilio}`, pageWidth - (margin * 2));
+            doc.text(splitDomicilio, margin, y);
+            y += lineHeight * splitDomicilio.length;
+        }
     }
 
     y += 10;
@@ -410,7 +416,6 @@ export async function generatePDF(ticketId, venta, isNotaCredito = false) {
     y += lineHeight;
 
     venta.productos.forEach(producto => {
-        // --- INICIO DEL CAMBIO ---
         // Construimos la descripción completa del producto
         let descripcionCompleta = producto.nombre;
         if (producto.marca && producto.marca !== 'Desconocido') {
@@ -420,13 +425,19 @@ export async function generatePDF(ticketId, venta, isNotaCredito = false) {
             descripcionCompleta += ` - ${producto.color}`;
         }
 
-        drawText(descripcionCompleta, margin, y, 10); // Usamos la nueva descripción
-        // --- FIN DEL CAMBIO ---
+        // Solución Profesional: Salto de línea automático (Word-wrap)
+        doc.setFont(font, 'normal');
+        doc.setFontSize(10);
+        // La columna 'Cant.' empieza en X=100. Restamos el margen(10) y 5 de padding = 85 de ancho máximo.
+        const splitDesc = doc.splitTextToSize(descripcionCompleta, 85);
+        doc.text(splitDesc, margin, y);
 
         drawText(producto.cantidad.toString(), 100, y, 10);
         drawText(formatCurrency(producto.precio), 130, y, 10);
         drawText(formatCurrency(producto.cantidad * producto.precio), pageWidth - margin, y, 10, 'normal', 'right');
-        y += lineHeight;
+        
+        // Aumentamos 'y' dinámicamente según cuántas líneas ocupó la descripción
+        y += lineHeight * splitDesc.length;
     });
 
     y += lineHeight;
