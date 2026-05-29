@@ -751,8 +751,10 @@ export function showAlertModal(message, title = 'Aviso') {
     return new Promise(resolve => {
         if (!genericModalEl) {
             genericModalEl = document.getElementById('genericModal');
-            genericModal = new bootstrap.Modal(genericModalEl);
+            genericModal = bootstrap.Modal.getOrCreateInstance(genericModalEl);
         }
+
+        document.body.classList.add('generic-modal-is-open');
 
         document.getElementById('genericModalLabel').textContent = title;
         document.getElementById('genericModalBody').innerHTML = message;
@@ -761,8 +763,13 @@ export function showAlertModal(message, title = 'Aviso') {
         const confirmButton = document.getElementById('btn-generic-confirm');
         confirmButton.textContent = 'OK';
 
-        // ---- Lógica de Eventos Corregida ----
-        const triggerHide = () => genericModal.hide();
+        let isResolved = false;
+
+        const triggerHide = () => {
+            if (!isResolved) {
+                genericModal.hide();
+            }
+        };
 
         const handleKeyPress = (e) => {
             if (e.key === 'Enter') {
@@ -772,6 +779,9 @@ export function showAlertModal(message, title = 'Aviso') {
         };
 
         const cleanupAndResolve = () => {
+            if (isResolved) return;
+            isResolved = true;
+            document.body.classList.remove('generic-modal-is-open');
             confirmButton.removeEventListener('click', triggerHide);
             document.removeEventListener('keydown', handleKeyPress);
             resolve();
@@ -780,7 +790,6 @@ export function showAlertModal(message, title = 'Aviso') {
         confirmButton.addEventListener('click', triggerHide, { once: true });
         document.addEventListener('keydown', handleKeyPress);
         genericModalEl.addEventListener('hidden.bs.modal', cleanupAndResolve, { once: true });
-        // ---- Fin de la Corrección ----
 
         genericModal.show();
     });
@@ -805,7 +814,7 @@ export function showConfirmationModal(message, title = 'Confirmación', options 
     return new Promise(resolve => {
         if (!genericModalEl) {
             genericModalEl = document.getElementById('genericModal');
-            genericModal = new bootstrap.Modal(genericModalEl);
+            genericModal = bootstrap.Modal.getOrCreateInstance(genericModalEl);
         }
 
         document.body.classList.add('generic-modal-is-open');

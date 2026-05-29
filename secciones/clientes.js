@@ -448,8 +448,8 @@ function mostrarDetalleTicket(venta) {
     }
 
     // Abrimos el modal. Como ya tenemos bootstrap disponible globalmente:
-    const ticketModal = new bootstrap.Modal(document.getElementById('ticketModal'));
-    ticketModal.show();
+    const ticketModalInst = bootstrap.Modal.getOrCreateInstance(document.getElementById('ticketModal'));
+    ticketModalInst.show();
 }
 
 // Función auxiliar para parsear fechas string "DD/MM/YYYY HH:mm"

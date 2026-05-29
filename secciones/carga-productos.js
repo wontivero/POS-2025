@@ -1,6 +1,7 @@
 // secciones/carga-productos.js
-import { db } from '../firebase.js';
+import { db, functions } from '../firebase.js';
 import { collection, writeBatch, doc, getDocs, query, where, addDoc, orderBy, Timestamp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
+import { httpsCallable } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-functions.js";
 import { showAlertModal, showConfirmationModal, roundUpToNearest50, formatCurrency, normalizeString, capitalizeFirstLetter } from '../utils.js';
 import { getProductos, getMarcas, getColores, getRubros } from './dataManager.js';
 // --- ESTADO Y ELEMENTOS DEL DOM ---
@@ -167,6 +168,62 @@ function setupEventListeners() {
                 handleAddImagenUrl();
             }
         });
+    }
+
+    const btnIaCarga = document.getElementById('btn-ia-carga');
+    if (btnIaCarga) {
+        btnIaCarga.onclick = async () => {
+            const nombre = prodNombre.value.trim();
+            if (!nombre) {
+                showAlertModal("Por favor, ingresa el nombre del producto primero.");
+                return;
+            }
+
+            const descripcionActual = quillCarga.root.innerHTML === '<p><br></p>' ? '' : quillCarga.root.innerHTML;
+            btnIaCarga.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Pensando...';
+            btnIaCarga.disabled = true;
+
+            try {
+                const optimizarDescripcionIA = httpsCallable(functions, 'optimizarDescripcionIA');
+                const result = await optimizarDescripcionIA({ nombre: nombre, descripcion: descripcionActual });
+                if (result.data && result.data.success) {
+                    quillCarga.clipboard.dangerouslyPasteHTML(result.data.data);
+                }
+            } catch (error) {
+                console.error("Error con IA:", error);
+                showAlertModal("Hubo un error al optimizar la descripción con IA.");
+            } finally {
+                btnIaCarga.innerHTML = '<i class="fas fa-magic me-1"></i>Optimizar con IA';
+                btnIaCarga.disabled = false;
+            }
+        };
+    }
+
+    const btnIaTituloCarga = document.getElementById('btn-ia-titulo-carga');
+    if (btnIaTituloCarga) {
+        btnIaTituloCarga.onclick = async () => {
+            const nombre = prodNombre.value.trim();
+            if (!nombre) {
+                showAlertModal("Por favor, ingresa un nombre inicial para optimizar.");
+                return;
+            }
+
+            btnIaTituloCarga.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+            btnIaTituloCarga.disabled = true;
+
+            try {
+                const optimizarTituloIA = httpsCallable(functions, 'optimizarTituloIA');
+                const result = await optimizarTituloIA({ nombre: nombre });
+                if (result.data && result.data.success) {
+                    prodNombre.value = result.data.data;
+                }
+            } catch (error) {
+                console.error("Error con IA:", error);
+            } finally {
+                btnIaTituloCarga.innerHTML = '<i class="fas fa-magic"></i> IA';
+                btnIaTituloCarga.disabled = false;
+            }
+        };
     }
 }
 

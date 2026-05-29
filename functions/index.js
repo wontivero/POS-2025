@@ -1,5 +1,5 @@
 const { onDocumentWritten, onDocumentUpdated } = require("firebase-functions/v2/firestore");
-const { onRequest, onCall } = require("firebase-functions/v2/https");
+const { onRequest, onCall, HttpsError } = require("firebase-functions/v2/https");
 const { defineSecret } = require("firebase-functions/params");
 const logger = require("firebase-functions/logger");
 const admin = require("firebase-admin");
@@ -10,6 +10,8 @@ if (!admin.apps.length) {
 
 const TIENDANUBE_TOKEN = defineSecret("TIENDANUBE_TOKEN");
 const TIENDANUBE_USER_ID = defineSecret("TIENDANUBE_USER_ID");
+const GEMINI_API_KEY = defineSecret("GEMINI_API_KEY");
+const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 exports.sincronizarTiendanube = onDocumentWritten(
     {
@@ -416,5 +418,77 @@ exports.generarBackupUniversal = onCall({ timeoutSeconds: 300, memory: "512Mi" }
     } catch (error) {
         logger.error("Error generando backup universal", error);
         throw new Error("No se pudo generar el backup");
+    }
+});
+
+// ========================================================
+// IA: Optimizar descripción de producto con Gemini
+// ========================================================
+exports.optimizarDescripcionIA = onCall({ secrets: [GEMINI_API_KEY], timeoutSeconds: 60 }, async (request) => {
+    try {
+        const { nombre, descripcion } = request.data;
+
+        if (!nombre) {
+            throw new HttpsError("invalid-argument", "El nombre del producto es obligatorio para la IA.");
+        }
+
+        // Inicializamos el modelo de Gemini usando la llave secreta
+        const genAI = new GoogleGenerativeAI(GEMINI_API_KEY.value());
+        const model = genAI.getGenerativeModel({ model: "gemini-3.5-flash" });
+
+        // Nuestro Prompt Maestro de Ingeniería
+        const prompt = `Eres un experto copywriter de E-commerce y especialista en SEO. Tu tarea es reescribir y optimizar la descripción de un producto para una tienda online.
+
+DATOS DEL PRODUCTO:
+- Nombre: ${nombre}
+- Descripción original/Borrador: ${descripcion || 'Sin descripción previa.'}
+
+REGLAS ESTRICTAS:
+1. No inventes características ni funciones que no estén mencionadas o implícitas en el texto original o el nombre.
+2. Utiliza un tono persuasivo, profesional y orientado a los beneficios del cliente.
+3. Optimiza el texto para SEO usando palabras clave relevantes de forma natural.
+4. Estructura la respuesta con: un breve párrafo introductorio atractivo, seguido de una lista de viñetas (bullet points) con las características destacadas, y un breve llamado a la acción final.
+5. FORMATO DE SALIDA: Devuelve ÚNICAMENTE código HTML válido (usando etiquetas <p>, <ul>, <li>, <strong>). No uses Markdown, no incluyas la etiqueta <html> ni <body>, solo el contenido HTML listo para inyectar.`;
+
+        const result = await model.generateContent(prompt);
+        const responseText = result.response.text();
+
+        // Limpiamos bloques de Markdown (```html ... ```) por si la IA los incluye por costumbre
+        const cleanedHtml = responseText.replace(/```html/gi, '').replace(/```/g, '').trim();
+
+        return { success: true, data: cleanedHtml };
+    } catch (error) {
+        logger.error("Error interno de IA:", error.message, error);
+        throw new HttpsError("internal", `Error del servidor: ${error.message}`);
+    }
+});
+
+// ========================================================
+// IA: Optimizar Título de producto con Gemini
+// ========================================================
+exports.optimizarTituloIA = onCall({ secrets: [GEMINI_API_KEY], timeoutSeconds: 30 }, async (request) => {
+    try {
+        const { nombre } = request.data;
+
+        if (!nombre) {
+            throw new HttpsError("invalid-argument", "El nombre del producto es obligatorio.");
+        }
+
+        const genAI = new GoogleGenerativeAI(GEMINI_API_KEY.value());
+        const model = genAI.getGenerativeModel({ model: "gemini-3.5-flash" });
+
+        const prompt = `Eres un experto en E-commerce y SEO. Mejora el siguiente nombre de un producto para una tienda online.
+Debe ser conciso, vendedor y contener palabras clave relevantes.
+Devuelve ÚNICAMENTE el nuevo nombre del producto, sin comillas, sin formato, sin explicaciones y con un máximo de 65 caracteres.
+
+Nombre original: ${nombre}`;
+
+        const result = await model.generateContent(prompt);
+        const cleanedTitle = result.response.text().replace(/["*]/g, '').trim();
+
+        return { success: true, data: cleanedTitle };
+    } catch (error) {
+        logger.error("Error interno de IA (Título):", error.message, error);
+        throw new HttpsError("internal", `Error del servidor: ${error.message}`);
     }
 });

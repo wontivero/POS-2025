@@ -33,6 +33,20 @@ let genericProductToAdd = null; // Nuevo estado para el producto genérico
 let ventaExitosaTimer = null;
 let lastEnterPressTime = 0;
 // --- Funciones de la Sección de Ventas ---
+
+// Manejadores nombrados para evitar duplicación de eventos de modales
+function handleConfirmacionVentaHidden() {
+    if (ventaExitosaTimer) {
+        clearInterval(ventaExitosaTimer);
+        ventaExitosaTimer = null;
+    }
+    resetVentas();
+}
+
+function handleGenericPriceModalShown() {
+    genericPriceInput.focus();
+    genericPriceInput.select();
+}
 // AÑADE ESTA FUNCIÓN NUEVA EN ventas.js
 
 function startVentaExitosaCountdown() {
@@ -196,7 +210,11 @@ function initEditPriceModalListeners() {
     const editPriceModalEl = document.getElementById('editPriceModal');
     if (!editPriceModalEl) return; // Si el modal no existe, no hacemos nada
 
-    const editPriceModal = new bootstrap.Modal(editPriceModalEl);
+    // Prevenir duplicación de eventos e instancias al cambiar de sección
+    if (editPriceModalEl.dataset.initialized) return;
+    editPriceModalEl.dataset.initialized = 'true';
+
+    const editPriceModal = bootstrap.Modal.getOrCreateInstance(editPriceModalEl);
     const editPriceProductName = document.getElementById('editPriceProductName');
     const editPriceInput = document.getElementById('editPriceInput');
     const permanentCheck = document.getElementById('editPricePermanentCheck');
@@ -1183,7 +1201,7 @@ function handleAgregarCliente() {
     clienteDomicilio.value = '';
     clienteEmail.value = '';
     clienteTelefono.value = '';
-    const modal = new bootstrap.Modal(clienteModal);
+    const modal = bootstrap.Modal.getOrCreateInstance(clienteModal);
     modal.show();
 }
 
@@ -1196,7 +1214,7 @@ function handleEditarCliente() {
     clienteDomicilio.value = clienteSeleccionado.domicilio || '';
     clienteEmail.value = clienteSeleccionado.email || '';
     clienteTelefono.value = clienteSeleccionado.telefono || '';
-    const modal = new bootstrap.Modal(clienteModal);
+    const modal = bootstrap.Modal.getOrCreateInstance(clienteModal);
     modal.show();
 }
 
@@ -1353,7 +1371,7 @@ export async function init() {
     btnGuardarCliente = document.getElementById('btnGuardarCliente');
     btnCrearProductoVentas = document.getElementById('btnCrearProductoVentas');
     genericPriceModalEl = document.getElementById('genericPriceModal');
-    genericPriceModal = new bootstrap.Modal(genericPriceModalEl);
+    if (genericPriceModalEl) genericPriceModal = bootstrap.Modal.getOrCreateInstance(genericPriceModalEl);
     genericProductName = document.getElementById('genericProductName');
     genericPriceInput = document.getElementById('genericPriceInput');
     btnConfirmGenericPrice = document.getElementById('btnConfirmGenericPrice');
@@ -1373,48 +1391,61 @@ export async function init() {
     // asegurando que funcionen con los nuevos elementos del DOM.
     // Por eso, los sacamos del bloque 'if (!window.ventasListenersAttached)'.
 
+    productoSearch.removeEventListener('input', handleSearch);
     productoSearch.addEventListener('input', handleSearch);
+    productoSearch.removeEventListener('keyup', handleSearchKeyUp);
     productoSearch.addEventListener('keyup', handleSearchKeyUp);
 
     if (btnCrearProductoVentas && productoModal) {
-        btnCrearProductoVentas.addEventListener('click', () => {
+        btnCrearProductoVentas.onclick = () => {
             productoModal.show();
-        });
+        };
     }
 
     camposPago.forEach(input => {
+        input.removeEventListener('input', handlePaymentChange);
         input.addEventListener('input', handlePaymentChange);
-        input.addEventListener('focus', (e) => e.target.select());
+        input.onfocus = (e) => e.target.select();
     });
 
+    txtRecargoCredito.removeEventListener('input', handlePaymentChange);
     txtRecargoCredito.addEventListener('input', handlePaymentChange);
+    btnFinalizarVenta.removeEventListener('click', finalizarVenta);
     btnFinalizarVenta.addEventListener('click', finalizarVenta);
-    btnsPagoRapido.forEach(btn => btn.addEventListener('click', handleQuickPayment));
-
-    confirmacionVentaModal.addEventListener('hidden.bs.modal', () => {
-        if (ventaExitosaTimer) {
-            clearInterval(ventaExitosaTimer);
-            ventaExitosaTimer = null;
-        }
-        resetVentas();
+    btnsPagoRapido.forEach(btn => {
+        btn.removeEventListener('click', handleQuickPayment);
+        btn.addEventListener('click', handleQuickPayment);
     });
 
+    confirmacionVentaModal.removeEventListener('hidden.bs.modal', handleConfirmacionVentaHidden);
+    confirmacionVentaModal.addEventListener('hidden.bs.modal', handleConfirmacionVentaHidden);
+
+    clienteSearch.removeEventListener('input', handleClienteSearchInput);
     clienteSearch.addEventListener('input', handleClienteSearchInput);
+    clienteSearch.removeEventListener('keydown', handleClienteSearchKeydown);
     clienteSearch.addEventListener('keydown', handleClienteSearchKeydown);
+    btnAgregarCliente.removeEventListener('click', handleAgregarCliente);
     btnAgregarCliente.addEventListener('click', handleAgregarCliente);
+    btnEditarCliente.removeEventListener('click', handleEditarCliente);
     btnEditarCliente.addEventListener('click', handleEditarCliente);
+    btnGuardarCliente.removeEventListener('click', handleGuardarCliente);
     btnGuardarCliente.addEventListener('click', handleGuardarCliente);
 
-    if (btnConfirmGenericPrice) btnConfirmGenericPrice.addEventListener('click', handleConfirmGenericPrice);
+    if (btnConfirmGenericPrice) {
+        btnConfirmGenericPrice.removeEventListener('click', handleConfirmGenericPrice);
+        btnConfirmGenericPrice.addEventListener('click', handleConfirmGenericPrice);
+    }
 
-    if (genericPriceInput) genericPriceInput.addEventListener('keyup', (e) => {
-        if (e.key === 'Enter') handleConfirmGenericPrice();
-    });
+    if (genericPriceInput) {
+        genericPriceInput.onkeyup = (e) => {
+            if (e.key === 'Enter') handleConfirmGenericPrice();
+        };
+    }
 
-    if (genericPriceModalEl) genericPriceModalEl.addEventListener('shown.bs.modal', () => {
-        genericPriceInput.focus();
-        genericPriceInput.select();
-    });
+    if (genericPriceModalEl) {
+        genericPriceModalEl.removeEventListener('shown.bs.modal', handleGenericPriceModalShown);
+        genericPriceModalEl.addEventListener('shown.bs.modal', handleGenericPriceModalShown);
+    }
 
     // LISTENERS CLAVE PARA EL TICKET (DELEGADOS)
     // También deben reasignarse porque 'ticketItems' es un nuevo elemento.

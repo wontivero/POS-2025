@@ -1,6 +1,8 @@
 // secciones/productos.js
-import { getCollection, saveDocument, deleteDocument, formatCurrency, getTodayDate, updateDocument, capitalizeFirstLetter, showAlertModal, showConfirmationModal, roundUpToNearest50, normalizeString } from '../utils.js';
+import { getCollection, saveDocument, deleteDocument, formatCurrency, getTodayDate, updateDocument, capitalizeFirstLetter, showAlertModal, showConfirmationModal, roundUpToNearest50, normalizeString, showToast } from '../utils.js';
 import { getFirestore, collection, onSnapshot, query, orderBy, getDocs, writeBatch, Timestamp, doc, where, addDoc } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
+import { functions } from '../firebase.js';
+import { httpsCallable } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-functions.js";
 import { getProductos, getMarcas, getColores, getRubros } from './dataManager.js';
 
 const db = getFirestore();
@@ -354,7 +356,7 @@ async function handleFormSubmit(e) {
         });
 
         if (productoModal) productoModal.hide();
-        await showAlertModal(`Producto ${isNew ? 'creado' : 'actualizado'} correctamente.`);
+        showToast(`Producto ${isNew ? 'creado' : 'actualizado'} correctamente.`);
     } catch (e) {
         console.error('Error al guardar el producto:', e);
         await showAlertModal('Ocurrió un error al guardar el producto.');
@@ -876,7 +878,7 @@ export function init() {
     tablaProductosHead = document.getElementById('tablaProductosHead');
     btnNuevoProducto = document.getElementById('btnNuevoProducto');
     productoModalEl = document.getElementById('productoModal');
-    if (productoModalEl) productoModal = new bootstrap.Modal(productoModalEl);
+    if (productoModalEl) productoModal = bootstrap.Modal.getOrCreateInstance(productoModalEl);
     formProducto = document.getElementById('formProducto');
     modalProductoLabel = document.getElementById('productoModalLabel');
     btnExportarProductos = document.getElementById('btnExportarProductos');
@@ -940,6 +942,61 @@ export function init() {
         });
     }
 
+    const btnIaModal = document.getElementById('btn-ia-modal');
+    if (btnIaModal) {
+        // Usamos .onclick para evitar que se dupliquen los eventos al cambiar de sección
+        btnIaModal.onclick = async () => {
+            const nombre = productoNombre.value.trim();
+            if (!nombre) {
+                return import('../utils.js').then(({ showAlertModal }) => showAlertModal("Por favor, ingresa el nombre del producto primero."));
+            }
+
+            const descripcionActual = quillModal.root.innerHTML === '<p><br></p>' ? '' : quillModal.root.innerHTML;
+            btnIaModal.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Pensando...';
+            btnIaModal.disabled = true;
+
+            try {
+                const optimizarDescripcionIA = httpsCallable(functions, 'optimizarDescripcionIA');
+                const result = await optimizarDescripcionIA({ nombre: nombre, descripcion: descripcionActual });
+                if (result.data && result.data.success) {
+                    quillModal.clipboard.dangerouslyPasteHTML(result.data.data);
+                }
+            } catch (error) {
+                console.error("Error con IA:", error);
+                import('../utils.js').then(({ showAlertModal }) => showAlertModal("Hubo un error al optimizar la descripción con IA."));
+            } finally {
+                btnIaModal.innerHTML = '<i class="fas fa-magic me-1"></i>Optimizar con IA';
+                btnIaModal.disabled = false;
+            }
+        };
+    }
+
+    const btnIaTituloModal = document.getElementById('btn-ia-titulo-modal');
+    if (btnIaTituloModal) {
+        btnIaTituloModal.onclick = async () => {
+            const nombre = productoNombre.value.trim();
+            if (!nombre) {
+                return import('../utils.js').then(({ showAlertModal }) => showAlertModal("Por favor, ingresa un nombre inicial para optimizar."));
+            }
+
+            btnIaTituloModal.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+            btnIaTituloModal.disabled = true;
+
+            try {
+                const optimizarTituloIA = httpsCallable(functions, 'optimizarTituloIA');
+                const result = await optimizarTituloIA({ nombre: nombre });
+                if (result.data && result.data.success) {
+                    productoNombre.value = result.data.data;
+                }
+            } catch (error) {
+                console.error("Error con IA:", error);
+            } finally {
+                btnIaTituloModal.innerHTML = '<i class="fas fa-magic me-1"></i> IA';
+                btnIaTituloModal.disabled = false;
+            }
+        };
+    }
+
     const actualizarDatalists = () => {
         const poblar = (el, lista) => { if (el) el.innerHTML = lista.map(item => `<option value="${capitalizeFirstLetter(item)}"></option>`).join(''); };
         poblar(datalistMarcasFiltro, getMarcas());
@@ -976,26 +1033,46 @@ export function init() {
     }
 
     if (productoCodigo) {
+        productoCodigo.removeEventListener('blur', handleCodigoBlur);
         productoCodigo.addEventListener('blur', handleCodigoBlur);
-        productoCodigo.addEventListener('input', () => productoCodigo.classList.remove('is-invalid'));
+        productoCodigo.oninput = () => productoCodigo.classList.remove('is-invalid');
     }
     if (productoImagenesInput) {
+        productoImagenesInput.removeEventListener('change', handleModalImagenesSelection);
         productoImagenesInput.addEventListener('change', handleModalImagenesSelection);
     }
     if (btnAddProductoImagenUrl) {
+        btnAddProductoImagenUrl.removeEventListener('click', handleAddModalImagenUrl);
         btnAddProductoImagenUrl.addEventListener('click', handleAddModalImagenUrl);
     }
     if (productoImagenUrlInput) {
-        productoImagenUrlInput.addEventListener('keydown', (e) => {
+        productoImagenUrlInput.onkeydown = (e) => {
             if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); handleAddModalImagenUrl(); }
-        });
+        };
     }
-    if (btnImportarProductos) btnImportarProductos.addEventListener('click', () => importarArchivoInput?.click());
-    if (importarArchivoInput) importarArchivoInput.addEventListener('change', handleFileUpload);
-    if (btnNuevoProducto) btnNuevoProducto.addEventListener('click', handleNewProduct);
-    if (productoModalEl) productoModalEl.addEventListener('hidden.bs.modal', resetProductoModal);
-    if (formProducto) formProducto.addEventListener('submit', handleFormSubmit);
-    if (btnExportarProductos) btnExportarProductos.addEventListener('click', exportarProductosAExcel);
+    if (btnImportarProductos) {
+        btnImportarProductos.onclick = () => importarArchivoInput?.click();
+    }
+    if (importarArchivoInput) {
+        importarArchivoInput.removeEventListener('change', handleFileUpload);
+        importarArchivoInput.addEventListener('change', handleFileUpload);
+    }
+    if (btnNuevoProducto) {
+        btnNuevoProducto.removeEventListener('click', handleNewProduct);
+        btnNuevoProducto.addEventListener('click', handleNewProduct);
+    }
+    if (productoModalEl) {
+        productoModalEl.removeEventListener('hidden.bs.modal', resetProductoModal);
+        productoModalEl.addEventListener('hidden.bs.modal', resetProductoModal);
+    }
+    if (formProducto) {
+        formProducto.removeEventListener('submit', handleFormSubmit);
+        formProducto.addEventListener('submit', handleFormSubmit);
+    }
+    if (btnExportarProductos) {
+        btnExportarProductos.removeEventListener('click', exportarProductosAExcel);
+        btnExportarProductos.addEventListener('click', exportarProductosAExcel);
+    }
     if (tablaProductosBody) {
         tablaProductosBody.addEventListener('click', (e) => {
             if (e.target.closest('.btn-eliminar-producto')) handleDelete(e);
