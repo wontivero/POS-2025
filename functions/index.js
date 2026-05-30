@@ -449,18 +449,21 @@ exports.optimizarDescripcionIA = onCall({ secrets: [GEMINI_API_KEY], timeoutSeco
         const model = genAI.getGenerativeModel({ model: "gemini-3.5-flash" });
 
         // Nuestro Prompt Maestro de Ingeniería
-        const prompt = `Eres un experto copywriter de E-commerce y especialista en SEO. Tu tarea es reescribir y optimizar la descripción de un producto para una tienda online.
+        const prompt = `Eres un Copywriter experto en E-commerce y SEO. Reescribe y optimiza la descripción de este producto para una tienda online (Tiendanube).
 
 DATOS DEL PRODUCTO:
 - Nombre: ${nombre}
-- Descripción original/Borrador: ${descripcion || 'Sin descripción previa.'}
+- Descripción original: ${descripcion || 'Sin descripción detallada.'}
 
 REGLAS ESTRICTAS:
-1. No inventes características ni funciones que no estén mencionadas o implícitas en el texto original o el nombre.
-2. Utiliza un tono persuasivo, profesional y orientado a los beneficios del cliente.
-3. Optimiza el texto para SEO usando palabras clave relevantes de forma natural.
-4. Estructura la respuesta con: un breve párrafo introductorio atractivo, seguido de una lista de viñetas (bullet points) con las características destacadas, y un breve llamado a la acción final.
-5. FORMATO DE SALIDA: Devuelve ÚNICAMENTE código HTML válido (usando etiquetas <p>, <ul>, <li>, <strong>). No uses Markdown, no incluyas la etiqueta <html> ni <body>, solo el contenido HTML listo para inyectar.`;
+1. TONO: Persuasivo, profesional pero cercano, enfocado en cómo el producto resuelve un problema o mejora la vida del cliente.
+2. ESTRUCTURA: 
+   - Un párrafo introductorio corto y magnético (2-3 líneas).
+   - Una lista de viñetas (bullet points) con 3 a 5 beneficios o características principales.
+   - Un breve llamado a la acción (CTA) al final invitando a la compra de forma sutil.
+3. VERACIDAD: NO inventes especificaciones técnicas, medidas o características puntuales que no se deduzcan del nombre o la descripción original.
+4. SEO: Usa palabras clave relevantes de forma natural para mejorar el posicionamiento.
+5. FORMATO CRÍTICO: Devuelve ÚNICAMENTE código HTML puro. Usa <p> para párrafos, <ul> y <li> para listas, y <strong> para resaltar textos clave. NO uses Markdown (como \`\`\`html), no uses <html> ni <body>. Entrega el HTML crudo listo para ser inyectado.`;
 
         const result = await model.generateContent(prompt);
         const responseText = result.response.text();
@@ -489,11 +492,16 @@ exports.optimizarTituloIA = onCall({ secrets: [GEMINI_API_KEY], timeoutSeconds: 
         const genAI = new GoogleGenerativeAI(GEMINI_API_KEY.value());
         const model = genAI.getGenerativeModel({ model: "gemini-3.5-flash" });
 
-        const prompt = `Eres un experto en E-commerce y SEO. Mejora el siguiente nombre de un producto para una tienda online.
-Debe ser conciso, vendedor y contener palabras clave relevantes.
-Devuelve ÚNICAMENTE el nuevo nombre del producto, sin comillas, sin formato, sin explicaciones y con un máximo de 65 caracteres.
+        const prompt = `Eres un especialista en SEO y E-commerce. Tu objetivo es optimizar el título de este producto para maximizar clics (CTR) y búsquedas.
 
-Nombre original: ${nombre}`;
+TÍTULO ORIGINAL: "${nombre}"
+
+REGLAS ESTRICTAS:
+1. ESTRUCTURA IDEAL: [Producto principal] + [Marca/Modelo si aplica] + [Característica clave/Color/Tamaño].
+2. LONGITUD: Máximo 65-70 caracteres. Sé conciso y directo.
+3. ESTILO: Capitaliza la primera letra de cada palabra importante (Title Case). NO uses TODO MAYÚSCULAS.
+4. LIMPIEZA: Elimina códigos internos inútiles, palabras redundantes o caracteres extraños.
+5. FORMATO CRÍTICO: Devuelve ÚNICAMENTE el nuevo título optimizado. Sin comillas, sin asteriscos, sin puntos finales y sin explicaciones adicionales.`;
 
         const result = await model.generateContent(prompt);
         const cleanedTitle = result.response.text().replace(/["*]/g, '').trim();
@@ -501,6 +509,57 @@ Nombre original: ${nombre}`;
         return { success: true, data: cleanedTitle };
     } catch (error) {
         logger.error("Error interno de IA (Título):", error.message, error);
+        throw new HttpsError("internal", `Error del servidor: ${error.message}`);
+    }
+});
+
+// ========================================================
+// IA: Generar Post para Instagram con Gemini
+// ========================================================
+exports.generarPostIG = onCall({ secrets: [GEMINI_API_KEY], timeoutSeconds: 60 }, async (request) => {
+    try {
+        const { nombre, descripcion, precio, url, plataforma } = request.data;
+
+        if (!nombre) {
+            throw new HttpsError("invalid-argument", "El nombre del producto es obligatorio.");
+        }
+
+        const genAI = new GoogleGenerativeAI(GEMINI_API_KEY.value());
+        const model = genAI.getGenerativeModel({ model: "gemini-3.5-flash" });
+
+        let ctaRule = "";
+        let hashtagRule = "";
+        let tonoRule = "";
+
+        if (plataforma === 'whatsapp') {
+            ctaRule = `4. CTA: Una sola línea rápida y directa invitando a la compra. Es OBLIGATORIO pegar textualmente el Link de compra al final: ${url}`;
+            hashtagRule = "5. HASHTAGS: No uses hashtags o usa máximo uno o dos muy generales.";
+            tonoRule = "3. TONO: Directo, persuasivo y amigable para enviar por WhatsApp o grupos de Facebook. Usa emojis para que se vea dinámico pero limpio.";
+        } else {
+            ctaRule = `4. CTA: Una sola línea rápida y directa (ej: "👇 Conseguilo en el link de nuestra bio"). NO incluyas el enlace web textualmente.`;
+            hashtagRule = "5. HASHTAGS: 5 a 7 hashtags estratégicos al final.";
+            tonoRule = "3. TONO: Muy casual, relajado y orgánico. PROHIBIDO sonar como infomercial de TV. Escribe como si recomendaras algo útil a un amigo.";
+        }
+
+        const prompt = `Eres un experto Copywriter y Community Manager. Escribe un texto magnético y directo para vender este producto en ${plataforma === 'whatsapp' ? 'WhatsApp o Facebook' : 'Instagram'}:
+- Nombre: ${nombre}
+- Precio: ${precio}
+- Descripción: ${descripcion || 'Sin descripción detallada.'}
+
+REGLAS ESTRICTAS:
+1. ESTRUCTURA: Un gancho (hook) de 1 línea, 2 o 3 beneficios en formato viñeta, precio destacado y un CTA de 1 sola línea.
+2. LONGITUD (EXTRA BREVE): Usa "micro-copy". Las viñetas NO deben superar las 6 a 8 palabras cada una. Textos cortos y al pie.
+${tonoRule}
+${ctaRule}
+${hashtagRule}
+6. FORMATO (CRÍTICO): Devuelve ÚNICAMENTE el texto exacto que se copiará. NO uses formato Markdown (absolutamente NINGÚN asterisco **), no uses comillas envolviendo el texto, y no agregues frases como "Aquí tienes tu post".`;
+
+        const result = await model.generateContent(prompt);
+        const text = result.response.text().trim();
+
+        return { success: true, data: text };
+    } catch (error) {
+        logger.error("Error interno de IA (Instagram):", error.message, error);
         throw new HttpsError("internal", `Error del servidor: ${error.message}`);
     }
 });

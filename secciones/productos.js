@@ -3,7 +3,7 @@ import { getCollection, saveDocument, deleteDocument, formatCurrency, getTodayDa
 import { getFirestore, collection, onSnapshot, query, orderBy, getDocs, writeBatch, Timestamp, doc, where, addDoc } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
 import { functions } from '../firebase.js';
 import { httpsCallable } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-functions.js";
-import { getProductos, getMarcas, getColores, getRubros } from './dataManager.js';
+import { getProductos, getMarcas, getColores, getRubros, getAppConfig } from './dataManager.js';
 
 const db = getFirestore();
 
@@ -35,6 +35,7 @@ let productoImagenesInput, productoImagenesPreview, productoImagenUrlInput, btnA
 let modalSelectedFiles = [];
 let modalExistingImages = [];
 let btnImportarProductos, importarArchivoInput;
+let cachedSocialPosts = { instagram: null, whatsapp: null }; // Memoria para los posts generados
 
 // --- Funciones de la Sección de Productos ---
 
@@ -68,6 +69,9 @@ function sortProducts(products, column, direction) {
 function renderProductRows(productos) {
     if (!tablaProductosBody) return;
 
+    const appConfig = getAppConfig();
+    const storeUrl = appConfig?.tiendanube?.storeUrl || '';
+
     let rowsHtml = '';
     productos.forEach(p => {
         let c = p.stock <= 0 ? 'table-danger' : (p.stock <= p.stockMinimo ? 'table-warning' : '');
@@ -80,7 +84,29 @@ function renderProductRows(productos) {
             porcentajeGanancia = '100%+';
         }
 
-        const cloudIcon = p.publicarEnWeb ? `<i class="fas fa-cloud text-primary ms-2" title="Sincronizado con Tiendanube"></i>` : '';
+        let socialPostBtn = '';
+        if (p.publicarEnWeb) {
+            socialPostBtn = `<button class="btn btn-sm text-white btn-social-post ms-1" style="background: linear-gradient(45deg, #833ab4, #fd1d1d, #fcb045); border: none;" data-id="${p.id}" title="Generar Post IA (Redes Sociales)"><i class="fas fa-share-alt"></i></button>`;
+        }
+
+        let cloudIcon = '';
+        if (p.publicarEnWeb) {
+            if (storeUrl) {
+                // Construimos la URL ("slug") imitando el algoritmo exacto de Tiendanube
+                const slug = p.nombre
+                    .toLowerCase()
+                    .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // Quita tildes
+                    .replace(/[^a-z0-9\s-]/g, "")                     // Quita símbolos raros
+                    .trim()
+                    .replace(/\s+/g, "-")                             // Reemplaza espacios por guiones
+                    .replace(/-+/g, "-");                             // Evita guiones dobles
+                
+                const productUrl = `${storeUrl.replace(/\/$/, '')}/productos/${slug}/`;
+                cloudIcon = `<a href="${productUrl}" target="_blank" title="Ver publicación en Tiendanube" class="text-decoration-none"><i class="fas fa-cloud text-primary ms-2"></i></a>`;
+            } else {
+                cloudIcon = `<i class="fas fa-cloud text-primary ms-2" title="Sincronizado con Tiendanube"></i>`;
+            }
+        }
 
         rowsHtml += `<tr class="${c}" data-id="${p.id}">
             <td>${p.nombre || 'N/A'}${cloudIcon}</td>
@@ -97,6 +123,7 @@ function renderProductRows(productos) {
                 <button class="btn btn-secondary btn-sm btn-historial-producto" data-id="${p.id}" data-nombre="${p.nombre}" title="Ver Historial"><i class="fas fa-history"></i></button>
                 <button class="btn btn-warning btn-sm btn-editar-producto" data-id="${p.id}" title="Editar"><i class="fas fa-edit"></i></button>
                 <button class="btn btn-info btn-sm btn-duplicar-producto" data-id="${p.id}" title="Duplicar"><i class="fas fa-copy"></i></button>
+                ${socialPostBtn}
                 <button class="btn btn-danger btn-sm btn-eliminar-producto" data-id="${p.id}" title="Eliminar"><i class="fas fa-trash-alt"></i></button>
             </td>
         </tr>`;
@@ -222,8 +249,7 @@ async function handleAddModalImagenUrl() {
         renderModalImagenesPreview();
         productoImagenUrlInput.value = '';
     } else if (url) {
-        const { showAlertModal } = await import('../utils.js');
-        await showAlertModal('Por favor ingresa un link válido que comience con http:// o https://');
+        showToast('Por favor ingresa un link válido que comience con http:// o https://', 'fa-exclamation-triangle', '#f6c23e');
     }
 }
 
@@ -305,7 +331,7 @@ async function handleFormSubmit(e) {
     };
 
     if (!productoData.nombre || !productoData.codigo || isNaN(productoData.costo) || isNaN(productoData.venta) || isNaN(productoData.stock)) {
-        await showAlertModal("Por favor, completa los campos Nombre, Código y los valores numéricos.");
+        showToast("Por favor, completa los campos Nombre, Código y los valores numéricos.", "fa-exclamation-triangle", "#f6c23e");
         return;
     }
 
@@ -359,7 +385,7 @@ async function handleFormSubmit(e) {
         showToast(`Producto ${isNew ? 'creado' : 'actualizado'} correctamente.`);
     } catch (e) {
         console.error('Error al guardar el producto:', e);
-        await showAlertModal('Ocurrió un error al guardar el producto.');
+        showToast('Ocurrió un error al guardar el producto.', 'fa-times-circle', '#dc3545');
         saveButton.disabled = false;
         saveButton.innerHTML = originalButtonContent;
     }
@@ -873,6 +899,126 @@ async function showHistorialModal(productoId, productoNombre) {
     }
 }
 
+function updateSocialModalColors(plataforma) {
+    const spinner = document.getElementById('post-spinner');
+    const btnCopy = document.getElementById('btn-copy-ig');
+    const btnGenerar = document.getElementById('btn-generar-post-ia');
+
+    if (plataforma === 'whatsapp') {
+        if (spinner) spinner.style.color = '#25D366';
+        if (btnCopy) btnCopy.style.background = 'linear-gradient(45deg, #11998e, #25D366)';
+        if (btnGenerar) btnGenerar.style.background = 'linear-gradient(45deg, #11998e, #25D366)';
+        document.querySelector('#igPostModal .modal-header').style.background = 'linear-gradient(45deg, #11998e, #25D366)';
+        document.querySelector('#igPostModal .modal-title').innerHTML = '<i class="fab fa-whatsapp me-2"></i>Post para WhatsApp / FB';
+    } else {
+        if (spinner) spinner.style.color = '#e1306c';
+        if (btnCopy) btnCopy.style.background = 'linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%)';
+        if (btnGenerar) btnGenerar.style.background = 'linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%)';
+        document.querySelector('#igPostModal .modal-header').style.background = 'linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%)';
+        document.querySelector('#igPostModal .modal-title').innerHTML = '<i class="fab fa-instagram me-2"></i>Generador de Posts IA';
+    }
+}
+
+function openSocialPostModal(id) {
+    const producto = listaCompletaProductos.find(p => p.id === id);
+    if (!producto) return;
+
+    let igModalEl = document.getElementById('igPostModal');
+    if (!igModalEl) return;
+    let igModal = bootstrap.Modal.getOrCreateInstance(igModalEl);
+    
+    igModalEl.dataset.currentId = id;
+    cachedSocialPosts = { instagram: null, whatsapp: null }; // Reseteamos la memoria al abrir un producto nuevo
+
+    const loader = document.getElementById('ig-post-loader');
+    const content = document.getElementById('ig-post-content');
+    const btnGenerar = document.getElementById('btn-generar-post-ia');
+    const btnCopy = document.getElementById('btn-copy-ig');
+
+    // Preparar UI inicial: ocultar loader y content, habilitar botón generar
+    loader.classList.add('d-none');
+    content.classList.add('d-none');
+    if (btnGenerar) {
+        btnGenerar.disabled = false;
+        btnGenerar.innerHTML = '<i class="fas fa-magic me-2"></i>Redactar Post con IA';
+        btnGenerar.style.display = 'block';
+    }
+    if (btnCopy) btnCopy.style.display = 'none';
+
+    // Disparamos el cambio de colores por defecto
+    const checkedRadio = document.querySelector('input[name="post-platform"]:checked');
+    updateSocialModalColors(checkedRadio ? checkedRadio.value : 'instagram');
+
+    igModal.show();
+}
+
+async function handleIgPost(id) {
+    const producto = listaCompletaProductos.find(p => p.id === id);
+    if (!producto) return;
+
+    const checkedRadio = document.querySelector('input[name="post-platform"]:checked');
+    const plataforma = checkedRadio ? checkedRadio.value : 'instagram';
+
+    const loader = document.getElementById('ig-post-loader');
+    const content = document.getElementById('ig-post-content');
+    const textArea = document.getElementById('ig-post-text');
+    const imgPreview = document.getElementById('ig-post-image');
+    const btnGenerar = document.getElementById('btn-generar-post-ia');
+    const btnCopy = document.getElementById('btn-copy-ig');
+    
+    // UI Update para cargar
+    loader.classList.remove('d-none');
+    content.classList.add('d-none');
+    if (btnGenerar) {
+        btnGenerar.disabled = true;
+        btnGenerar.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Redactando...';
+    }
+    if (btnCopy) btnCopy.style.display = 'none';
+    
+    if (producto.imagenes && producto.imagenes.length > 0) {
+        imgPreview.src = producto.imagenes[0];
+        imgPreview.classList.remove('d-none');
+    } else {
+        imgPreview.classList.add('d-none');
+    }
+
+    const appConfig = getAppConfig();
+    const storeUrl = appConfig?.tiendanube?.storeUrl || '';
+    let productUrl = '';
+    if (producto.publicarEnWeb && storeUrl) {
+        const slug = producto.nombre.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9\s-]/g, "").trim().replace(/\s+/g, "-").replace(/-+/g, "-");
+        productUrl = `${storeUrl.replace(/\/$/, '')}/productos/${slug}/`;
+    }
+
+    try {
+        const generarPostIG = httpsCallable(functions, 'generarPostIG');
+        const result = await generarPostIG({
+            nombre: producto.nombre,
+            descripcion: producto.descripcionWeb || '',
+            precio: formatCurrency(producto.venta),
+            url: productUrl,
+            plataforma: plataforma
+        });
+
+        if (result.data && result.data.success) {
+            textArea.value = result.data.data;
+            cachedSocialPosts[plataforma] = result.data.data; // Guardamos el texto en memoria
+            loader.classList.add('d-none');
+            content.classList.remove('d-none');
+            if (btnGenerar) btnGenerar.style.display = 'none';
+            if (btnCopy) btnCopy.style.display = 'inline-block';
+        }
+    } catch (e) {
+        console.error("Error generando post IG:", e);
+        showToast("Ocurrió un error al generar el post. Asegurate de actualizar tus Cloud Functions.", "fa-times-circle", "#dc3545");
+        let igModalEl = document.getElementById('igPostModal');
+        if (igModalEl) {
+            let igModal = bootstrap.Modal.getOrCreateInstance(igModalEl);
+            igModal.hide();
+        }
+    }
+}
+
 export function init() {
     tablaProductosBody = document.getElementById('tabla-productos');
     tablaProductosHead = document.getElementById('tablaProductosHead');
@@ -948,7 +1094,8 @@ export function init() {
         btnIaModal.onclick = async () => {
             const nombre = productoNombre.value.trim();
             if (!nombre) {
-                return import('../utils.js').then(({ showAlertModal }) => showAlertModal("Por favor, ingresa el nombre del producto primero."));
+                showToast("Por favor, ingresa el nombre del producto primero.", "fa-info-circle", "#f6c23e");
+                return;
             }
 
             const descripcionActual = quillModal.root.innerHTML === '<p><br></p>' ? '' : quillModal.root.innerHTML;
@@ -963,7 +1110,7 @@ export function init() {
                 }
             } catch (error) {
                 console.error("Error con IA:", error);
-                import('../utils.js').then(({ showAlertModal }) => showAlertModal("Hubo un error al optimizar la descripción con IA."));
+                showToast("Hubo un error al optimizar la descripción con IA.", "fa-times-circle", "#dc3545");
             } finally {
                 btnIaModal.innerHTML = '<i class="fas fa-magic me-1"></i>Optimizar con IA';
                 btnIaModal.disabled = false;
@@ -976,7 +1123,8 @@ export function init() {
         btnIaTituloModal.onclick = async () => {
             const nombre = productoNombre.value.trim();
             if (!nombre) {
-                return import('../utils.js').then(({ showAlertModal }) => showAlertModal("Por favor, ingresa un nombre inicial para optimizar."));
+                showToast("Por favor, ingresa un nombre inicial para optimizar.", "fa-info-circle", "#f6c23e");
+                return;
             }
 
             btnIaTituloModal.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
@@ -990,6 +1138,7 @@ export function init() {
                 }
             } catch (error) {
                 console.error("Error con IA:", error);
+                showToast("Hubo un error al optimizar el título con IA.", "fa-times-circle", "#dc3545");
             } finally {
                 btnIaTituloModal.innerHTML = '<i class="fas fa-magic me-1"></i> IA';
                 btnIaTituloModal.disabled = false;
@@ -1057,6 +1206,59 @@ export function init() {
         importarArchivoInput.removeEventListener('change', handleFileUpload);
         importarArchivoInput.addEventListener('change', handleFileUpload);
     }
+
+    const btnCopyIg = document.getElementById('btn-copy-ig');
+    if (btnCopyIg) {
+        btnCopyIg.addEventListener('click', () => {
+            const textArea = document.getElementById('ig-post-text');
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(textArea.value);
+            } else {
+                textArea.select();
+                document.execCommand('copy');
+            }
+            const originalHtml = btnCopyIg.innerHTML;
+            btnCopyIg.innerHTML = '<i class="fas fa-check me-2"></i>¡Copiado!';
+            setTimeout(() => btnCopyIg.innerHTML = originalHtml, 2000);
+        });
+    }
+
+    // Escuchamos los botones de Instagram/WhatsApp en el modal
+    const radiosPlatform = document.querySelectorAll('input[name="post-platform"]');
+    radiosPlatform.forEach(radio => {
+        radio.addEventListener('change', (e) => {
+            const platform = e.target.value;
+            updateSocialModalColors(platform);
+            
+            const content = document.getElementById('ig-post-content');
+            const btnGenerar = document.getElementById('btn-generar-post-ia');
+            const btnCopy = document.getElementById('btn-copy-ig');
+            const textArea = document.getElementById('ig-post-text');
+            
+            if (cachedSocialPosts[platform]) {
+                // Si ya teníamos el texto generado en memoria, lo mostramos directo
+                if (textArea) textArea.value = cachedSocialPosts[platform];
+                if (content) content.classList.remove('d-none');
+                if (btnGenerar) btnGenerar.style.display = 'none';
+                if (btnCopy) btnCopy.style.display = 'inline-block';
+            } else {
+                // Si no hay memoria para esta red, mostramos el botón de generar
+                if (content && !content.classList.contains('d-none')) content.classList.add('d-none');
+                if (btnGenerar) { btnGenerar.style.display = 'block'; btnGenerar.disabled = false; btnGenerar.innerHTML = '<i class="fas fa-magic me-2"></i>Redactar Post con IA'; }
+                if (btnCopy) btnCopy.style.display = 'none';
+            }
+        });
+    });
+
+    const btnGenerarPost = document.getElementById('btn-generar-post-ia');
+    if (btnGenerarPost) {
+        btnGenerarPost.onclick = () => {
+            const modalEl = document.getElementById('igPostModal');
+            const id = modalEl?.dataset.currentId;
+            if (id) handleIgPost(id);
+        };
+    }
+
     if (btnNuevoProducto) {
         btnNuevoProducto.removeEventListener('click', handleNewProduct);
         btnNuevoProducto.addEventListener('click', handleNewProduct);
@@ -1079,6 +1281,13 @@ export function init() {
             if (e.target.closest('.btn-editar-producto')) handleEdit(e);
             if (e.target.closest('.btn-duplicar-producto')) handleDuplicate(e);
             if (e.target.closest('.btn-historial-producto')) showHistorialModal(e.target.closest('.btn-historial-producto').dataset.id, e.target.closest('.btn-historial-producto').dataset.nombre);
+            if (e.target.closest('.btn-social-post')) {
+                const id = e.target.closest('.btn-social-post').dataset.id;
+                // Forzamos selección inicial en Instagram al abrir
+                const radioIg = document.getElementById('platform-ig');
+                if (radioIg) radioIg.checked = true;
+                openSocialPostModal(id);
+            }
         });
     }
     if (tablaProductosHead) tablaProductosHead.addEventListener('click', handleSort);
