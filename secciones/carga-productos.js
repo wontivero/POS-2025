@@ -286,7 +286,7 @@ function renderImagenesPreview() {
         div.style.width = '80px';
         div.style.height = '80px';
         div.innerHTML = `
-            <img src="${url}" class="w-100 h-100 object-fit-cover rounded">
+            <img src="${url}" class="w-100 h-100 object-fit-cover rounded" onerror="this.onerror=null; this.src='https://placehold.co/80x80/dc3545/ffffff?text=Bloqueada'; this.title='El sitio original no permite usar sus imágenes mediante un link directo.'">
             <button type="button" class="btn btn-sm btn-danger position-absolute top-0 start-100 translate-middle rounded-circle" style="width:24px;height:24px;padding:0;line-height:1;" data-existing-index="${index}">&times;</button>
         `;
         div.querySelector('button').addEventListener('click', () => {
@@ -339,7 +339,7 @@ function renderImagenesPreview() {
                 const div = document.createElement('div');
                 div.className = 'position-relative border border-primary rounded p-1 bg-white';
                 div.style.width = '80px'; div.style.height = '80px';
-                div.innerHTML = `<img src="${src}" class="w-100 h-100 object-fit-cover rounded"><span class="badge bg-primary position-absolute bottom-0 start-50 translate-middle-x w-100" style="font-size: 0.6rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-radius: 0 0 0.25rem 0.25rem;">${varNombre}</span>`;
+                div.innerHTML = `<img src="${src}" class="w-100 h-100 object-fit-cover rounded" onerror="this.onerror=null; this.src='https://placehold.co/80x80/dc3545/ffffff?text=Bloqueada'"><span class="badge bg-primary position-absolute bottom-0 start-50 translate-middle-x w-100" style="font-size: 0.6rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-radius: 0 0 0.25rem 0.25rem;">${varNombre}</span>`;
                 prodImagenesPreview.appendChild(div);
             };
             if (fileInput && fileInput.files.length > 0) {

@@ -131,7 +131,16 @@ exports.sincronizarTiendanube = onDocumentWritten(
             published: true
         };
         if (categoryId) productoTN.categories = [categoryId];
-        if (tnAttributes.length > 0) productoTN.attributes = tnAttributes;
+        
+        // --- SOLUCIÓN DE CONFLICTO ESTRUCTURAL ---
+        const cambioDeModoVariantes = docViejo && (!!docNuevo.tieneVariantes !== !!docViejo.tieneVariantes);
+        
+        if (cambioDeModoVariantes) {
+            // Si cambiamos de Simple a Variantes (o viceversa), forzamos una reescritura atómica
+            productoTN.attributes = tnAttributes; 
+        } else if (tnAttributes.length > 0) {
+            productoTN.attributes = tnAttributes;
+        }
 
         // CONTROL DE IMÁGENES
         const imagenesNuevas = docNuevo.imagenes || [];
@@ -150,7 +159,7 @@ exports.sincronizarTiendanube = onDocumentWritten(
 
                 // A) Actualizar Datos Básicos
                 const resProd = await fetch(`${apiUrl}/${tnId}`, { method: "PUT", headers, body: JSON.stringify(productoTN) });
-                if (!resProd.ok) logger.error(`❌ Error actualizando producto en TN:`, await resProd.json());
+                if (!resProd.ok) logger.error(`❌ Error actualizando producto en TN:`, await resProd.text());
 
                 // B) Obtener la Variante actual y actualizarla
                 const getProd = await fetch(`${apiUrl}/${tnId}`, { headers });
@@ -161,7 +170,8 @@ exports.sincronizarTiendanube = onDocumentWritten(
                     // Crear o Actualizar Variantes comparando por SKU
                     for (const tv of tnVariants) {
                         let existingTnVar;
-                        if (!docNuevo.tieneVariantes && currentTnVariants.length === 1) {
+                        if (!docNuevo.tieneVariantes && currentTnVariants.length > 0) {
+                            // Si pasamos a Simple, forzamos a actualizar la primera variante en lugar de crear una nueva
                             existingTnVar = currentTnVariants[0];
                         } else {
                             existingTnVar = currentTnVariants.find(v => v.sku === tv.sku && v.sku !== "");
@@ -176,12 +186,16 @@ exports.sincronizarTiendanube = onDocumentWritten(
 
                     // Borrar las variantes que ya no existen en POS 2025
                     for (const existingTnVar of currentTnVariants) {
-                        let stillExists = (!docNuevo.tieneVariantes) ? currentTnVariants.indexOf(existingTnVar) === 0 : tnVariants.some(tv => tv.sku === existingTnVar.sku && tv.sku !== "");
+                        let stillExists = false;
+                        if (!docNuevo.tieneVariantes) {
+                            stillExists = currentTnVariants.indexOf(existingTnVar) === 0;
+                        } else {
+                            stillExists = tnVariants.some(tv => tv.sku === existingTnVar.sku && tv.sku !== "");
+                        }
                         if (!stillExists) {
                             await fetch(`${apiUrl}/${tnId}/variants/${existingTnVar.id}`, { method: "DELETE", headers });
                         }
                     }
-
                     // C) Si las imágenes cambiaron, las sincronizamos dedicadamente
                     if (imagenesCambiaron) {
                         // Borrar imágenes existentes en TN para no duplicar
