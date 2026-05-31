@@ -28,6 +28,7 @@ let datalistMarcasFiltro, datalistColoresFiltro, datalistRubrosFiltro;
 let datalistMarcasModal, datalistColoresModal, datalistRubrosModal;
 let productoId, productoNombre, productoCodigo, productoMarca, productoColor, productoRubro, productoCosto, productoVenta, productoPorcentaje, productoStock, productoStockMinimo, productoDestacado;
 let productoPublicarWeb, productoPeso, productoCategoriaWeb;
+let modalProductoTieneVariantes, modalVariantesContainer, modalVariantesTbody, btnModalAddVariante;
 let quillModal;
 let productoAlto, productoAncho, productoProfundidad;
 let productoEcommerceFields;
@@ -108,16 +109,22 @@ function renderProductRows(productos) {
             }
         }
 
+        const vCodigo = p.tieneVariantes ? `<span class="badge bg-primary">Varios</span>` : `<code>${p.codigo || 'N/A'}</code>`;
+        const vCosto = p.tieneVariantes ? `<span class="badge bg-light text-dark">N/A</span>` : (p.costo ? formatCurrency(p.costo) : '0.00');
+        const vVenta = p.tieneVariantes ? `<span class="badge bg-light text-dark">N/A</span>` : (p.venta ? formatCurrency(p.venta) : '0.00');
+        const vStock = p.tieneVariantes ? `<span class="badge bg-info">${p.variantes?.reduce((acc, v)=>acc+v.stock,0) || 0}</span>` : (p.stock || 0);
+        if (p.tieneVariantes) porcentajeGanancia = `<span class="badge bg-light text-dark">N/A</span>`;
+
         rowsHtml += `<tr class="${c}" data-id="${p.id}">
             <td>${p.nombre || 'N/A'}${cloudIcon}</td>
-            <td><code>${p.codigo || 'N/A'}</code></td>
+            <td>${vCodigo}</td>
             <td>${capitalizeFirstLetter(p.marca) || 'N/A'}</td>
             <td>${capitalizeFirstLetter(p.color) || 'N/A'}</td>
             <td><span class="badge bg-secondary">${capitalizeFirstLetter(p.rubro)}</span></td>
-            <td>${p.costo ? formatCurrency(p.costo) : '0.00'}</td>
-            <td class="precio-venta">${p.venta ? formatCurrency(p.venta) : '0.00'}</td>
+            <td>${vCosto}</td>
+            <td class="precio-venta">${vVenta}</td>
             <td>${porcentajeGanancia}</td>
-            <td>${p.stock || 0}</td>
+            <td>${vStock}</td>
             <td>${ultimaActualizacion}</td>
             <td>
                 <button class="btn btn-secondary btn-sm btn-historial-producto" data-id="${p.id}" data-nombre="${p.nombre}" title="Ver Historial"><i class="fas fa-history"></i></button>
@@ -296,6 +303,57 @@ function renderModalImagenesPreview() {
         div.appendChild(btn);
         productoImagenesPreview.appendChild(div);
     });
+
+    // 3. Imágenes de variantes (Dinámico)
+    if (modalProductoTieneVariantes && modalProductoTieneVariantes.checked && modalVariantesTbody) {
+        const filas = modalVariantesTbody.querySelectorAll('tr');
+        filas.forEach(fila => {
+            const varNombre = fila.querySelector('.var-nombre').value.trim() || 'Variante';
+            const varUrl = fila.querySelector('.var-img-url').value;
+            const fileInput = fila.querySelector('.var-img-input');
+            
+            const createPreviewDiv = (src) => {
+                const div = document.createElement('div');
+                div.className = 'position-relative border border-primary rounded p-1 bg-white';
+                div.style.width = '80px'; div.style.height = '80px';
+                div.innerHTML = `<img src="${src}" class="w-100 h-100 object-fit-cover rounded"><span class="badge bg-primary position-absolute bottom-0 start-50 translate-middle-x w-100" style="font-size: 0.6rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-radius: 0 0 0.25rem 0.25rem;">${varNombre}</span>`;
+                productoImagenesPreview.appendChild(div);
+            };
+            if (fileInput && fileInput.files.length > 0) {
+                const reader = new FileReader(); reader.onload = e => createPreviewDiv(e.target.result); reader.readAsDataURL(fileInput.files[0]);
+            } else if (varUrl) {
+                createPreviewDiv(varUrl);
+            }
+        });
+    }
+}
+
+function agregarFilaVarianteModal(variante = null) {
+    if (!modalVariantesTbody) return;
+    const tr = document.createElement('tr');
+    const imagenSrc = (variante && variante.imagenUrl) ? variante.imagenUrl : 'https://placehold.co/100x100?text=Foto';
+    tr.innerHTML = `
+        <td><input type="text" class="form-control form-control-sm var-nombre" placeholder="Ej: Rojo - XL" value="${variante ? variante.nombre : ''}"></td>
+        <td><input type="text" class="form-control form-control-sm var-codigo" placeholder="SKU Único" value="${variante ? variante.codigo : ''}"></td>
+        <td><input type="number" class="form-control form-control-sm var-costo text-end" step="0.01" value="${variante ? variante.costo : ''}"></td>
+        <td><input type="number" class="form-control form-control-sm var-venta text-end" step="0.01" value="${variante ? variante.venta : ''}"></td>
+        <td><input type="number" class="form-control form-control-sm var-stock text-end" value="${variante ? variante.stock : '1'}"></td>
+        <td class="text-center">
+            <label style="cursor: pointer;" class="mb-0" title="Subir foto para esta variante">
+                <img src="${imagenSrc}" class="var-img-preview rounded shadow-sm border" style="width: 35px; height: 35px; object-fit: cover;">
+                <input type="file" class="var-img-input d-none" accept="image/png, image/jpeg, image/webp">
+                <input type="hidden" class="var-img-url" value="${variante && variante.imagenUrl ? variante.imagenUrl : ''}">
+            </label>
+        </td>
+        <td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger btn-remove-variante"><i class="fas fa-trash"></i></button></td>
+    `;
+    const fileInput = tr.querySelector('.var-img-input');
+    const imgPreview = tr.querySelector('.var-img-preview');
+    fileInput.addEventListener('change', (e) => { const file = e.target.files[0]; if (file) { const reader = new FileReader(); reader.onload = (ev) => imgPreview.src = ev.target.result; reader.readAsDataURL(file); } });
+    tr.querySelector('.var-nombre').addEventListener('input', renderModalImagenesPreview);
+    tr.querySelector('.btn-remove-variante').addEventListener('click', () => tr.remove());
+    modalVariantesTbody.appendChild(tr);
+    renderModalImagenesPreview();
 }
 
 async function handleFormSubmit(e) {
@@ -305,10 +363,66 @@ async function handleFormSubmit(e) {
 
     const id = productoId.value;
     const isNew = !id;
+    const tieneVariantes = modalProductoTieneVariantes && modalProductoTieneVariantes.checked;
+    
+    let variantes = [];
+    if (tieneVariantes) {
+        const filas = modalVariantesTbody.querySelectorAll('tr');
+        let varianteInvalida = false;
+        filas.forEach(fila => {
+            const vNom = fila.querySelector('.var-nombre').value.trim();
+            const vCod = fila.querySelector('.var-codigo').value.trim();
+            const fileInput = fila.querySelector('.var-img-input');
+            const vFile = fileInput && fileInput.files.length > 0 ? fileInput.files[0] : null;
+            const vUrl = fila.querySelector('.var-img-url').value;
+            if (!vNom || !vCod) varianteInvalida = true;
+            else variantes.push({ 
+                nombre: vNom, codigo: vCod, 
+                costo: parseFloat(fila.querySelector('.var-costo').value) || 0, 
+                venta: parseFloat(fila.querySelector('.var-venta').value) || 0, 
+                stock: parseInt(fila.querySelector('.var-stock').value) || 0,
+                imagenFile: vFile, imagenUrl: vUrl
+            });
+        });
+        if (varianteInvalida || variantes.length === 0) {
+            showToast("Todas las variantes deben tener Opción y Código (SKU).", "fa-exclamation-triangle", "#f6c23e");
+            return;
+        }
+
+        const nombresUnicos = new Set(variantes.map(v => v.nombre.toLowerCase()));
+        if (nombresUnicos.size !== variantes.length) {
+            showToast("Las opciones de las variantes no pueden repetirse (Ej: No puede haber dos 'Rojo').", "fa-exclamation-triangle", "#f6c23e");
+            return;
+        }
+    }
+
+    const codigo = tieneVariantes ? 'VARIOS' : productoCodigo.value.trim();
+    if (!tieneVariantes && !codigo) {
+        showToast("El Código es obligatorio si el producto no tiene variantes.", "fa-exclamation-triangle", "#f6c23e");
+        return;
+    }
+
+    if (!productoNombre.value.trim()) {
+        showToast("El Nombre es obligatorio.", "fa-exclamation-triangle", "#f6c23e");
+        return;
+    }
+    
+    const codigosAVerificar = tieneVariantes ? variantes.map(v => v.codigo) : [codigo];
+    for (const c of codigosAVerificar) {
+        const existe = listaCompletaProductos.find(p => 
+            p.id !== id && (p.codigo === c || (p.tieneVariantes && p.variantes?.some(v => v.codigo === c)))
+        );
+        if (existe) {
+            showToast(`El código "${c}" ya existe en el producto "${existe.nombre}".`, "fa-exclamation-triangle", "#f6c23e");
+            saveButton.disabled = false;
+            return;
+        }
+    }
+
     const productoData = {
         nombre: productoNombre.value.trim(),
         nombre_lowercase: productoNombre.value.trim().toLowerCase(),
-        codigo: productoCodigo.value.trim(),
+        codigo: codigo,
         marca: normalizeString(productoMarca.value.trim()),
         color: normalizeString(productoColor.value.trim()),
         rubro: normalizeString(productoRubro.value.trim()),
@@ -319,6 +433,7 @@ async function handleFormSubmit(e) {
         isGeneric: document.getElementById('producto-generico').checked,
         genericProfitMargin: parseFloat(document.getElementById('producto-margen-generico').value) || 0,
         isFeatured: document.getElementById('producto-destacado').checked,
+        tieneVariantes: tieneVariantes,
         fechaUltimoCambioPrecio: Timestamp.now(),
         publicarEnWeb: productoPublicarWeb ? productoPublicarWeb.checked : false,
         descripcionWeb: quillModal ? (quillModal.root.innerHTML === '<p><br></p>' ? '' : quillModal.root.innerHTML) : '',
@@ -329,9 +444,11 @@ async function handleFormSubmit(e) {
         categoriaWeb: productoCategoriaWeb ? productoCategoriaWeb.value : '',
         imagenes: [...modalExistingImages]
     };
+    
+    if (tieneVariantes) productoData.variantes = variantes;
 
-    if (!productoData.nombre || !productoData.codigo || isNaN(productoData.costo) || isNaN(productoData.venta) || isNaN(productoData.stock)) {
-        showToast("Por favor, completa los campos Nombre, Código y los valores numéricos.", "fa-exclamation-triangle", "#f6c23e");
+    if (!tieneVariantes && (isNaN(productoData.costo) || isNaN(productoData.venta) || isNaN(productoData.stock))) {
+        showToast("Por favor, completa los valores numéricos.", "fa-exclamation-triangle", "#f6c23e");
         return;
     }
 
@@ -347,19 +464,34 @@ async function handleFormSubmit(e) {
         
         let finalId = id;
         
+        // 1. Si es nuevo, generamos el ID de Firebase ANTES de guardar para evitar múltiples disparadores en la nube
+        if (isNew) {
+            finalId = doc(collection(db, 'productos')).id;
+        }
+        
+        const { uploadProductImage } = await import('../utils.js');
+
+        // 2. Subimos imágenes generales del producto
         if (modalSelectedFiles.length > 0) {
-            if (isNew) {
-                finalId = await saveDocument('productos', productoData, null);
-            }
-            const { uploadProductImage } = await import('../utils.js');
             for (let i = 0; i < modalSelectedFiles.length; i++) {
                 const url = await uploadProductImage(modalSelectedFiles[i], finalId, i);
                 productoData.imagenes.push(url);
             }
-            await updateDocument('productos', finalId, isNew ? { imagenes: productoData.imagenes } : productoData);
-        } else {
-            finalId = await saveDocument('productos', productoData, isNew ? null : id);
         }
+
+        if (tieneVariantes) {
+            for (let i = 0; i < variantes.length; i++) {
+                if (variantes[i].imagenFile) {
+                    const url = await uploadProductImage(variantes[i].imagenFile, finalId, `var_${i}`);
+                    variantes[i].imagenUrl = url;
+                }
+                delete variantes[i].imagenFile;
+            }
+            productoData.variantes = variantes;
+        }
+
+        // 3. Guardamos el documento final de una sola vez con todas las URLs listas
+        await saveDocument('productos', productoData, finalId);
         
         if (isNew) {
             await addUniqueItem('marcas', productoData.marca);
@@ -722,6 +854,16 @@ function abrirProductoModal(modo, producto = null) {
         document.getElementById('producto-generico').checked = producto.isGeneric ?? false;
         document.getElementById('producto-margen-generico').value = producto.genericProfitMargin ?? 70;
         document.getElementById('producto-destacado').checked = producto.isFeatured ?? false;
+        
+        if (modalProductoTieneVariantes) {
+            modalProductoTieneVariantes.checked = producto.tieneVariantes || false;
+            modalProductoTieneVariantes.dispatchEvent(new Event('change'));
+            if (modalVariantesTbody) modalVariantesTbody.innerHTML = '';
+            if (producto.tieneVariantes && producto.variantes) {
+                producto.variantes.forEach(v => agregarFilaVarianteModal(v));
+            }
+        }
+        
         if (productoPublicarWeb) productoPublicarWeb.checked = producto.publicarEnWeb ?? false;
         if (productoEcommerceFields) {
             productoEcommerceFields.style.display = producto.publicarEnWeb ? 'flex' : 'none';
@@ -768,7 +910,7 @@ async function handleCodigoBlur() {
     productoCodigo.classList.remove('is-invalid');
     const codigo = productoCodigo.value.trim();
     const idProductoActual = productoId.value;
-    if (codigo === '') return;
+    if (codigo === '' || codigo === 'VARIOS') return;
 
     const productoExistente = listaCompletaProductos.find(p => p.codigo === codigo);
     if (productoExistente) {
@@ -800,6 +942,12 @@ function resetProductoModal() {
     const genericProfitFields = document.getElementById('generic-profit-fields');
     if (genericProfitFields) genericProfitFields.style.display = 'none';
     if (productoCodigo) productoCodigo.classList.remove('is-invalid');
+    
+    if (modalVariantesTbody) modalVariantesTbody.innerHTML = '';
+    if (modalProductoTieneVariantes) {
+        modalProductoTieneVariantes.checked = false;
+        modalProductoTieneVariantes.dispatchEvent(new Event('change'));
+    }
     
     modalSelectedFiles = [];
     modalExistingImages = [];
@@ -1080,6 +1228,10 @@ export function init() {
     productoAncho = document.getElementById('producto-ancho');
     productoProfundidad = document.getElementById('producto-profundidad');
     productoEcommerceFields = document.getElementById('producto-ecommerce-fields');
+    modalProductoTieneVariantes = document.getElementById('modal-producto-tiene-variantes');
+    modalVariantesContainer = document.getElementById('modal-variantes-container');
+    modalVariantesTbody = document.getElementById('modal-variantes-tbody');
+    btnModalAddVariante = document.getElementById('btn-modal-add-variante');
     productoImagenesInput = document.getElementById('producto-imagenes');
     productoImagenesPreview = document.getElementById('producto-imagenes-preview');
     productoImagenUrlInput = document.getElementById('producto-imagen-url');
@@ -1190,6 +1342,26 @@ export function init() {
         }).catch(e => console.error(e));
     }
 
+    if (modalProductoTieneVariantes) {
+        modalProductoTieneVariantes.onchange = (e) => {
+            const isChecked = e.target.checked;
+            if(modalVariantesContainer) modalVariantesContainer.style.display = isChecked ? 'block' : 'none';
+            
+            [productoCodigo, productoCosto, productoPorcentaje, productoVenta, productoStock, productoStockMinimo].forEach(el => {
+                if(el) {
+                    el.disabled = isChecked;
+                    if (isChecked && el.type !== 'checkbox') el.value = ''; 
+                }
+            });
+
+            if (isChecked && modalVariantesTbody && modalVariantesTbody.children.length === 0) {
+                agregarFilaVarianteModal();
+            }
+            renderModalImagenesPreview();
+        };
+    }
+    if (btnModalAddVariante) btnModalAddVariante.onclick = () => agregarFilaVarianteModal();
+
     if (productoCodigo) {
         productoCodigo.removeEventListener('blur', handleCodigoBlur);
         productoCodigo.addEventListener('blur', handleCodigoBlur);
@@ -1218,7 +1390,7 @@ export function init() {
 
     const btnCopyIg = document.getElementById('btn-copy-ig');
     if (btnCopyIg) {
-        btnCopyIg.addEventListener('click', () => {
+        btnCopyIg.onclick = () => {
             const textArea = document.getElementById('ig-post-text');
             if (navigator.clipboard) {
                 navigator.clipboard.writeText(textArea.value);
@@ -1229,13 +1401,13 @@ export function init() {
             const originalHtml = btnCopyIg.innerHTML;
             btnCopyIg.innerHTML = '<i class="fas fa-check me-2"></i>¡Copiado!';
             setTimeout(() => btnCopyIg.innerHTML = originalHtml, 2000);
-        });
+        };
     }
 
     // Escuchamos los botones de Instagram/WhatsApp en el modal
     const radiosPlatform = document.querySelectorAll('input[name="post-platform"]');
     radiosPlatform.forEach(radio => {
-        radio.addEventListener('change', (e) => {
+        radio.onchange = (e) => {
             const platform = e.target.value;
             updateSocialModalColors(platform);
             
@@ -1256,7 +1428,7 @@ export function init() {
                 if (btnGenerar) { btnGenerar.style.display = 'block'; btnGenerar.disabled = false; btnGenerar.innerHTML = '<i class="fas fa-magic me-2"></i>Redactar Post con IA'; }
                 if (btnCopy) btnCopy.style.display = 'none';
             }
-        });
+        };
     });
 
     const btnGenerarPost = document.getElementById('btn-generar-post-ia');

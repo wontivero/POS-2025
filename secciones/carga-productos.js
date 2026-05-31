@@ -15,6 +15,7 @@ let grillaBody, contadorProductos, grillaVaciaMsg;
 let prodPublicarWeb, prodPeso, prodCategoriaWeb;
 let quillCarga;
 let prodAlto, prodAncho, prodProfundidad; // <-- Dimensiones E-commerce
+let prodTieneVariantes, variantesContainer, variantesTbody, btnAddVariante; // <-- Elementos de Variantes
 let prodImagenesInput, prodImagenesPreview, prodImagenUrlInput, btnAddImagenUrl;
 let currentSelectedFiles = []; // Para almacenar las imágenes a subir temporalmente
 let currentExistingImages = []; // Para imágenes que ya estaban en el producto al editar
@@ -41,6 +42,10 @@ export async function init() {
     prodAlto = document.getElementById('prod-alto');
     prodAncho = document.getElementById('prod-ancho');
     prodProfundidad = document.getElementById('prod-profundidad');
+    prodTieneVariantes = document.getElementById('prod-tiene-variantes');
+    variantesContainer = document.getElementById('variantes-container');
+    variantesTbody = document.getElementById('variantes-tbody');
+    btnAddVariante = document.getElementById('btn-add-variante');
     prodImagenesInput = document.getElementById('prod-imagenes');
     prodImagenesPreview = document.getElementById('prod-imagenes-preview');
     prodImagenUrlInput = document.getElementById('prod-imagen-url');
@@ -115,15 +120,16 @@ export async function init() {
 
 // --- CONFIGURACIÓN DE EVENTOS ---
 function setupEventListeners() {
-    form.addEventListener('submit', async (e) => { e.preventDefault(); await agregarProductoAGrilla(); });
-    form.addEventListener('keydown', handleEnterAsTab);
-    form.addEventListener('keydown', restrictToNumericInput);
+    // Usamos asignación directa (.on...) en lugar de addEventListener para evitar
+    // que los eventos se dupliquen si la sección se inicializa múltiples veces.
+    form.onsubmit = async (e) => { e.preventDefault(); await agregarProductoAGrilla(); };
+    form.onkeydown = (e) => { handleEnterAsTab(e); restrictToNumericInput(e); };
 
-    prodCodigo.addEventListener('blur', () => verificarCodigo(prodCodigo));
-    btnAgregarYDuplicar.addEventListener('click', async () => { await agregarProductoAGrilla(true); });
-    btnLimpiarFormulario.addEventListener('click', limpiarFormulario);
+    prodCodigo.onblur = () => verificarCodigo(prodCodigo);
+    btnAgregarYDuplicar.onclick = async () => { await agregarProductoAGrilla(true); };
+    btnLimpiarFormulario.onclick = limpiarFormulario;
 
-    grillaBody.addEventListener('click', (e) => {
+    grillaBody.onclick = (e) => {
         const id = e.target.closest('tr')?.dataset.id;
         if (!id) return;
         if (e.target.closest('.btn-duplicar-form')) handleDuplicarAlFormulario(id);
@@ -131,44 +137,63 @@ function setupEventListeners() {
         else if (e.target.closest('.btn-duplicar-fila')) handleDuplicarEnGrilla(id);
         else if (e.target.closest('.btn-confirmar-fila')) handleConfirmarFila(id);
         else if (e.target.closest('.btn-cancelar-fila')) handleEliminar(id);
-    });
+    };
 
-    grillaBody.addEventListener('input', (e) => { if (e.target.tagName === 'INPUT') handleGridInput(e.target); });
-    grillaBody.addEventListener('keydown', handleEnterAsTab);
-    grillaBody.addEventListener('keydown', restrictToNumericInput);
+    grillaBody.oninput = (e) => { if (e.target.tagName === 'INPUT') handleGridInput(e.target); };
+    grillaBody.onkeydown = (e) => { handleEnterAsTab(e); restrictToNumericInput(e); };
 
-    grillaBody.addEventListener('blur', (e) => {
+    grillaBody.onfocusout = (e) => {
         const input = e.target;
         if (input.tagName === 'INPUT' && input.dataset.field === 'codigo') {
             verificarCodigo(input);
         }
-    }, true);
+    };
 
-    btnGuardarTodo.addEventListener('click', guardarTodoEnBD);
-    prodCosto.addEventListener('input', calcularPrecioVenta);
-    prodGanancia.addEventListener('input', calcularPrecioVenta);
-    prodVenta.addEventListener('input', calcularMargen);
+    btnGuardarTodo.onclick = guardarTodoEnBD;
+    prodCosto.oninput = calcularPrecioVenta;
+    prodGanancia.oninput = calcularPrecioVenta;
+    prodVenta.oninput = calcularMargen;
 
     if (prodPublicarWeb && prodEcommerceFields) {
-        prodPublicarWeb.addEventListener('change', (e) => {
+        prodPublicarWeb.onchange = (e) => {
             prodEcommerceFields.style.display = e.target.checked ? 'flex' : 'none';
-        });
+        };
     }
 
+    // --- EVENTOS DE VARIANTES ---
+    if (prodTieneVariantes) {
+        prodTieneVariantes.onchange = (e) => {
+            const isChecked = e.target.checked;
+            variantesContainer.style.display = isChecked ? 'block' : 'none';
+            
+            // Deshabilitar campos principales si hay variantes
+            [prodCodigo, prodCosto, prodGanancia, prodVenta, prodStock, prodStockMinimo].forEach(el => {
+                el.disabled = isChecked;
+                if (isChecked && el.type !== 'checkbox') el.value = ''; 
+            });
+
+            if (isChecked && variantesTbody.children.length === 0) {
+                agregarFilaVariante(); // Agrega una fila vacía por defecto
+            }
+            renderImagenesPreview();
+        };
+    }
+    if (btnAddVariante) btnAddVariante.onclick = () => agregarFilaVariante();
+
     if (prodImagenesInput) {
-        prodImagenesInput.addEventListener('change', handleImagenesSelection);
+        prodImagenesInput.onchange = handleImagenesSelection;
     }
     if (btnAddImagenUrl) {
-        btnAddImagenUrl.addEventListener('click', handleAddImagenUrl);
+        btnAddImagenUrl.onclick = handleAddImagenUrl;
     }
     if (prodImagenUrlInput) {
-        prodImagenUrlInput.addEventListener('keydown', (e) => {
+        prodImagenUrlInput.onkeydown = (e) => {
             if (e.key === 'Enter') {
                 e.preventDefault();
                 e.stopPropagation(); // Evitamos saltar al próximo campo
                 handleAddImagenUrl();
             }
-        });
+        };
     }
 
     const btnIaCarga = document.getElementById('btn-ia-carga');
@@ -301,6 +326,62 @@ function renderImagenesPreview() {
         div.appendChild(btnRemove);
         prodImagenesPreview.appendChild(div);
     });
+
+    // 3. Imágenes de variantes (Dinámico)
+    if (prodTieneVariantes && prodTieneVariantes.checked && variantesTbody) {
+        const filas = variantesTbody.querySelectorAll('tr');
+        filas.forEach(fila => {
+            const varNombre = fila.querySelector('.var-nombre').value.trim() || 'Variante';
+            const varUrl = fila.querySelector('.var-img-url').value;
+            const fileInput = fila.querySelector('.var-img-input');
+            
+            const createPreviewDiv = (src) => {
+                const div = document.createElement('div');
+                div.className = 'position-relative border border-primary rounded p-1 bg-white';
+                div.style.width = '80px'; div.style.height = '80px';
+                div.innerHTML = `<img src="${src}" class="w-100 h-100 object-fit-cover rounded"><span class="badge bg-primary position-absolute bottom-0 start-50 translate-middle-x w-100" style="font-size: 0.6rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-radius: 0 0 0.25rem 0.25rem;">${varNombre}</span>`;
+                prodImagenesPreview.appendChild(div);
+            };
+            if (fileInput && fileInput.files.length > 0) {
+                const reader = new FileReader(); reader.onload = e => createPreviewDiv(e.target.result); reader.readAsDataURL(fileInput.files[0]);
+            } else if (varUrl) {
+                createPreviewDiv(varUrl);
+            }
+        });
+    }
+}
+
+function agregarFilaVariante(variante = null) {
+    if (!variantesTbody) return;
+    const tr = document.createElement('tr');
+    const imagenSrc = (variante && variante.imagenUrl) ? variante.imagenUrl : 'https://placehold.co/100x100?text=Foto';
+    tr.innerHTML = `
+        <td><input type="text" class="form-control form-control-sm var-nombre" placeholder="Ej: Rojo - XL" value="${variante ? variante.nombre : ''}"></td>
+        <td><input type="text" class="form-control form-control-sm var-codigo" placeholder="SKU Único" value="${variante ? variante.codigo : ''}"></td>
+        <td><input type="number" class="form-control form-control-sm var-costo text-end" step="0.01" value="${variante ? variante.costo : ''}"></td>
+        <td><input type="number" class="form-control form-control-sm var-venta text-end" step="0.01" value="${variante ? variante.venta : ''}"></td>
+        <td><input type="number" class="form-control form-control-sm var-stock text-end" value="${variante ? (variante.stock !== undefined ? variante.stock : '1') : '1'}"></td>
+        <td class="text-center">
+            <label style="cursor: pointer;" class="mb-0" title="Subir foto para esta variante">
+                <img src="${imagenSrc}" class="var-img-preview rounded shadow-sm border" style="width: 35px; height: 35px; object-fit: cover;">
+                <input type="file" class="var-img-input d-none" accept="image/png, image/jpeg, image/webp">
+                <input type="hidden" class="var-img-url" value="${variante && variante.imagenUrl ? variante.imagenUrl : ''}">
+            </label>
+        </td>
+        <td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger btn-remove-variante"><i class="fas fa-trash"></i></button></td>
+    `;
+    
+    const fileInput = tr.querySelector('.var-img-input');
+    const imgPreview = tr.querySelector('.var-img-preview');
+    fileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) { const reader = new FileReader(); reader.onload = (ev) => { imgPreview.src = ev.target.result; renderImagenesPreview(); }; reader.readAsDataURL(file); }
+    });
+    
+    tr.querySelector('.var-nombre').addEventListener('input', renderImagenesPreview);
+    tr.querySelector('.btn-remove-variante').addEventListener('click', () => { tr.remove(); renderImagenesPreview(); });
+    variantesTbody.appendChild(tr);
+    renderImagenesPreview();
 }
 
 
@@ -384,19 +465,26 @@ function renderizarGrilla() {
             iconoEstado = '<i class="fas fa-plus-circle text-success" title="Este producto se creará como nuevo"></i>';
             accionesHtml = accionesComunes; // Usamos las acciones comunes también aquí
         }
-        // --- FIN DE LA MODIFICACIÓN ---
+        
+        // Adaptación visual si tiene variantes
+        const vCodigo = p.tieneVariantes ? `<span class="badge bg-primary">Varios</span>` : `<input type="text" class="form-control form-control-sm" value="${p.codigo}" data-field="codigo">`;
+        const vCosto = p.tieneVariantes ? `<span class="badge bg-light text-dark">N/A</span>` : `<input type="number" class="form-control form-control-sm" value="${p.costo}" data-field="costo" step="0.01">`;
+        const vGanancia = p.tieneVariantes ? `<span class="badge bg-light text-dark">N/A</span>` : `<input type="number" class="form-control form-control-sm" value="${p.ganancia.toFixed(2)}" data-field="ganancia" step="0.01">`;
+        const vVenta = p.tieneVariantes ? `<span class="badge bg-light text-dark">N/A</span>` : `<input type="number" class="form-control form-control-sm" value="${Math.round(p.venta)}" data-field="venta" step="1">`;
+        const vStock = p.tieneVariantes ? `<span class="badge bg-info">${p.variantes.reduce((acc, v)=>acc+v.stock,0)}</span>` : `<input type="number" class="form-control form-control-sm" value="${p.stock}" data-field="stock" step="1">`;
+        const vStockMin = p.tieneVariantes ? `<span class="badge bg-light text-dark">N/A</span>` : `<input type="number" class="form-control form-control-sm" value="${p.stockMinimo}" data-field="stockMinimo" step="1">`;
 
         row.innerHTML = `
-            <td class="codigo-cell">${iconoEstado} <input type="text" class="form-control form-control-sm" value="${p.codigo}" data-field="codigo"></td>
+            <td class="codigo-cell">${iconoEstado} ${vCodigo}</td>
             <td><input type="text" class="form-control form-control-sm" value="${p.nombre}" data-field="nombre"></td>
             <td><input type="text" class="form-control form-control-sm" value="${p.marca}" data-field="marca"></td>
             <td><input type="text" class="form-control form-control-sm" value="${p.color}" data-field="color"></td>
             <td><input type="text" class="form-control form-control-sm" value="${p.rubro}" data-field="rubro"></td>
-            <td><input type="number" class="form-control form-control-sm" value="${p.costo}" data-field="costo" step="0.01"></td>
-            <td><input type="number" class="form-control form-control-sm" value="${p.ganancia.toFixed(2)}" data-field="ganancia" step="0.01"></td>
-            <td><input type="number" class="form-control form-control-sm" value="${Math.round(p.venta)}" data-field="venta" step="1"></td>
-            <td><input type="number" class="form-control form-control-sm" value="${p.stock}" data-field="stock" step="1"></td>
-            <td><input type="number" class="form-control form-control-sm" value="${p.stockMinimo}" data-field="stockMinimo" step="1"></td>
+            <td>${vCosto}</td>
+            <td>${vGanancia}</td>
+            <td>${vVenta}</td>
+            <td>${vStock}</td>
+            <td>${vStockMin}</td>
             <td class="d-flex justify-content-around">${accionesHtml}</td>
         `;
         grillaBody.appendChild(row);
@@ -458,24 +546,61 @@ function calcularMargen() {
 async function agregarProductoAGrilla(duplicarDespues = false) {
     if (isVerifyingCodigo) return; // Previene colisión con el blur
 
+    const tieneVariantes = prodTieneVariantes && prodTieneVariantes.checked;
     const codigo = prodCodigo.value.trim();
-    if (!codigo || !prodNombre.value.trim()) {
-        showToast("El Código y el Nombre son obligatorios.", "fa-exclamation-triangle", "#f6c23e");
+    
+    if (!prodNombre.value.trim()) {
+        showToast("El Nombre del producto es obligatorio.", "fa-exclamation-triangle", "#f6c23e");
         return;
+    }
+    if (!tieneVariantes && !codigo) {
+        showToast("El Código es obligatorio si el producto no tiene variantes.", "fa-exclamation-triangle", "#f6c23e");
+        return;
+    }
+
+    let variantes = [];
+    if (tieneVariantes) {
+        const filas = variantesTbody.querySelectorAll('tr');
+        let varianteInvalida = false;
+        filas.forEach(fila => {
+            const vNom = fila.querySelector('.var-nombre').value.trim();
+            const vCod = fila.querySelector('.var-codigo').value.trim();
+            const fileInput = fila.querySelector('.var-img-input');
+            const vFile = fileInput && fileInput.files.length > 0 ? fileInput.files[0] : null;
+            const vUrl = fila.querySelector('.var-img-url').value;
+            if (!vNom || !vCod) varianteInvalida = true;
+            else variantes.push({ 
+                nombre: vNom, codigo: vCod, 
+                costo: parseFloat(fila.querySelector('.var-costo').value) || 0, 
+                venta: parseFloat(fila.querySelector('.var-venta').value) || 0, 
+                stock: parseInt(fila.querySelector('.var-stock').value) || 0,
+                imagenFile: vFile, imagenUrl: vUrl
+            });
+        });
+        if (varianteInvalida || variantes.length === 0) {
+            showToast("Todas las variantes deben tener Opción y Código (SKU).", "fa-exclamation-triangle", "#f6c23e");
+            return;
+        }
+
+        const nombresUnicos = new Set(variantes.map(v => v.nombre.toLowerCase()));
+        if (nombresUnicos.size !== variantes.length) {
+            showToast("Las opciones de las variantes no pueden repetirse (Ej: No puede haber dos 'Rojo').", "fa-exclamation-triangle", "#f6c23e");
+            return;
+        }
     }
 
     isVerifyingCodigo = true;
     try {
-    const verificacion = await verificarCodigoExistente(codigo, productoEnEdicionId);
-    if (verificacion.existe) {
-        showToast(`El código "${codigo}" ya existe en ${verificacion.origen}. No se puede agregar.`, "fa-exclamation-triangle", "#f6c23e");
-        return;
+    const codigosAVerificar = tieneVariantes ? variantes.map(v => v.codigo) : [codigo];
+    for (const c of codigosAVerificar) {
+        const verificacion = await verificarCodigoExistente(c, productoEnEdicionId);
+        if (verificacion.existe) return showToast(`El código "${c}" ya existe en ${verificacion.origen}.`, "fa-exclamation-triangle", "#f6c23e");
     }
 
     const productoParaGrilla = {
         id: productoEnEdicionId || Date.now().toString(),
         status: modoFormulario === 'editar' ? 'editar' : 'nuevo',
-        codigo: codigo,
+        codigo: tieneVariantes ? 'VARIOS' : codigo,
         nombre: prodNombre.value.trim(),
         marca: normalizeString(prodMarca.value.trim()),
         color: normalizeString(prodColor.value.trim()),
@@ -486,6 +611,8 @@ async function agregarProductoAGrilla(duplicarDespues = false) {
         stock: parseInt(prodStock.value) || 0,
         stockMinimo: parseInt(prodStockMinimo.value) || 0,
         isGeneric: prodGenerico.checked,
+        tieneVariantes: tieneVariantes,
+        variantes: variantes,
 
         isFeatured: prodDestacado.checked,
         publicarEnWeb: prodPublicarWeb ? prodPublicarWeb.checked : false,
@@ -525,6 +652,11 @@ function limpiarFormulario() {
     modoFormulario = 'nuevo';
     productoEnEdicionId = null;
     currentSelectedFiles = [];
+    variantesTbody.innerHTML = '';
+    if (prodTieneVariantes) {
+        prodTieneVariantes.checked = false;
+        prodTieneVariantes.dispatchEvent(new Event('change'));
+    }
     currentExistingImages = [];
     renderImagenesPreview();
     if (quillCarga) quillCarga.root.innerHTML = '';
@@ -544,6 +676,14 @@ function poblarFormulario(producto, modoDuplicar = false) {
     prodStockMinimo.value = producto.stockMinimo;
     prodGenerico.checked = producto.isGeneric;
     prodDestacado.checked = producto.isFeatured;
+    
+    if (prodTieneVariantes) {
+        prodTieneVariantes.checked = producto.tieneVariantes || false;
+        prodTieneVariantes.dispatchEvent(new Event('change'));
+        variantesTbody.innerHTML = '';
+        if (producto.tieneVariantes && producto.variantes) producto.variantes.forEach(v => agregarFilaVariante(v));
+    }
+
     if (prodPublicarWeb) prodPublicarWeb.checked = producto.publicarEnWeb || false;
     if (prodEcommerceFields) {
         prodEcommerceFields.style.display = producto.publicarEnWeb ? 'flex' : 'none';
@@ -629,7 +769,7 @@ async function verificarCodigoExistente(codigo, idExcluir = null) {
 
     // Luego busca en la base de datos
     const productosEnBD = getProductos();
-    const docEncontrado = productosEnBD.find(p => p.codigo === codigo);
+    const docEncontrado = productosEnBD.find(p => p.codigo === codigo || (p.tieneVariantes && p.variantes?.some(v => v.codigo === codigo)));
 
     if (docEncontrado) {
         if (docEncontrado.id !== idExcluir) {
@@ -642,6 +782,7 @@ async function verificarCodigoExistente(codigo, idExcluir = null) {
 
 async function verificarCodigo(inputElement) {
     if (isVerifyingCodigo) return; // Evita el doble disparo simultáneo
+    if (prodTieneVariantes && prodTieneVariantes.checked) return; // Ignoramos si está en modo variantes
 
     const codigo = inputElement.value.trim();
     const idExcluir = inputElement.closest('tr')?.dataset.id || productoEnEdicionId;
@@ -726,6 +867,7 @@ async function guardarTodoEnBD() {
                 costo: p.costo, venta: p.venta, stock: p.stock,
                 stockMinimo: p.stockMinimo, isGeneric: p.isGeneric,
                 isFeatured: p.isFeatured,
+                tieneVariantes: p.tieneVariantes || false,
                 genericProfitMargin: p.isGeneric ? p.ganancia : 0,
                 fechaUltimoCambioPrecio: Timestamp.now(),
                 publicarEnWeb: p.publicarEnWeb || false,
@@ -737,6 +879,10 @@ async function guardarTodoEnBD() {
                 categoriaWeb: p.categoriaWeb || '',
                 imagenes: p.imagenesExistentes || []
             };
+            
+            if (p.tieneVariantes) {
+                productoData.variantes = p.variantes;
+            }
 
             let docRef;
             let actionType = 'creación';
@@ -762,6 +908,17 @@ async function guardarTodoEnBD() {
                 for (let i = 0; i < p.nuevasImagenes.length; i++) {
                     const downloadUrl = await uploadProductImage(p.nuevasImagenes[i], p.status === 'editar' ? p.id : docRef.id, i);
                     productoData.imagenes.push(downloadUrl);
+                }
+            }
+
+            // Subir imágenes individuales de variantes al Storage
+            if (p.tieneVariantes && p.variantes) {
+                for (let i = 0; i < p.variantes.length; i++) {
+                    if (p.variantes[i].imagenFile) {
+                        const downloadUrl = await uploadProductImage(p.variantes[i].imagenFile, p.status === 'editar' ? p.id : docRef.id, `var_${i}`);
+                        p.variantes[i].imagenUrl = downloadUrl;
+                    }
+                    delete p.variantes[i].imagenFile; // No lo guardamos en la base de datos
                 }
             }
 

@@ -10,6 +10,7 @@ const db = getFirestore();
 
 // --- Estado de la Sección de Ventas ---
 let productos = [];
+let productosPlanos = []; // Caché aplanado para buscar variantes rápidamente
 let clientes = [];
 let ticket = [];
 let totalVentaBase = 0;
@@ -80,10 +81,38 @@ function startVentaExitosaCountdown() {
     }, 1000); // 1000ms = 1 segundo AUTO CIERRE DE LA VENTANA  VENTA EXITOSA
 }
 
+/**
+ * Desarma los productos con variantes para que el buscador de caja los trate como ítems individuales.
+ */
+function aplanarProductos(lista) {
+    let planos = [];
+    lista.forEach(p => {
+        if (p.tieneVariantes && p.variantes && p.variantes.length > 0) {
+            p.variantes.forEach(v => {
+                planos.push({
+                    ...p,
+                    id: `${p.id}_${v.codigo}`, // ID virtual único para el ticket
+                    parentId: p.id,
+                    isVariant: true,
+                    varianteCodigo: v.codigo,
+                    nombre: `${p.nombre} - ${v.nombre}`,
+                    codigo: v.codigo,
+                    costo: parseFloat(v.costo) || 0,
+                    venta: parseFloat(v.venta) || 0,
+                    stock: parseInt(v.stock) || 0
+                });
+            });
+        } else {
+            planos.push(p);
+        }
+    });
+    return planos;
+}
 
 async function loadData() {
     // Obtenemos la lista de productos directamente del caché. ¡Sin lecturas a Firebase!
     productos = getProductos();
+    productosPlanos = aplanarProductos(productos);
 
     // Renderizamos los productos de acceso rápido con la lista que ya tenemos.
     renderQuickAccessProducts();
@@ -333,8 +362,23 @@ function initEditPriceModalListeners() {
 
                 try {
                     const productoEnTicket = ticket.find(p => p.id === currentEditingProductId);
-                    const productRef = doc(db, "productos", currentEditingProductId);
-                    await updateDoc(productRef, { costo: newCosto, venta: newVenta, fechaUltimoCambioPrecio: serverTimestamp() });
+                    const realDocId = productoEnTicket.parentId || currentEditingProductId;
+                    const productRef = doc(db, "productos", realDocId);
+                    
+                    if (productoEnTicket.isVariant) {
+                        const pDoc = await getDoc(productRef);
+                        if (pDoc.exists()) {
+                            const pData = pDoc.data();
+                            const vIndex = pData.variantes.findIndex(v => v.codigo === productoEnTicket.varianteCodigo);
+                            if (vIndex > -1) {
+                                pData.variantes[vIndex].costo = newCosto;
+                                pData.variantes[vIndex].venta = newVenta;
+                                await updateDoc(productRef, { variantes: pData.variantes, fechaUltimoCambioPrecio: serverTimestamp() });
+                            }
+                        }
+                    } else {
+                        await updateDoc(productRef, { costo: newCosto, venta: newVenta, fechaUltimoCambioPrecio: serverTimestamp() });
+                    }
                     const { logProducto } = await import('../utils.js');
                     if (productoEnTicket) {
                         await logProducto(currentEditingProductId, productoEnTicket.nombre, 'edición', `Desde Ventas (Permanente). Venta: $${productoEnTicket.precio} -> $${newVenta} | Costo: $${productoEnTicket.costo} -> $${newCosto}`);
@@ -415,7 +459,7 @@ async function handleQuantityManualChange(e) {
     if (!item) return;
 
     // Buscamos el producto original para verificar el stock
-    const productoOriginal = productos.find(p => p.id === item.id);
+    const productoOriginal = productosPlanos.find(p => p.id === item.id);
 
     // Si la cantidad no es un número válido o es menor a 1, eliminamos el producto
     if (isNaN(newQuantity) || newQuantity < 1) {
@@ -501,7 +545,7 @@ function handleSearch(e) {
     if (searchTerms.length === 0) return;
 
     // 2. Filtramos los productos.
-    const filteredProducts = productos.filter(p => {
+    const filteredProducts = productosPlanos.filter(p => {
         // 3. Creamos un único texto de búsqueda combinando los campos relevantes.
         const searchableString = [
             p.nombre,
@@ -546,7 +590,7 @@ function handleSearch(e) {
 
 // REEMPLAZA ESTA FUNCIÓN ENTERA EN ventas.js
 async function addProductToTicket(productId) {
-    const producto = productos.find(p => p.id === productId);
+    const producto = productosPlanos.find(p => p.id === productId);
     if (!producto) {
         console.error("Error: Producto no encontrado con el ID:", productId);
         return;
@@ -589,8 +633,18 @@ async function addProductToTicket(productId) {
         }
         if (!productoEncontradoEnTicket) {
             ticket.push({
-                id: producto.id, nombre: producto.nombre, marca: producto.marca || '', precio: producto.venta, costo: producto.costo,
-                cantidad: 1, total: producto.venta, isGeneric: false, justAdded: true
+                id: producto.id, 
+                parentId: producto.parentId || null,
+                isVariant: producto.isVariant || false,
+                varianteCodigo: producto.varianteCodigo || null,
+                nombre: producto.nombre, 
+                marca: producto.marca || '', 
+                precio: producto.venta, 
+                costo: producto.costo,
+                cantidad: 1, 
+                total: producto.venta, 
+                isGeneric: false, 
+                justAdded: true
             });
             showToast(`Agregado: <strong>${producto.nombre}</strong>`);
         }
@@ -975,7 +1029,7 @@ async function finalizarVenta() {
             
             // Filtramos los productos que requieren verificación de stock
             const itemsNoGenericos = ticket.filter(item => !item.isGeneric);
-            const productRefs = itemsNoGenericos.map(item => doc(db, 'productos', item.id));
+            const productRefs = itemsNoGenericos.map(item => doc(db, 'productos', item.parentId || item.id));
             
             let clienteRef = null;
             if (clienteSeleccionado && clienteSeleccionado.id) {
@@ -1014,8 +1068,20 @@ async function finalizarVenta() {
                 const productDoc = productDocs[index];
                 if (!productDoc.exists()) throw new Error(`El producto "${item.nombre}" ya no existe.`);
 
-                const currentStock = productDoc.data().stock || 0;
-                productsToUpdate.push({ ref: productRefs[index], newStock: currentStock - item.cantidad });
+                const data = productDoc.data();
+                let newData = {};
+
+                if (item.isVariant) {
+                    const varArr = data.variantes || [];
+                    const vIndex = varArr.findIndex(v => v.codigo === item.varianteCodigo);
+                    if (vIndex > -1) {
+                        varArr[vIndex].stock = (varArr[vIndex].stock || 0) - item.cantidad;
+                    }
+                    newData = { variantes: varArr, stock: (data.stock || 0) - item.cantidad };
+                } else {
+                    newData = { stock: (data.stock || 0) - item.cantidad };
+                }
+                productsToUpdate.push({ ref: productRefs[index], newData: newData });
             });
 
             // C) Procesar Cliente
@@ -1024,7 +1090,7 @@ async function finalizarVenta() {
                 clienteDoc = results[results.length - 1];
             }
 
-            productsToUpdate.forEach(p => transaction.update(p.ref, { stock: p.newStock }));
+            productsToUpdate.forEach(p => transaction.update(p.ref, p.newData));
 
             const productosParaGuardar = ticket.map(item => {
                 if (item.isGeneric) {
@@ -1061,9 +1127,12 @@ async function finalizarVenta() {
                 facturadoEnArca: false, // <-- NUEVO ESTADO DE FACTURACION
                 arcaData: null,
                 productos: productosParaGuardar.map(item => ({
-                    id: item.id, nombre: item.nombre, precio: item.precio, costo: item.costo, cantidad: item.cantidad,
-                    rubro: productos.find(p => p.id === item.id)?.rubro || 'Desconocido',
-                    marca: productos.find(p => p.id === item.id)?.marca || 'Desconocido'
+                    id: item.parentId || item.id, // ID real para base de datos
+                    varianteCodigo: item.varianteCodigo || null,
+                    isVariant: item.isVariant || false,
+                    nombre: item.nombre, precio: item.precio, costo: item.costo, cantidad: item.cantidad,
+                    rubro: productosPlanos.find(p => p.id === item.id)?.rubro || 'Desconocido',
+                    marca: productosPlanos.find(p => p.id === item.id)?.marca || 'Desconocido'
                 })),
                 pagos: {
                     contado: parseFloat(txtContado.value) || 0,
@@ -1291,7 +1360,7 @@ function renderQuickAccessProducts() {
     if (!container) return;
 
     // Filtramos solo los productos marcados como destacados
-    const featuredProducts = productos.filter(p => p.isFeatured === true);
+    const featuredProducts = productosPlanos.filter(p => p.isFeatured === true);
 
     // --- INICIO DEL CAMBIO ---
     // 2. Ordenamos la lista de productos destacados por su código
@@ -1581,7 +1650,7 @@ export async function init() {
                     const searchTerm = productoSearch.value.trim();
                     const items = searchResults.querySelectorAll('.list-group-item-action');
                     let productIdToAdd = null;
-                    const productByBarcode = searchTerm ? productos.find(p => p.codigo === searchTerm) : null;
+                    const productByBarcode = searchTerm ? productosPlanos.find(p => p.codigo === searchTerm) : null;
                     if (productByBarcode) {
                         addProductToTicket(productByBarcode.id);
                     } else {
@@ -1631,6 +1700,7 @@ export async function init() {
             console.log("Evento 'productos-updated' recibido. Actualizando UI de Ventas...");
             // Volvemos a obtener la lista actualizada y re-dibujamos los accesos rápidos.
             productos = getProductos();
+            productosPlanos = aplanarProductos(productos);
             renderQuickAccessProducts();
         });
         window.productosUpdateListenerAttached = true;

@@ -27,7 +27,7 @@ async function getTiendanubeConfig() {
 exports.sincronizarTiendanube = onDocumentWritten(
     {
         document: "productos/{productoId}",
-        timeoutSeconds: 60 // Le damos más tiempo de ejecución por las imágenes
+        timeoutSeconds: 120 // 2 minutos para asegurar carga de múltiples imágenes
     },
     async (event) => {
         const tnConfig = await getTiendanubeConfig();
@@ -92,21 +92,36 @@ exports.sincronizarTiendanube = onDocumentWritten(
             } catch (e) { logger.warn("No se pudo obtener/crear la categoría de TN", e); }
         }
 
-        // PREPARAR VARIANTE (Datos Duros)
-        const varianteTN = {
-            price: docNuevo.venta ? String(docNuevo.venta) : "0",
-            stock: parseInt(docNuevo.stock) || 0,
-            sku: docNuevo.codigo || "",
-            barcode: docNuevo.codigo || "",
-            weight: docNuevo.peso ? String(docNuevo.peso / 1000) : "0.000",
-            depth: docNuevo.profundidad ? String(docNuevo.profundidad) : "0.00",
-            width: docNuevo.ancho ? String(docNuevo.ancho) : "0.00",
-            height: docNuevo.alto ? String(docNuevo.alto) : "0.00"
-        };
+        // PREPARAR VARIANTES Y ATRIBUTOS
+        let tnAttributes = [];
+        let tnVariants = [];
 
-        // TN acepta "cost" en variantes
-        if (docNuevo.costo) {
-            varianteTN.cost = String(docNuevo.costo);
+        if (docNuevo.tieneVariantes && docNuevo.variantes && docNuevo.variantes.length > 0) {
+            tnAttributes = [{ es: "Opción" }]; // Atributo genérico requerido por Tiendanube
+            tnVariants = docNuevo.variantes.map(v => {
+                const variantObj = {
+                    price: v.venta ? String(v.venta) : "0",
+                    stock: parseInt(v.stock) || 0,
+                    sku: v.codigo || "",
+                    barcode: v.codigo || "",
+                    values: [{ es: v.nombre }]
+                };
+                if (v.costo) variantObj.cost = String(v.costo);
+                return variantObj;
+            });
+        } else {
+            const singleVariant = {
+                price: docNuevo.venta ? String(docNuevo.venta) : "0",
+                stock: parseInt(docNuevo.stock) || 0,
+                sku: docNuevo.codigo || "",
+                barcode: docNuevo.codigo || "",
+                weight: docNuevo.peso ? String(docNuevo.peso / 1000) : "0.000",
+                depth: docNuevo.profundidad ? String(docNuevo.profundidad) : "0.00",
+                width: docNuevo.ancho ? String(docNuevo.ancho) : "0.00",
+                height: docNuevo.alto ? String(docNuevo.alto) : "0.00"
+            };
+            if (docNuevo.costo) singleVariant.cost = String(docNuevo.costo);
+            tnVariants.push(singleVariant);
         }
 
         // ESTRUCTURA BASE DEL PRODUCTO
@@ -116,11 +131,17 @@ exports.sincronizarTiendanube = onDocumentWritten(
             published: true
         };
         if (categoryId) productoTN.categories = [categoryId];
+        if (tnAttributes.length > 0) productoTN.attributes = tnAttributes;
 
         // CONTROL DE IMÁGENES
         const imagenesNuevas = docNuevo.imagenes || [];
+        const variantesNuevas = docNuevo.tieneVariantes ? (docNuevo.variantes || []) : [];
         const imagenesViejas = docViejo ? (docViejo.imagenes || []) : [];
-        const imagenesCambiaron = JSON.stringify(imagenesNuevas) !== JSON.stringify(imagenesViejas);
+        const variantesViejas = docViejo?.tieneVariantes ? (docViejo.variantes || []) : [];
+        
+        const stateImgNuevo = JSON.stringify({ i: imagenesNuevas, v: variantesNuevas.map(v => v.imagenUrl) });
+        const stateImgViejo = JSON.stringify({ i: imagenesViejas, v: variantesViejas.map(v => v.imagenUrl) });
+        const imagenesCambiaron = stateImgNuevo !== stateImgViejo;
 
         try {
             if (docNuevo.tiendanubeId) {
@@ -135,13 +156,29 @@ exports.sincronizarTiendanube = onDocumentWritten(
                 const getProd = await fetch(`${apiUrl}/${tnId}`, { headers });
                 if (getProd.ok) {
                     const prodData = await getProd.json();
-                    if (prodData.variants && prodData.variants.length > 0) {
-                        const variantId = prodData.variants[0].id;
-                        const resVar = await fetch(`${apiUrl}/${tnId}/variants/${variantId}`, { method: "PUT", headers, body: JSON.stringify(varianteTN) });
-                        if (!resVar.ok) {
-                            logger.error(`❌ Error actualizando variante en TN:`, await resVar.json());
+                    const currentTnVariants = prodData.variants || [];
+
+                    // Crear o Actualizar Variantes comparando por SKU
+                    for (const tv of tnVariants) {
+                        let existingTnVar;
+                        if (!docNuevo.tieneVariantes && currentTnVariants.length === 1) {
+                            existingTnVar = currentTnVariants[0];
                         } else {
-                            logger.info(`✅ Variante ACTUALIZADA en TN: ${docNuevo.nombre}`);
+                            existingTnVar = currentTnVariants.find(v => v.sku === tv.sku && v.sku !== "");
+                        }
+
+                        if (existingTnVar) {
+                            await fetch(`${apiUrl}/${tnId}/variants/${existingTnVar.id}`, { method: "PUT", headers, body: JSON.stringify(tv) });
+                        } else {
+                            await fetch(`${apiUrl}/${tnId}/variants`, { method: "POST", headers, body: JSON.stringify(tv) });
+                        }
+                    }
+
+                    // Borrar las variantes que ya no existen en POS 2025
+                    for (const existingTnVar of currentTnVariants) {
+                        let stillExists = (!docNuevo.tieneVariantes) ? currentTnVariants.indexOf(existingTnVar) === 0 : tnVariants.some(tv => tv.sku === existingTnVar.sku && tv.sku !== "");
+                        if (!stillExists) {
+                            await fetch(`${apiUrl}/${tnId}/variants/${existingTnVar.id}`, { method: "DELETE", headers });
                         }
                     }
 
@@ -158,12 +195,38 @@ exports.sincronizarTiendanube = onDocumentWritten(
                             const resImg = await fetch(`${apiUrl}/${tnId}/images`, { method: "POST", headers, body: JSON.stringify({ src: imgUrl }) });
                             if (!resImg.ok) logger.error(`❌ Error subiendo imagen:`, await resImg.json());
                         }
+                        
+                        // Subir imágenes de variantes y enlazarlas a la opción correspondiente
+                        if (docNuevo.tieneVariantes) {
+                            const getProdVars = await fetch(`${apiUrl}/${tnId}`, { headers });
+                            if (getProdVars.ok) {
+                                const prodVarsData = await getProdVars.json();
+                                for (const v of variantesNuevas) {
+                                    if (v.imagenUrl) {
+                                        const tnVar = prodVarsData.variants.find(tv => tv.sku === v.codigo);
+                                        const payload = { src: v.imagenUrl };
+                                        if (tnVar) payload.product_variant_ids = [tnVar.id];
+                                        
+                                        const resImg = await fetch(`${apiUrl}/${tnId}/images`, { method: "POST", headers, body: JSON.stringify(payload) });
+                                        if (!resImg.ok) {
+                                            logger.error(`Error subiendo imagen para variante ${v.codigo}:`, await resImg.text());
+                                        } else {
+                                            const imgData = await resImg.json();
+                                            if (tnVar) {
+                                                // FORZAMOS LA VINCULACIÓN EXPLÍCITA
+                                                await fetch(`${apiUrl}/${tnId}/variants/${tnVar.id}`, { method: "PUT", headers, body: JSON.stringify({ image_id: imgData.id }) });
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                         logger.info(`📸 Imágenes actualizadas en TN para: ${docNuevo.nombre}`);
                     }
                 }
             } else {
                 // --- 2. CREAR PRODUCTO NUEVO ---
-                productoTN.variants = [varianteTN]; // Al crearlo sí le pasamos la variante de golpe
+                productoTN.variants = tnVariants; // Pasamos todas las variantes de golpe
 
                 const response = await fetch(apiUrl, { method: "POST", headers, body: JSON.stringify(productoTN) });
                 const result = await response.json();
@@ -175,8 +238,31 @@ exports.sincronizarTiendanube = onDocumentWritten(
                     // Subir imágenes MANUALMENTE después de crear para asegurar que Tiendanube no las ignore
                     if (imagenesNuevas.length > 0) {
                         for (const imgUrl of imagenesNuevas) {
-                            const resImg = await fetch(`${apiUrl}/${result.id}/images`, { method: "POST", headers, body: JSON.stringify({ src: imgUrl }) });
-                            if (!resImg.ok) logger.error("❌ Error subiendo imagen a nuevo producto TN:", await resImg.json());
+                            await fetch(`${apiUrl}/${result.id}/images`, { method: "POST", headers, body: JSON.stringify({ src: imgUrl }) });
+                        }
+                    }
+                    if (docNuevo.tieneVariantes) {
+                        const getProdVars = await fetch(`${apiUrl}/${result.id}`, { headers });
+                        if (getProdVars.ok) {
+                            const prodVarsData = await getProdVars.json();
+                            for (const v of variantesNuevas) {
+                                if (v.imagenUrl) {
+                                        const tnVar = prodVarsData.variants.find(tv => tv.sku === v.codigo);
+                                        const payload = { src: v.imagenUrl };
+                                        if (tnVar) payload.product_variant_ids = [tnVar.id];
+                                        
+                                        const resImg = await fetch(`${apiUrl}/${result.id}/images`, { method: "POST", headers, body: JSON.stringify(payload) });
+                                        if (!resImg.ok) {
+                                            logger.error(`Error subiendo imagen para variante ${v.codigo}:`, await resImg.text());
+                                        } else {
+                                            const imgData = await resImg.json();
+                                            if (tnVar) {
+                                                // FORZAMOS LA VINCULACIÓN EXPLÍCITA
+                                                await fetch(`${apiUrl}/${result.id}/variants/${tnVar.id}`, { method: "PUT", headers, body: JSON.stringify({ image_id: imgData.id }) });
+                                            }
+                                        }
+                                }
+                            }
                         }
                     }
                     logger.info(`🚀 CREADO en TN con fotos y variantes: ${docNuevo.nombre}`);
@@ -331,20 +417,58 @@ exports.webhookTiendanube = onRequest(async (req, res) => {
 
         // Descontamos stock SOLO si corresponde
         if (shouldDiscountStock) {
+            const productsToUpdate = {}; // Acumulador en memoria para evitar sobrescribir datos del mismo documento
+
             for (const item of order.products) {
                 const tnIdNum = Number(item.product_id);
                 const tnIdStr = String(item.product_id);
                 const cantidadVendida = parseInt(item.quantity) || 0;
+                const itemSku = item.sku || "";
 
                 const snapshot = await admin.firestore().collection('productos')
                     .where('tiendanubeId', 'in', [tnIdNum, tnIdStr])
                     .limit(1)
                     .get();
+
                 if (!snapshot.empty) {
                     const docRef = snapshot.docs[0].ref;
-                    batch.update(docRef, { stock: admin.firestore.FieldValue.increment(-cantidadVendida) });
-                    logger.info(`📉 Webhook: Descontando ${cantidadVendida} unidades de ${item.name}`);
+                    const docId = docRef.id;
+
+                    // Si no lo teníamos en memoria, lo agregamos con sus datos originales
+                    if (!productsToUpdate[docId]) {
+                        productsToUpdate[docId] = {
+                            ref: docRef,
+                            data: snapshot.docs[0].data()
+                        };
+                    }
+
+                    // Trabajamos sobre la copia en memoria para acumular las restas
+                    const pData = productsToUpdate[docId].data;
+
+                    if (pData.tieneVariantes) {
+                        const varArr = pData.variantes || [];
+                        const vIndex = varArr.findIndex(v => v.codigo === itemSku);
+                        if (vIndex > -1) {
+                            varArr[vIndex].stock = (varArr[vIndex].stock || 0) - cantidadVendida;
+                        }
+                        pData.variantes = varArr;
+                        pData.stock = (pData.stock || 0) - cantidadVendida;
+                    } else {
+                        pData.stock = (pData.stock || 0) - cantidadVendida;
+                    }
+
+                    logger.info(`📉 Webhook: Descontando ${cantidadVendida} unidades de ${item.name} (SKU: ${itemSku})`);
                 }
+            }
+
+            // Aplicamos los cambios acumulados al batch de Firestore de una sola vez
+            for (const docId in productsToUpdate) {
+                const p = productsToUpdate[docId];
+                let newData = { stock: p.data.stock };
+                if (p.data.tieneVariantes) {
+                    newData.variantes = p.data.variantes;
+                }
+                batch.update(p.ref, newData);
             }
         }
 
