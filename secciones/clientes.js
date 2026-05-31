@@ -257,10 +257,10 @@ async function guardarEdicionCliente(e) {
             telefono: loyaltyTelefono.value,
             domicilio: loyaltyDomicilio.value
         });
-        showAlertModal("Datos actualizados correctamente.");
+        showToast("Datos actualizados correctamente.");
     } catch (error) {
         console.error(error);
-        showAlertModal("Error al actualizar.");
+        showToast("Error al actualizar.", 'fa-times-circle', '#dc3545');
     }
 }
 
@@ -283,11 +283,11 @@ async function confirmarAjustePuntos() {
     
     if (!clienteId) return;
     if (isNaN(cantidad) || cantidad <= 0) {
-        alert("Por favor ingresa una cantidad válida.");
+        showToast("Por favor ingresa una cantidad válida.", 'fa-exclamation-triangle', '#f6c23e');
         return;
     }
     if (!concepto) {
-        alert("Por favor ingresa un motivo para el ajuste.");
+        showToast("Por favor ingresa un motivo para el ajuste.", 'fa-exclamation-triangle', '#f6c23e');
         return;
     }
 
@@ -318,7 +318,7 @@ async function confirmarAjustePuntos() {
         });
 
         modalAjustePuntos.hide();
-        showAlertModal("Ajuste realizado correctamente.");
+        showToast("Ajuste realizado correctamente.");
         
         // Recargar datos del perfil (puntos y lista)
         const clienteRef = doc(db, 'clientes', clienteId);
@@ -337,7 +337,7 @@ async function confirmarAjustePuntos() {
 
     } catch (error) {
         console.error("Error en ajuste:", error);
-        showAlertModal("Error al aplicar el ajuste.");
+        showToast("Error al aplicar el ajuste.", 'fa-times-circle', '#dc3545');
     } finally {
         btnConfirmarAjuste.disabled = false;
         btnConfirmarAjuste.textContent = "Aplicar Ajuste";
@@ -485,7 +485,7 @@ async function guardarClienteABM() {
     const domicilio = abmDomicilio.value.trim();
 
     if (!nombre) {
-        alert("El nombre es obligatorio.");
+        showToast("El nombre es obligatorio.", 'fa-exclamation-triangle', '#f6c23e');
         return;
     }
 
@@ -501,7 +501,7 @@ async function guardarClienteABM() {
             
             if (!snapshot.empty) {
                 // Si encontramos un cliente con ese CUIT
-                await showAlertModal(`Ya existe un cliente registrado con el CUIT/DNI: ${cuit} (${snapshot.docs[0].data().nombre})`, "Cliente Duplicado");
+                showToast(`Ya existe un cliente registrado con el CUIT/DNI: ${cuit} (${snapshot.docs[0].data().nombre})`, "fa-exclamation-triangle", "#f6c23e");
                 btnGuardarABM.disabled = false;
                 btnGuardarABM.textContent = 'Guardar Cliente';
                 return;
@@ -514,11 +514,11 @@ async function guardarClienteABM() {
         });
 
         modalClienteABM.hide();
-        showAlertModal("Cliente creado exitosamente.");
+        showToast("Cliente creado exitosamente.");
 
     } catch (error) {
         console.error("Error al guardar cliente:", error);
-        showAlertModal("Ocurrió un error al guardar el cliente.");
+        showToast("Ocurrió un error al guardar el cliente.", 'fa-times-circle', '#dc3545');
     } finally {
         btnGuardarABM.disabled = false;
         btnGuardarABM.textContent = 'Guardar Cliente';

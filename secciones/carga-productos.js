@@ -2,12 +2,13 @@
 import { db, functions } from '../firebase.js';
 import { collection, writeBatch, doc, getDocs, query, where, addDoc, orderBy, Timestamp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
 import { httpsCallable } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-functions.js";
-import { showAlertModal, showConfirmationModal, roundUpToNearest50, formatCurrency, normalizeString, capitalizeFirstLetter } from '../utils.js';
+import { showAlertModal, showConfirmationModal, roundUpToNearest50, formatCurrency, normalizeString, capitalizeFirstLetter, showToast } from '../utils.js';
 import { getProductos, getMarcas, getColores, getRubros } from './dataManager.js';
 // --- ESTADO Y ELEMENTOS DEL DOM ---
 let productosEnPreparacion = [];
 let modoFormulario = 'nuevo';
 let productoEnEdicionId = null;
+let isVerifyingCodigo = false; // Semáforo para prevenir colisiones de modales
 let form, prodCodigo, prodNombre, prodMarca, prodColor, prodRubro, prodCosto, prodGanancia, prodVenta, prodStock, prodStockMinimo, prodGenerico, prodDestacado;
 let btnAgregar, btnAgregarYDuplicar, btnGuardarTodo, btnLimpiarFormulario; // <-- Añádelo aquí
 let grillaBody, contadorProductos, grillaVaciaMsg;
@@ -175,7 +176,7 @@ function setupEventListeners() {
         btnIaCarga.onclick = async () => {
             const nombre = prodNombre.value.trim();
             if (!nombre) {
-                showAlertModal("Por favor, ingresa el nombre del producto primero.");
+                showToast("Por favor, ingresa el nombre del producto primero.", "fa-info-circle", "#f6c23e");
                 return;
             }
 
@@ -191,7 +192,7 @@ function setupEventListeners() {
                 }
             } catch (error) {
                 console.error("Error con IA:", error);
-                showAlertModal("Hubo un error al optimizar la descripción con IA.");
+                showToast("Hubo un error al optimizar la descripción con IA.", "fa-times-circle", "#dc3545");
             } finally {
                 btnIaCarga.innerHTML = '<i class="fas fa-magic me-1"></i>Optimizar con IA';
                 btnIaCarga.disabled = false;
@@ -204,7 +205,7 @@ function setupEventListeners() {
         btnIaTituloCarga.onclick = async () => {
             const nombre = prodNombre.value.trim();
             if (!nombre) {
-                showAlertModal("Por favor, ingresa un nombre inicial para optimizar.");
+                showToast("Por favor, ingresa un nombre inicial para optimizar.", "fa-info-circle", "#f6c23e");
                 return;
             }
 
@@ -219,6 +220,7 @@ function setupEventListeners() {
                 }
             } catch (error) {
                 console.error("Error con IA:", error);
+                showToast("Hubo un error al optimizar el título con IA.", "fa-times-circle", "#dc3545");
             } finally {
                 btnIaTituloCarga.innerHTML = '<i class="fas fa-magic"></i> IA';
                 btnIaTituloCarga.disabled = false;
@@ -234,8 +236,7 @@ async function handleAddImagenUrl() {
         renderImagenesPreview();
         prodImagenUrlInput.value = '';
     } else if (url) {
-        const { showAlertModal } = await import('../utils.js');
-        await showAlertModal('Por favor ingresa un link válido que comience con http:// o https://');
+        showToast('Por favor ingresa un link válido que comience con http:// o https://', 'fa-exclamation-triangle', '#f6c23e');
     }
 
 }
@@ -455,15 +456,19 @@ function calcularMargen() {
 
 
 async function agregarProductoAGrilla(duplicarDespues = false) {
+    if (isVerifyingCodigo) return; // Previene colisión con el blur
+
     const codigo = prodCodigo.value.trim();
     if (!codigo || !prodNombre.value.trim()) {
-        showAlertModal("El Código y el Nombre son obligatorios.");
+        showToast("El Código y el Nombre son obligatorios.", "fa-exclamation-triangle", "#f6c23e");
         return;
     }
 
+    isVerifyingCodigo = true;
+    try {
     const verificacion = await verificarCodigoExistente(codigo, productoEnEdicionId);
     if (verificacion.existe) {
-        showAlertModal(`El código "${codigo}" ya existe en ${verificacion.origen}. No se puede agregar.`, "Código Duplicado");
+        showToast(`El código "${codigo}" ya existe en ${verificacion.origen}. No se puede agregar.`, "fa-exclamation-triangle", "#f6c23e");
         return;
     }
 
@@ -508,6 +513,9 @@ async function agregarProductoAGrilla(duplicarDespues = false) {
         poblarFormulario(productoParaGrilla, true);
     } else {
         limpiarFormulario();
+    }
+    } finally {
+        setTimeout(() => { isVerifyingCodigo = false; }, 300);
     }
 }
 
@@ -598,11 +606,11 @@ async function handleConfirmarFila(id) {
     if (!producto) return;
     const verificacion = await verificarCodigoExistente(producto.codigo, id);
     if (verificacion.existe) {
-        showAlertModal(`El código "${producto.codigo}" ya existe en ${verificacion.origen}.`, "Código Duplicado");
+        showToast(`El código "${producto.codigo}" ya existe en ${verificacion.origen}.`, "fa-exclamation-triangle", "#f6c23e");
         return;
     }
     if (!producto.codigo) {
-        showAlertModal('El campo "Código" no puede estar vacío.', "Código Requerido");
+        showToast('El campo "Código" no puede estar vacío.', "fa-exclamation-triangle", "#f6c23e");
         return;
     }
     delete producto.status;
@@ -633,6 +641,8 @@ async function verificarCodigoExistente(codigo, idExcluir = null) {
 }
 
 async function verificarCodigo(inputElement) {
+    if (isVerifyingCodigo) return; // Evita el doble disparo simultáneo
+
     const codigo = inputElement.value.trim();
     const idExcluir = inputElement.closest('tr')?.dataset.id || productoEnEdicionId;
 
@@ -641,6 +651,8 @@ async function verificarCodigo(inputElement) {
 
     if (codigo === '') return;
 
+    isVerifyingCodigo = true; // Activamos el semáforo
+    try {
     const verificacion = await verificarCodigoExistente(codigo, idExcluir);
 
     if (verificacion.existe) {
@@ -669,18 +681,21 @@ async function verificarCodigo(inputElement) {
 
         } else {
             // Si el duplicado está en la grilla de preparación, solo mostramos un error simple.
-            await showAlertModal(`El código "${codigo}" ya existe en ${verificacion.origen}.`, "Código Duplicado");
+            showToast(`El código "${codigo}" ya existe en ${verificacion.origen}.`, "fa-exclamation-triangle", "#f6c23e");
             inputElement.classList.add('is-invalid');
             inputElement.focus();
             inputElement.select();
         }
+    }
+    } finally {
+        setTimeout(() => { isVerifyingCodigo = false; }, 300);
     }
 }
 
 async function guardarTodoEnBD() {
     const hayPendientes = productosEnPreparacion.some(p => p.status === 'pendiente');
     if (hayPendientes) {
-        showAlertModal("Confirma o cancela las filas pendientes antes de guardar.");
+        showToast("Confirma o cancela las filas pendientes antes de guardar.", "fa-exclamation-triangle", "#f6c23e");
         return;
     }
     const aCrear = productosEnPreparacion.filter(p => p.status === 'nuevo').length;
@@ -734,6 +749,12 @@ async function guardarTodoEnBD() {
                 detailsMsg = `Edición desde Carga. Venta: $${p.venta}, Costo: $${p.costo}`;
             } else { // 'nuevo'
                 docRef = doc(collection(db, "productos"));
+            }
+            
+            if (p.publicarEnWeb) {
+                detailsMsg += ` | Tiendanube: Publicado (Cat: ${p.categoriaWeb || 'Sin categoría'})`;
+            } else if (p.status === 'editar') {
+                detailsMsg += ` | Tiendanube: Oculto`;
             }
 
             // Subir nuevas imágenes al Storage

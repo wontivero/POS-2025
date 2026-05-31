@@ -257,6 +257,10 @@ export async function generatePDF(ticketId, venta, isNotaCredito = false) {
     const font = 'helvetica';
     const pageWidth = doc.internal.pageSize.width;
     let y = margin;
+    
+    const isFacturaAFIP = venta.facturadoEnArca && arcaInfo && arcaInfo.CAE;
+    const cbteTipoStr = isNotaCredito ? 'NOTA DE CRÉDITO' : 'FACTURA';
+    const comprobanteNro = isFacturaAFIP ? `0001-${arcaInfo.CbteNro.toString().padStart(8, '0')}` : ticketId;
 
     const drawText = (text, x, yPos, size, style = 'normal', align = 'left') => {
         doc.setFont(font, style);
@@ -360,6 +364,11 @@ export async function generatePDF(ticketId, venta, isNotaCredito = false) {
     doc.setFont(font, 'bold');
     doc.setFontSize(16);
     doc.text('C', pageWidth / 2, textCY, { align: 'center', baseline: 'middle' });
+    
+    if (isFacturaAFIP) {
+        doc.setFontSize(7);
+        doc.text(isNotaCredito ? 'COD. 013' : 'COD. 011', pageWidth / 2, boxY + boxSize + 3, { align: 'center' });
+    }
 
     const rightY = topY + (logoHeight > 0 ? logoHeight / 2 : 0) - (lineHeight / 2);
     // --- INICIO DE LA MODIFICACIÓN ---
@@ -369,7 +378,7 @@ export async function generatePDF(ticketId, venta, isNotaCredito = false) {
     if (venta.vendedor && venta.vendedor.nombre) {
         drawText(`Vendedor: ${venta.vendedor.nombre}`, pageWidth - margin, currentY, 9, 'normal', 'right');
     }
-    drawText(`${isNotaCredito ? 'NOTA DE CRÉDITO' : 'FACTURA'} N°: ${ticketId}`, pageWidth - margin, currentY + lineHeight * 1.5, 12, 'bold', 'right');
+    drawText(`${isFacturaAFIP ? cbteTipoStr : (isNotaCredito ? 'NOTA DE CRÉDITO' : 'TICKET')} N°: ${comprobanteNro}`, pageWidth - margin, currentY + lineHeight * 1.5, 12, 'bold', 'right');
     // --- FIN DE LA MODIFICACIÓN ---
 
     y = topY + Math.max(logoHeight, lineHeight * 3) + 10;
@@ -379,6 +388,16 @@ export async function generatePDF(ticketId, venta, isNotaCredito = false) {
     y += lineHeight;
     drawText(`CUIT: ${companyInfo.cuit}`, margin, y, 10);
     y += lineHeight;
+    if (companyInfo.iibb) {
+        drawText(`IIBB: ${companyInfo.iibb}`, margin, y, 10);
+        y += lineHeight;
+    }
+    if (companyInfo.startDate) {
+        const parts = companyInfo.startDate.split('-');
+        const dateStr = parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : companyInfo.startDate;
+        drawText(`Inicio de Actividades: ${dateStr}`, margin, y, 10);
+        y += lineHeight;
+    }
     drawText(`IVA: ${companyInfo.ivaCondition}`, margin, y, 10);
     y += lineHeight;
     drawText(`Tel: ${companyInfo.phone}`, margin, y, 10);
@@ -483,19 +502,15 @@ export async function generatePDF(ticketId, venta, isNotaCredito = false) {
     // --------------------------------
 
     // --- SECCIÓN AFIP (ARCA) ---
-    if (venta.facturadoEnArca && arcaInfo && arcaInfo.CAE) {
+    if (isFacturaAFIP) {
         doc.line(margin, y, pageWidth - margin, y);
         y += lineHeight;
-        drawText('Comprobante Electrónico AFIP', pageWidth / 2, y, 11, 'bold', 'center');
-        y += lineHeight;
-        
-        const cbtNro = arcaInfo.CbteNro.toString().padStart(8, '0');
-        drawText(`${isNotaCredito ? 'NC Nro' : 'Factura Nro'}: 0001-${cbtNro}`, pageWidth / 2, y, 10, 'normal', 'center');
+        drawText('Comprobante Autorizado', pageWidth / 2, y, 11, 'bold', 'center');
         y += lineHeight;
         
         const vtoStr = arcaInfo.CAEFchVto || '';
         const vtoFormat = vtoStr.length === 8 ? `${vtoStr.substring(6,8)}/${vtoStr.substring(4,6)}/${vtoStr.substring(0,4)}` : vtoStr;
-        drawText(`CAE: ${arcaInfo.CAE}  Vto: ${vtoFormat}`, pageWidth / 2, y, 10, 'normal', 'center');
+        drawText(`CAE: ${arcaInfo.CAE}  Vto CAE: ${vtoFormat}`, pageWidth / 2, y, 10, 'normal', 'center');
         y += lineHeight;
 
         if (afipQrBase64) {
@@ -552,6 +567,10 @@ export async function printThermalTicket(ticketId, venta, isNotaCredito = false)
     const appConfig = getAppConfig();
     const companyInfo = appConfig.companyInfo || {};
     const arcaInfo = isNotaCredito ? venta.arcaData?.notaCredito : venta.arcaData;
+    
+    const isFacturaAFIP = venta.facturadoEnArca && arcaInfo && arcaInfo.CAE;
+    const cbteTipoStr = isNotaCredito ? 'Nota de Crédito' : 'Factura';
+    const comprobanteNro = isFacturaAFIP ? `0001-${arcaInfo.CbteNro.toString().padStart(8, '0')}` : ticketId;
 
     // --- INICIO DE CARGA DE QR AFIP ---
     let afipQrBase64 = '';
@@ -635,17 +654,35 @@ export async function printThermalTicket(ticketId, venta, isNotaCredito = false)
     `;
 
     // Construcción del HTML del ticket
+    let startDateFormatted = '';
+    if (companyInfo.startDate) {
+        const parts = companyInfo.startDate.split('-');
+        startDateFormatted = parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : companyInfo.startDate;
+    }
+
     let html = `
         <div class="center">
             ${companyInfo.name ? `<h3>${companyInfo.name}</h3>` : ''}
             ${companyInfo.address ? `<p>${companyInfo.address}</p>` : ''}
             ${companyInfo.cuit ? `<p>CUIT: ${companyInfo.cuit}</p>` : ''}
+            ${companyInfo.iibb ? `<p>IIBB: ${companyInfo.iibb}</p>` : ''}
+            ${startDateFormatted ? `<p>Inicio Act.: ${startDateFormatted}</p>` : ''}
             ${companyInfo.ivaCondition ? `<p>${companyInfo.ivaCondition}</p>` : ''}
             ${companyInfo.phone ? `<p>Tel: ${companyInfo.phone}</p>` : ''}
         </div>
         <hr>
+        ${isFacturaAFIP ? `
+        <div class="center">
+            <div style="border: 1px solid #000; display: inline-block; padding: 2px 10px; margin: 5px auto 2px auto; font-weight: bold; font-size: 14pt;">
+                C
+            </div>
+            <div style="font-size: 8pt; font-weight: bold; margin-bottom: 5px;">
+                ${isNotaCredito ? 'COD. 013' : 'COD. 011'}
+            </div>
+        </div>
+        ` : ''}
         <p>Fecha: ${venta.timestamp}</p>
-        <p>${isNotaCredito ? 'NOTA DE CRÉDITO N°' : 'Ticket N°'}: ${ticketId}</p>
+        <p>${isFacturaAFIP ? `${cbteTipoStr} Electrónica` : (isNotaCredito ? 'NOTA DE CRÉDITO N°' : 'Ticket N°')}: ${comprobanteNro}</p>
         ${venta.vendedor?.nombre ? `<p>Vendedor: ${venta.vendedor.nombre}</p>` : ''}
         ${(venta.cliente?.nombre && venta.cliente.nombre !== 'Consumidor Final') ? `<hr><p>Cliente: ${venta.cliente.nombre}</p>${venta.cliente.cuit ? `<p>CUIT/DNI: ${venta.cliente.cuit}</p>` : ''}` : ''}
         <hr>
@@ -710,14 +747,12 @@ export async function printThermalTicket(ticketId, venta, isNotaCredito = false)
         html += `<hr><div class="center"><p>Sumaste: ${venta.loyalty.puntosGanados} pts.</p><p>Saldo: ${venta.loyalty.puntosTotalSnapshot} pts.</p></div>`;
     }
 
-    if (venta.facturadoEnArca && arcaInfo && arcaInfo.CAE) {
-        const cbtNro = arcaInfo.CbteNro.toString().padStart(8, '0');
+    if (isFacturaAFIP) {
         const vtoStr = arcaInfo.CAEFchVto || '';
         const vtoFormat = vtoStr.length === 8 ? `${vtoStr.substring(6,8)}/${vtoStr.substring(4,6)}/${vtoStr.substring(0,4)}` : vtoStr;
         
         html += `<hr><div class="center">
-            <p><strong>Comprobante AFIP</strong></p>
-            <p>${isNotaCredito ? 'NC N°' : 'Factura N°'}: 0001-${cbtNro}</p>
+            <p><strong>Comprobante Autorizado</strong></p>
             <p>CAE: ${arcaInfo.CAE}</p>
             <p>Vto CAE: ${vtoFormat}</p>
             ${afipQrBase64 ? `<p><img src="${afipQrBase64}" style="width:120px; height:120px; margin-top:5px;" /></p>` : ''}
@@ -762,10 +797,31 @@ export function showAlertModal(message, title = 'Aviso') {
     return new Promise(resolve => {
         if (!genericModalEl) {
             genericModalEl = document.getElementById('genericModal');
-            genericModal = bootstrap.Modal.getOrCreateInstance(genericModalEl);
         }
 
-        document.body.classList.add('generic-modal-is-open');
+        if (genericModalEl && genericModalEl.parentNode !== document.body) {
+            document.body.appendChild(genericModalEl);
+        }
+
+        if (genericModalEl) {
+            const oldInstance = bootstrap.Modal.getInstance(genericModalEl);
+            if (oldInstance) oldInstance.dispose();
+            genericModal = new bootstrap.Modal(genericModalEl);
+
+            if (!genericModalEl.dataset.cleanerAttached) {
+                genericModalEl.addEventListener('hidden.bs.modal', () => {
+                    setTimeout(() => {
+                        if (!document.querySelector('.modal.show')) {
+                            document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
+                            document.body.classList.remove('modal-open');
+                            document.body.style.overflow = '';
+                            document.body.style.paddingRight = '';
+                        }
+                    }, 100);
+                });
+                genericModalEl.dataset.cleanerAttached = 'true';
+            }
+        }
 
         document.getElementById('genericModalLabel').textContent = title;
         document.getElementById('genericModalBody').innerHTML = message;
@@ -792,7 +848,6 @@ export function showAlertModal(message, title = 'Aviso') {
         const cleanupAndResolve = () => {
             if (isResolved) return;
             isResolved = true;
-            document.body.classList.remove('generic-modal-is-open');
             confirmButton.removeEventListener('click', triggerHide);
             document.removeEventListener('keydown', handleKeyPress);
             resolve();
@@ -802,7 +857,9 @@ export function showAlertModal(message, title = 'Aviso') {
         document.addEventListener('keydown', handleKeyPress);
         genericModalEl.addEventListener('hidden.bs.modal', cleanupAndResolve, { once: true });
 
-        genericModal.show();
+        setTimeout(() => {
+            genericModal.show();
+        }, 50);
     });
 }
 /**
@@ -825,13 +882,34 @@ export function showConfirmationModal(message, title = 'Confirmación', options 
     return new Promise(resolve => {
         if (!genericModalEl) {
             genericModalEl = document.getElementById('genericModal');
-            genericModal = bootstrap.Modal.getOrCreateInstance(genericModalEl);
         }
 
-        document.body.classList.add('generic-modal-is-open');
+        if (genericModalEl && genericModalEl.parentNode !== document.body) {
+            document.body.appendChild(genericModalEl);
+        }
+
+        if (genericModalEl) {
+            const oldInstance = bootstrap.Modal.getInstance(genericModalEl);
+            if (oldInstance) oldInstance.dispose();
+            genericModal = new bootstrap.Modal(genericModalEl);
+
+            if (!genericModalEl.dataset.cleanerAttached) {
+                genericModalEl.addEventListener('hidden.bs.modal', () => {
+                    setTimeout(() => {
+                        if (!document.querySelector('.modal.show')) {
+                            document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
+                            document.body.classList.remove('modal-open');
+                            document.body.style.overflow = '';
+                            document.body.style.paddingRight = '';
+                        }
+                    }, 100);
+                });
+                genericModalEl.dataset.cleanerAttached = 'true';
+            }
+        }
 
         const modalDialog = genericModalEl.querySelector('.modal-dialog');
-        modalDialog.className = 'modal-dialog';
+        modalDialog.className = 'modal-dialog modal-dialog-centered';
         if (customClass) {
             modalDialog.classList.add(customClass);
         }
@@ -849,7 +927,6 @@ export function showConfirmationModal(message, title = 'Confirmación', options 
         let isResolved = false;
 
         const cleanup = () => {
-            document.body.classList.remove('generic-modal-is-open');
             confirmButton.removeEventListener('click', confirmListener);
             cancelButton.removeEventListener('click', cancelListener);
             genericModalEl.removeEventListener('hidden.bs.modal', hideListener);
@@ -877,7 +954,9 @@ export function showConfirmationModal(message, title = 'Confirmación', options 
         cancelButton.addEventListener('click', cancelListener, { once: true });
         genericModalEl.addEventListener('hidden.bs.modal', hideListener, { once: true });
 
-        genericModal.show();
+        setTimeout(() => {
+            genericModal.show();
+        }, 50);
     });
 }
 

@@ -13,7 +13,7 @@ let commissionInput;
 let saveCommissionButton;
 
 // --- INICIO DE LA MODIFICACIÓN: Nuevos elementos del DOM ---
-let companyNameInput, companyAddressInput, companyCuitInput, companyPhoneInput, companyIvaInput, companyEmailInput, companyLogoInput, userEmailInput, userRoleSelect, btnAddUser, usersTableBody;
+let companyNameInput, companyAddressInput, companyCuitInput, companyIibbInput, companyStartDateInput, companyPhoneInput, companyIvaInput, companyEmailInput, companyLogoInput, userEmailInput, userRoleSelect, btnAddUser, usersTableBody;
 let saveCompanyButton;
 let autoPrintTicketCheck, savePrintingButton;
 let loyaltyPercentageInput, loyaltyPrintCheck, loyaltyExpirationCheck, loyaltyExpirationDaysInput, btnSaveLoyalty; // <-- NUEVO
@@ -84,6 +84,8 @@ async function loadConfiguration() {
                 companyNameInput.value = configData.companyInfo.name || '';
                 companyAddressInput.value = configData.companyInfo.address || '';
                 companyCuitInput.value = configData.companyInfo.cuit || '';
+                companyIibbInput.value = configData.companyInfo.iibb || '';
+                companyStartDateInput.value = configData.companyInfo.startDate || '';
                 companyPhoneInput.value = configData.companyInfo.phone || '';
                 companyIvaInput.value = configData.companyInfo.ivaCondition || '';
                 companyEmailInput.value = configData.companyInfo.email || '';
@@ -96,6 +98,8 @@ async function loadConfiguration() {
                 name: "INFOTECH",
                 address: "Av. Revolución de Mayo 1806. Córdoba, Argentina.",
                 cuit: "20-30843660-9",
+                iibb: "",
+                startDate: "",
                 phone: "351-7693065",
                 ivaCondition: "Monotributista",
                 email: "consulta.infotech@gmail.com",
@@ -119,6 +123,8 @@ async function loadConfiguration() {
             companyNameInput.value = defaultCompanyInfo.name;
             companyAddressInput.value = defaultCompanyInfo.address;
             companyCuitInput.value = defaultCompanyInfo.cuit;
+            companyIibbInput.value = defaultCompanyInfo.iibb;
+            companyStartDateInput.value = defaultCompanyInfo.startDate;
             companyPhoneInput.value = defaultCompanyInfo.phone;
             companyIvaInput.value = defaultCompanyInfo.ivaCondition;
             companyEmailInput.value = defaultCompanyInfo.email;
@@ -272,6 +278,8 @@ async function saveCompanyInfo() {
         name: companyNameInput.value,
         address: companyAddressInput.value,
         cuit: companyCuitInput.value,
+        iibb: companyIibbInput.value,
+        startDate: companyStartDateInput.value,
         phone: companyPhoneInput.value,
         ivaCondition: companyIvaInput.value,
         email: companyEmailInput.value,
@@ -569,6 +577,8 @@ export async function init() {
     companyNameInput = document.getElementById('config-company-name');
     companyAddressInput = document.getElementById('config-company-address');
     companyCuitInput = document.getElementById('config-company-cuit');
+    companyIibbInput = document.getElementById('config-company-iibb');
+    companyStartDateInput = document.getElementById('config-company-start-date');
     companyPhoneInput = document.getElementById('config-company-phone');
     companyIvaInput = document.getElementById('config-company-iva');
     companyEmailInput = document.getElementById('config-company-email');

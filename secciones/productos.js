@@ -371,10 +371,19 @@ async function handleFormSubmit(e) {
             let detalles = [];
             if (isNew) {
                 detalles.push(`Venta: $${productoData.venta}, Costo: $${productoData.costo}`);
+                if (productoData.publicarEnWeb) {
+                    detalles.push(`Tiendanube: Publicado (Cat: ${productoData.categoriaWeb || 'Sin categoría'})`);
+                }
             } else if (oldProducto) {
                 if (oldProducto.venta !== productoData.venta) detalles.push(`Venta: $${oldProducto.venta} -> $${productoData.venta}`);
                 if (oldProducto.costo !== productoData.costo) detalles.push(`Costo: $${oldProducto.costo} -> $${productoData.costo}`);
                 if (oldProducto.stock !== productoData.stock) detalles.push(`Stock: ${oldProducto.stock} -> ${productoData.stock}`);
+                if (!!oldProducto.publicarEnWeb !== !!productoData.publicarEnWeb) {
+                    detalles.push(`Tiendanube: ${productoData.publicarEnWeb ? 'Publicado' : 'Oculto'}`);
+                }
+                if (productoData.publicarEnWeb && oldProducto.categoriaWeb !== productoData.categoriaWeb) {
+                    detalles.push(`Cat. TN: ${oldProducto.categoriaWeb || 'Ninguna'} -> ${productoData.categoriaWeb || 'Ninguna'}`);
+                }
             }
             if (detalles.length > 0 || isNew) {
                 await logProducto(finalId, productoData.nombre, isNew ? 'creación' : 'edición', detalles.join(' | '));

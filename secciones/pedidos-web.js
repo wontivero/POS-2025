@@ -9,6 +9,8 @@ let colPendientes, colPreparacion, colFinalizados;
 let countPendientes, countPreparacion, countFinalizados;
 let tablaArchivadosBody, countArchivados;
 let modalDetalleEl, modalDetalle;
+let chart1, chart2, chart3; // ApexCharts instances
+let filtroFechaDesdeWeb, filtroFechaHastaWeb, btnFiltrarWeb, filtroRangoWeb, btnExportarWebExcel;
 
 export async function init() {
     colPendientes = document.getElementById('col-pendientes');
@@ -22,11 +24,93 @@ export async function init() {
     tablaArchivadosBody = document.getElementById('tabla-pedidos-archivados');
     countArchivados = document.getElementById('count-archivados');
 
+    filtroFechaDesdeWeb = document.getElementById('filtro-fecha-desde-web');
+    filtroFechaHastaWeb = document.getElementById('filtro-fecha-hasta-web');
+    btnFiltrarWeb = document.getElementById('btn-filtrar-web');
+    filtroRangoWeb = document.getElementById('filtro-rango-web');
+    btnExportarWebExcel = document.getElementById('btn-exportar-web-excel');
+
+    const hoy = new Date();
+    const hace7Dias = new Date();
+    hace7Dias.setDate(hoy.getDate() - 6);
+    
+    if (filtroFechaDesdeWeb) filtroFechaDesdeWeb.value = hace7Dias.toISOString().split('T')[0];
+    if (filtroFechaHastaWeb) filtroFechaHastaWeb.value = hoy.toISOString().split('T')[0];
+
+    if (btnFiltrarWeb) btnFiltrarWeb.addEventListener('click', renderKanban);
+    if (filtroRangoWeb) filtroRangoWeb.addEventListener('change', (e) => aplicarRangoPredefinido(e.target.value));
+    if (filtroFechaDesdeWeb) filtroFechaDesdeWeb.addEventListener('change', () => { if(filtroRangoWeb) filtroRangoWeb.value = 'custom'; });
+    if (filtroFechaHastaWeb) filtroFechaHastaWeb.addEventListener('change', () => { if(filtroRangoWeb) filtroRangoWeb.value = 'custom'; });
+    if (btnExportarWebExcel) btnExportarWebExcel.addEventListener('click', exportarPedidosWebAExcel);
+
     crearModalHTML();
     modalDetalleEl = document.getElementById('modalDetallePedido');
     if (modalDetalleEl) modalDetalle = new bootstrap.Modal(modalDetalleEl);
 
     escucharPedidos();
+}
+
+function exportarPedidosWebAExcel() {
+    const filas = tablaArchivadosBody.querySelectorAll('tr');
+    if (filas.length === 0 || (filas.length === 1 && filas[0].innerText.includes('Aún no hay pedidos'))) {
+        import('../utils.js').then(({ showAlertModal }) => showAlertModal('No hay pedidos en la lista para exportar.'));
+        return;
+    }
+
+    const data = [];
+    const headers = ["Orden", "Fecha", "Cliente", "Envio", "Total", "Estado Pago"];
+    
+    filas.forEach(row => {
+        if (row.cells.length >= 6) {
+            data.push([
+                row.cells[0].innerText.trim(),
+                row.cells[1].innerText.trim(),
+                row.cells[2].innerText.trim(),
+                row.cells[3].innerText.trim(),
+                row.cells[4].innerText.trim().replace(/\$/g, '').replace(/\./g, ''), // Limpiar formato moneda
+                row.cells[5].innerText.trim()
+            ]);
+        }
+    });
+
+    const csvContent = [
+        headers.join(';'),
+        ...data.map(row => row.map(item => `"${item}"`).join(';'))
+    ].join('\n');
+
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `pedidos_web_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+function aplicarRangoPredefinido(rango) {
+    if (rango === 'custom') return;
+    const hoy = new Date();
+    let desde = new Date();
+    let hasta = new Date();
+
+    if (rango === 'hoy') {
+        // desde y hasta ya son hoy
+    } else if (rango === 'ayer') {
+        desde.setDate(hoy.getDate() - 1);
+        hasta.setDate(hoy.getDate() - 1);
+    } else if (rango === 'ultimos_7') {
+        desde.setDate(hoy.getDate() - 6);
+    } else if (rango === 'este_mes') {
+        desde = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+    } else if (rango === 'mes_pasado') {
+        desde = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1);
+        hasta = new Date(hoy.getFullYear(), hoy.getMonth(), 0);
+    }
+    if (filtroFechaDesdeWeb) filtroFechaDesdeWeb.value = desde.toISOString().split('T')[0];
+    if (filtroFechaHastaWeb) filtroFechaHastaWeb.value = hasta.toISOString().split('T')[0];
+    renderKanban();
 }
 
 function crearModalHTML() {
@@ -72,6 +156,9 @@ function renderKanban() {
     const appConfig = getAppConfig();
     const tnStoreUrl = appConfig.tiendanube?.storeUrl || 'https://admin.tiendanube.com';
 
+    let fechaDesde = filtroFechaDesdeWeb && filtroFechaDesdeWeb.value ? new Date(filtroFechaDesdeWeb.value + 'T00:00:00') : new Date(0);
+    let fechaHasta = filtroFechaHastaWeb && filtroFechaHastaWeb.value ? new Date(filtroFechaHastaWeb.value + 'T23:59:59') : new Date();
+
     pedidos.forEach(pedido => {
         const card = crearTarjetaPedido(pedido);
         const estado = pedido.estado || 'pendiente';
@@ -86,6 +173,8 @@ function renderKanban() {
             colFinalizados.appendChild(card);
             cFin++;
         } else if (estado === 'archivado') {
+            let pDate = pedido.fecha?.toDate ? pedido.fecha.toDate() : new Date(pedido.fecha);
+            if (pDate >= fechaDesde && pDate <= fechaHasta) {
             cArch++;
             const isPaid = pedido.pagos?.estado === 'paid';
             const isSyncedTN = pedido.pagos?.sincronizadoTN !== false;
@@ -127,6 +216,7 @@ function renderKanban() {
                     </td>
                 </tr>
             `;
+            }
         }
     });
 
@@ -154,7 +244,104 @@ function renderKanban() {
             });
         }
     }
+
+        actualizarDashboard(fechaDesde, fechaHasta);
 }
+
+    function actualizarDashboard(fechaDesde, fechaHasta) {
+        let totalRecaudado = 0;
+        let pedidosCompletados = 0;
+        let dineroEnCurso = 0;
+
+        const ventasPorDia = {};
+        const countPorDia = {};
+        const diasArray = [];
+
+        const diffTime = Math.abs(fechaHasta - fechaDesde);
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        const showSparkline = diffDays <= 31;
+
+        if (showSparkline) {
+            let curDate = new Date(fechaDesde);
+            while (curDate <= fechaHasta) {
+                const year = curDate.getFullYear();
+                const month = String(curDate.getMonth() + 1).padStart(2, '0');
+                const day = String(curDate.getDate()).padStart(2, '0');
+                const dateStr = `${year}-${month}-${day}`;
+
+                diasArray.push(dateStr);
+                ventasPorDia[dateStr] = 0;
+                countPorDia[dateStr] = 0;
+                curDate.setDate(curDate.getDate() + 1);
+            }
+        }
+
+        pedidos.forEach(p => {
+            const total = p.pagos?.total || 0;
+            const estado = p.estado || 'pendiente';
+            
+            let pDate = p.fecha?.toDate ? p.fecha.toDate() : (p.fecha ? new Date(p.fecha) : new Date());
+            
+            // Construimos la fecha en zona horaria LOCAL, evitando desfases
+            const pYear = pDate.getFullYear();
+            const pMonth = String(pDate.getMonth() + 1).padStart(2, '0');
+            const pDay = String(pDate.getDate()).padStart(2, '0');
+            const dateStr = `${pYear}-${pMonth}-${pDay}`;
+
+            // 1. Calculamos Total Recaudado y Gráficos (Para todos los pedidos del rango)
+            if (pDate >= fechaDesde && pDate <= fechaHasta) {
+                totalRecaudado += total;
+                pedidosCompletados++;
+                
+                if (showSparkline && ventasPorDia[dateStr] !== undefined) {
+                    ventasPorDia[dateStr] += total;
+                    countPorDia[dateStr]++;
+                }
+            }
+            
+            // 2. Dinero en curso SIEMPRE cuenta pedidos sin despachar, sin importar la fecha
+            if (estado === 'pendiente' || estado === 'preparacion') {
+                dineroEnCurso += total;
+            }
+        });
+
+        const ticketPromedio = pedidosCompletados > 0 ? totalRecaudado / pedidosCompletados : 0;
+
+        const elTotal = document.getElementById('dash-web-total');
+        if(elTotal) elTotal.textContent = formatCurrency(totalRecaudado);
+        const elCount = document.getElementById('dash-web-count');
+        if(elCount) elCount.textContent = pedidosCompletados;
+        const elPromedio = document.getElementById('dash-web-promedio');
+        if(elPromedio) elPromedio.textContent = formatCurrency(ticketPromedio);
+        const elCurso = document.getElementById('dash-web-curso');
+        if(elCurso) elCurso.textContent = formatCurrency(dineroEnCurso);
+
+        if (typeof ApexCharts !== 'undefined') {
+            if (showSparkline && diasArray.length > 1) {
+                const seriesTotal = diasArray.map(d => ventasPorDia[d]);
+                const seriesCount = diasArray.map(d => countPorDia[d]);
+                const seriesPromedio = diasArray.map(d => countPorDia[d] > 0 ? ventasPorDia[d] / countPorDia[d] : 0);
+
+                const commonOptions = { chart: { type: 'area', height: 60, sparkline: { enabled: true }, parentHeightOffset: 0, animations: { enabled: false } }, stroke: { curve: 'smooth', width: 2 }, fill: { opacity: 0.15 } };
+
+                if (chart1) chart1.destroy();
+                chart1 = new ApexCharts(document.querySelector("#sparkline-1"), { ...commonOptions, series: [{ name: 'Recaudado', data: seriesTotal }], colors: ['#0d6efd'], tooltip: { y: { formatter: val => formatCurrency(val) } } });
+                chart1.render();
+
+                if (chart2) chart2.destroy();
+                chart2 = new ApexCharts(document.querySelector("#sparkline-2"), { ...commonOptions, series: [{ name: 'Pedidos', data: seriesCount }], colors: ['#198754'], tooltip: { y: { formatter: val => val + ' pedidos' } } });
+                chart2.render();
+
+                if (chart3) chart3.destroy();
+                chart3 = new ApexCharts(document.querySelector("#sparkline-3"), { ...commonOptions, series: [{ name: 'Promedio', data: seriesPromedio }], colors: ['#0dcaf0'], tooltip: { y: { formatter: val => formatCurrency(val) } } });
+                chart3.render();
+            } else {
+                if (chart1) { chart1.destroy(); chart1 = null; }
+                if (chart2) { chart2.destroy(); chart2 = null; }
+                if (chart3) { chart3.destroy(); chart3 = null; }
+            }
+        }
+    }
 
 function crearTarjetaPedido(pedido) {
     const div = document.createElement('div');

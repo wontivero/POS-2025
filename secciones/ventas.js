@@ -47,6 +47,7 @@ function handleGenericPriceModalShown() {
     genericPriceInput.focus();
     genericPriceInput.select();
 }
+
 // AÑADE ESTA FUNCIÓN NUEVA EN ventas.js
 
 function startVentaExitosaCountdown() {
@@ -173,14 +174,15 @@ function renderTicket() {
  
         // --- INICIO: Lógica para el ícono de edición de precio ---
         // No mostramos el lápiz para productos genéricos, ya que su precio se define al agregar.
+        // Usamos un botón sin bordes con data-bs-toggle nativo para evitar bugs de JS y saltos de pantalla
         const editPriceIcon = !item.isGeneric ? `
-            <a href="#" class="edit-price-btn ms-2 text-decoration-none"
-               data-product-id="${item.id}"
-               data-bs-toggle="modal"
+            <button type="button" class="btn btn-link p-0 ms-2 text-primary edit-price-btn" 
+               data-bs-toggle="modal" 
                data-bs-target="#editPriceModal"
+               data-product-id="${item.id}"
                title="Editar precio">
-                <i class="fas fa-pen-to-square text-primary"></i>
-            </a>` : '';
+                <i class="fas fa-pen-to-square"></i>
+            </button>` : '';
         // --- FIN: Lógica para el ícono de edición de precio ---
  
         itemDiv.innerHTML = `
@@ -206,6 +208,9 @@ function renderTicket() {
 // =========================================================================
 // INICIO: LÓGICA PARA EDITAR PRECIO DE PRODUCTO EN TICKET
 // =========================================================================
+
+let currentEditingProductId = null;
+
 function initEditPriceModalListeners() {
     const editPriceModalEl = document.getElementById('editPriceModal');
     if (!editPriceModalEl) return; // Si el modal no existe, no hacemos nada
@@ -214,7 +219,6 @@ function initEditPriceModalListeners() {
     if (editPriceModalEl.dataset.initialized) return;
     editPriceModalEl.dataset.initialized = 'true';
 
-    const editPriceModal = bootstrap.Modal.getOrCreateInstance(editPriceModalEl);
     const editPriceProductName = document.getElementById('editPriceProductName');
     const editPriceInput = document.getElementById('editPriceInput');
     const permanentCheck = document.getElementById('editPricePermanentCheck');
@@ -223,8 +227,6 @@ function initEditPriceModalListeners() {
     const editPorcentaje = document.getElementById('editPricePorcentaje');
     const editVenta = document.getElementById('editPriceVenta');
     const btnConfirmEditPrice = document.getElementById('btnConfirmEditPrice');
-
-    let currentEditingProductId = null;
 
     // --- INICIO DE LA LÓGICA MEJORADA ---
 
@@ -269,30 +271,46 @@ function initEditPriceModalListeners() {
 
     // --- FIN DE LA LÓGICA MEJORADA ---
 
+    // Restauramos el listener nativo de Bootstrap para cuando se abre el modal
     editPriceModalEl.addEventListener('show.bs.modal', (event) => {
         const button = event.relatedTarget;
+        if (!button) return; // Si no hay botón, fue abierto por JS de otra forma
         currentEditingProductId = button.getAttribute('data-product-id');
         const productoEnTicket = ticket.find(p => p.id === currentEditingProductId);
         if (!productoEnTicket) return;
- 
-        // --- INICIO DE LA MODIFICACIÓN ---
-        // Rellenamos los campos del modal con los datos del producto en el ticket.
-        editPriceProductName.textContent = productoEnTicket.nombre;
-        editPriceInput.value = productoEnTicket.precio.toFixed(2);
-        editCosto.value = productoEnTicket.costo.toFixed(2);
- 
-        // Calculamos y rellenamos el margen de ganancia y el precio de venta originales.
+
+        document.getElementById('editPriceProductName').textContent = productoEnTicket.nombre;
+        document.getElementById('editPriceInput').value = productoEnTicket.precio.toFixed(2);
+        document.getElementById('editPriceCosto').value = productoEnTicket.costo.toFixed(2);
+
         if (productoEnTicket.costo > 0) {
             const originalProfitMargin = ((productoEnTicket.precio - productoEnTicket.costo) / productoEnTicket.costo) * 100;
-            editPorcentaje.value = originalProfitMargin.toFixed(2);
+            document.getElementById('editPricePorcentaje').value = originalProfitMargin.toFixed(2);
+        } else {
+            document.getElementById('editPricePorcentaje').value = '';
         }
-        editVenta.value = productoEnTicket.precio.toFixed(2);
-        // --- FIN DE LA MODIFICACIÓN ---
+        document.getElementById('editPriceVenta').value = productoEnTicket.precio.toFixed(2);
 
-        permanentCheck.checked = false;
-        permanentFields.style.display = 'none';
-        editPriceInput.disabled = false; // Asegurarse de que esté habilitado al abrir
-        setTimeout(() => editPriceInput.focus(), 500);
+        document.getElementById('editPricePermanentCheck').checked = false;
+        document.getElementById('permanentPriceFields').style.display = 'none';
+        document.getElementById('editPriceInput').disabled = false;
+    });
+
+    editPriceModalEl.addEventListener('shown.bs.modal', () => {
+        document.getElementById('editPriceInput').focus();
+        document.getElementById('editPriceInput').select();
+    });
+
+    // Limpieza forzada ultra-agresiva al cerrar
+    editPriceModalEl.addEventListener('hidden.bs.modal', () => {
+        setTimeout(() => {
+            if (!document.querySelector('.modal.show')) {
+                document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
+                document.body.classList.remove('modal-open');
+                document.body.style.overflow = '';
+                document.body.style.paddingRight = '';
+            }
+        }, 100);
     });
 
     btnConfirmEditPrice.addEventListener('click', async () => {
@@ -307,7 +325,7 @@ function initEditPriceModalListeners() {
                 const newCosto = parseFloat(editCosto.value);
                 const newVenta = parseFloat(editVenta.value);
                 if (isNaN(newCosto) || isNaN(newVenta) || newCosto < 0 || newVenta <= newCosto) {
-                    showAlertModal('Para guardar el cambio permanente, el costo y la venta deben ser valores válidos.');
+                    showToast('Para guardar el cambio permanente, el costo y la venta deben ser valores válidos.', 'fa-exclamation-triangle', '#f6c23e');
                     return; // Salimos de la función, el bloque finally se ejecutará.
                 }
 
@@ -324,13 +342,13 @@ function initEditPriceModalListeners() {
                     console.log("Producto actualizado en la base de datos.");
                 } catch (error) {
                     console.error("Error al actualizar el producto en la base de datos: ", error);
-                    showAlertModal("Hubo un error al guardar el cambio permanente.");
+                    showToast("Hubo un error al guardar el cambio permanente.", 'fa-times-circle', '#dc3545');
                     return; // Salimos si hay error en la BD.
                 }
             } else {
                 newPriceForTicket = parseFloat(editPriceInput.value);
                 if (isNaN(newPriceForTicket) || newPriceForTicket < 0) {
-                    showAlertModal('Por favor, ingresa un precio válido para esta venta.');
+                    showToast('Por favor, ingresa un precio válido para esta venta.', 'fa-exclamation-triangle', '#f6c23e');
                     return;
                 }
 
@@ -349,7 +367,8 @@ function initEditPriceModalListeners() {
             }
 
             renderTicket();
-            editPriceModal.hide();
+            const modalInstance = bootstrap.Modal.getInstance(editPriceModalEl);
+            if (modalInstance) modalInstance.hide();
 
         } finally {
             // Este bloque se ejecuta siempre, haya habido éxito o error.
@@ -536,11 +555,22 @@ async function addProductToTicket(productId) {
     if (producto.isGeneric) {
         // Guardamos el producto que queremos agregar
         genericProductToAdd = producto;
+        
+        // Destruimos la instancia anterior y creamos una nueva limpia para evitar bugs de Bootstrap
+        if (genericPriceModalEl) {
+            const oldInstance = bootstrap.Modal.getInstance(genericPriceModalEl);
+            if (oldInstance) oldInstance.dispose();
+            genericPriceModal = new bootstrap.Modal(genericPriceModalEl);
+        }
 
         // Preparamos y mostramos el modal
         genericProductName.textContent = producto.nombre;
-        genericPriceInput.value = ''; // Limpiamos el valor anterior
-        genericPriceModal.show(); // Mostramos el modal
+        genericPriceInput.value = ''; 
+        
+        // Pequeño timeout para asegurar que el DOM esté listo y no se cruce con otros eventos
+        setTimeout(() => {
+            genericPriceModal.show();
+        }, 50);
 
     } else {
         // La lógica para productos normales sigue igual
@@ -586,7 +616,7 @@ async function handleConfirmGenericPrice() {
     const finalPrice = parseFloat(genericPriceInput.value);
 
     if (isNaN(finalPrice) || finalPrice < 0) {
-        await showAlertModal('Por favor, ingrese un precio válido.');
+        showToast('Por favor, ingrese un precio válido.', 'fa-exclamation-triangle', '#f6c23e');
         return;
     }
 
@@ -604,7 +634,8 @@ async function handleConfirmGenericPrice() {
 
     showToast(`Agregado: <strong>${genericProductToAdd.nombre}</strong>`);
 
-    genericPriceModal.hide(); // Ocultamos el modal
+    const modalInstance = bootstrap.Modal.getInstance(document.getElementById('genericPriceModal'));
+    if (modalInstance) modalInstance.hide();
     genericProductToAdd = null; // Limpiamos la variable temporal
 
     productoSearch.value = '';
@@ -680,7 +711,7 @@ function handlePaymentChange() {
 
 async function handleQuickPayment(e) {
     if (totalVentaBase <= 0) {
-        await showAlertModal('No hay productos en el ticket para pagar.');
+        showToast('No hay productos en el ticket para pagar.', 'fa-exclamation-triangle', '#f6c23e');
         return;
     }
     const metodo = e.target.closest('.btn-pago-rapido').dataset.metodo;
@@ -878,7 +909,7 @@ function setCheckoutSuccessUI(venta, docId) {
                     btnFacturar.outerHTML = '<span class="badge bg-info p-3 fs-6 rounded-pill shadow-sm" title="Facturado en ARCA"><i class="fas fa-check-circle me-2"></i> ARCA</span>';
                 } else {
                     btnFacturar.classList.remove('btn-conectando-afip');
-                    await showAlertModal('Error al facturar: ' + result.error);
+                    showToast('Error al facturar: ' + result.error, 'fa-times-circle', '#dc3545');
                     btnFacturar.innerHTML = '<i class="fas fa-file-invoice me-2"></i> Reintentar ARCA';
                     btnFacturar.disabled = false;
                 }
@@ -895,7 +926,7 @@ async function finalizarVenta() {
         return;
     }
     if (ticket.length === 0) {
-        await showAlertModal('No hay productos en el ticket.', 'Ticket Vacío');
+        showToast('No hay productos en el ticket.', 'fa-exclamation-triangle', '#f6c23e');
         return;
     }
 
@@ -1100,7 +1131,7 @@ async function finalizarVenta() {
                 updateCheckoutStep('step-cae', 'success');
             } else {
                 updateCheckoutStep('step-afip', 'error');
-                await showAlertModal('La venta se guardó, pero hubo un error al facturar automáticamente en ARCA: ' + result.error, 'Aviso: Error ARCA');
+                showToast('La venta se guardó, pero hubo un error en ARCA: ' + result.error, 'fa-times-circle', '#dc3545');
             }
         }
         // --- FIN DE AUTO-FACTURACIÓN ARCA ---
@@ -1122,7 +1153,7 @@ async function finalizarVenta() {
         console.error('Error al finalizar la venta:', e);
         const modalInstance = bootstrap.Modal.getInstance(document.getElementById('confirmacionVentaModal'));
         if (modalInstance) modalInstance.hide();
-        await showAlertModal(`No se pudo completar la venta: ${e.message}`, 'Error de Venta');
+        showToast(`No se pudo completar la venta: ${e.message}`, 'fa-times-circle', '#dc3545');
     }
 }
 
@@ -1238,7 +1269,7 @@ async function handleGuardarCliente() {
         }
     } catch (e) {
         console.error('Error al guardar el cliente:', e);
-        await showAlertModal('Ocurrió un error al guardar el cliente.');
+        showToast('Ocurrió un error al guardar el cliente.', 'fa-times-circle', '#dc3545');
     } finally {
         hideLoading();
     }
@@ -1371,10 +1402,35 @@ export async function init() {
     btnGuardarCliente = document.getElementById('btnGuardarCliente');
     btnCrearProductoVentas = document.getElementById('btnCrearProductoVentas');
     genericPriceModalEl = document.getElementById('genericPriceModal');
-    if (genericPriceModalEl) genericPriceModal = bootstrap.Modal.getOrCreateInstance(genericPriceModalEl);
+    if (genericPriceModalEl) {
+        genericPriceModal = bootstrap.Modal.getOrCreateInstance(genericPriceModalEl);
+        // Garantizamos que el modal esté en el body para evitar bugs de z-index y pantallas grises
+        if (genericPriceModalEl.parentNode !== document.body) document.body.appendChild(genericPriceModalEl);
+        
+        // Agregamos la limpieza forzada al cerrar
+        if (!genericPriceModalEl.dataset.cleanerAttached) {
+            genericPriceModalEl.addEventListener('hidden.bs.modal', () => {
+                setTimeout(() => {
+                    if (!document.querySelector('.modal.show')) {
+                        document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
+                        document.body.classList.remove('modal-open');
+                        document.body.style.overflow = '';
+                        document.body.style.paddingRight = '';
+                    }
+                }, 100);
+            });
+            genericPriceModalEl.dataset.cleanerAttached = 'true';
+        }
+    }
+    
     genericProductName = document.getElementById('genericProductName');
     genericPriceInput = document.getElementById('genericPriceInput');
     btnConfirmGenericPrice = document.getElementById('btnConfirmGenericPrice');
+
+    const editPriceModalEl = document.getElementById('editPriceModal');
+    if (editPriceModalEl && editPriceModalEl.parentNode !== document.body) {
+        document.body.appendChild(editPriceModalEl);
+    }
 
     // 2. INICIALIZAR MODAL (Sin cambios)
     productoModal = initProductosModal();

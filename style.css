@@ -342,12 +342,6 @@ form.duplicando::before {
     z-index: 1060 !important;
 }
 
-/* 2. Sube el nivel de la sombra Y LA HACE MÁS OSCURA,
-      pero SOLO cuando el modal de advertencia está activo (usando la clase del body) */
-body.generic-modal-is-open .modal-backdrop.show {
-    z-index: 1059 !important;
-    opacity: 0.8 !important;
-}
 
 .codigo-cell {
   display: flex;         /* Activa el modo Flexbox para alinear elementos en una fila */

@@ -78,7 +78,7 @@ async function confirmarAperturaCaja() {
         actualizarVistaCaja();
     } catch (e) {
         console.error("Error al abrir la caja:", e);
-        await showAlertModal("No se pudo abrir la caja.");
+        showToast("No se pudo abrir la caja.", 'fa-times-circle', '#dc3545');
     }
 }
 
@@ -168,9 +168,9 @@ async function confirmarMovimiento() {
     const concepto = movimientoConceptoInput.value.trim();
     const user = auth.currentUser;
 
-    if (!sesionActiva) return await showAlertModal("Error: No hay una sesión de caja activa.");
-    if (isNaN(monto) || monto <= 0) return await showAlertModal("Por favor, ingrese un monto válido.");
-    if (concepto === '') return await showAlertModal("Por favor, ingrese un concepto o descripción.");
+    if (!sesionActiva) return showToast("Error: No hay una sesión de caja activa.", 'fa-times-circle', '#dc3545');
+    if (isNaN(monto) || monto <= 0) return showToast("Por favor, ingrese un monto válido.", 'fa-exclamation-triangle', '#f6c23e');
+    if (concepto === '') return showToast("Por favor, ingrese un concepto o descripción.", 'fa-exclamation-triangle', '#f6c23e');
 
     const nuevoMovimiento = {
         sesionCajaId: sesionActiva.id,
@@ -184,10 +184,10 @@ async function confirmarMovimiento() {
     try {
         await saveDocument('caja_movimientos', nuevoMovimiento);
         movimientoCajaModal.hide();
-        await showAlertModal(`El ${tipo} de ${formatCurrency(monto)} se registró correctamente.`);
+        showToast(`El ${tipo} de ${formatCurrency(monto)} se registró correctamente.`);
     } catch (e) {
         console.error("Error al registrar el movimiento:", e);
-        await showAlertModal("No se pudo registrar el movimiento.");
+        showToast("No se pudo registrar el movimiento.", 'fa-times-circle', '#dc3545');
     }
 }
 

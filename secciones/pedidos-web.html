@@ -69,6 +69,88 @@
 
     <!-- INICIO DE LA MODIFICACIÓN: Tabla de Archivados -->
     <hr class="my-5 border-secondary opacity-25">
+
+    <div class="d-flex flex-wrap justify-content-between align-items-end mb-4 gap-3">
+        <div class="d-flex align-items-center gap-3">
+            <h4 class="mb-0 fw-bold text-gray-800"><i class="fas fa-chart-line text-primary me-2"></i>Rendimiento y Archivo</h4>
+            <button class="btn btn-sm btn-outline-success rounded-pill fw-bold shadow-sm" id="btn-exportar-web-excel" title="Exportar pedidos filtrados a Excel"><i class="fas fa-file-excel me-1"></i>Excel</button>
+        </div>
+        <div class="d-flex flex-wrap gap-2 align-items-end bg-white p-2 rounded-4 shadow-sm border">
+            <div>
+                <label class="form-label small text-muted mb-0 ms-1">Rápido:</label>
+                <select class="form-select form-select-sm fw-bold text-secondary border-0 bg-light rounded-pill px-3" id="filtro-rango-web" style="cursor: pointer; min-width: 140px;">
+                    <option value="hoy">Hoy</option>
+                    <option value="ayer">Ayer</option>
+                    <option value="ultimos_7" selected>Últimos 7 días</option>
+                    <option value="este_mes">Este mes</option>
+                    <option value="mes_pasado">Mes pasado</option>
+                    <option value="custom">Personalizado</option>
+                </select>
+            </div>
+            <div>
+                <label class="form-label small text-muted mb-0 ms-1">Desde:</label>
+                <input type="date" class="form-control form-control-sm fw-bold text-secondary border-0 bg-light rounded-pill px-3" id="filtro-fecha-desde-web">
+            </div>
+            <div>
+                <label class="form-label small text-muted mb-0 ms-1">Hasta:</label>
+                <input type="date" class="form-control form-control-sm fw-bold text-secondary border-0 bg-light rounded-pill px-3" id="filtro-fecha-hasta-web">
+            </div>
+            <button class="btn btn-primary fw-bold rounded-pill px-4 shadow-sm" id="btn-filtrar-web" style="margin-bottom: 2px;"><i class="fas fa-filter me-2"></i>Filtrar</button>
+        </div>
+    </div>
+
+    <!-- Mini Dashboard Web (ApexCharts) -->
+    <div class="row mb-4 g-3">
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm rounded-4 overflow-hidden position-relative h-100">
+                <div class="card-body p-4 pb-0">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="text-muted fw-bold mb-0">Total Recaudado</h6>
+                        <div class="bg-primary bg-opacity-10 text-primary rounded-circle d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;"><i class="fas fa-dollar-sign fs-5"></i></div>
+                    </div>
+                    <h3 class="fw-bold text-dark mb-0" id="dash-web-total">$0.00</h3>
+                </div>
+                <div id="sparkline-1" class="mt-2" style="margin-bottom: -5px;"></div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm rounded-4 overflow-hidden position-relative h-100">
+                <div class="card-body p-4 pb-0">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="text-muted fw-bold mb-0">Total Pedidos</h6>
+                        <div class="bg-success bg-opacity-10 text-success rounded-circle d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;"><i class="fas fa-shopping-bag fs-5"></i></div>
+                    </div>
+                    <h3 class="fw-bold text-dark mb-0" id="dash-web-count">0</h3>
+                </div>
+                <div id="sparkline-2" class="mt-2" style="margin-bottom: -5px;"></div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm rounded-4 overflow-hidden position-relative h-100">
+                <div class="card-body p-4 pb-0">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="text-muted fw-bold mb-0">Ticket Promedio</h6>
+                        <div class="bg-info bg-opacity-10 text-info rounded-circle d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;"><i class="fas fa-receipt fs-5"></i></div>
+                    </div>
+                    <h3 class="fw-bold text-dark mb-0" id="dash-web-promedio">$0.00</h3>
+                </div>
+                <div id="sparkline-3" class="mt-2" style="margin-bottom: -5px;"></div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm rounded-4 overflow-hidden position-relative h-100">
+                <div class="card-body p-4">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="text-muted fw-bold mb-0">Dinero en Curso</h6>
+                        <div class="bg-warning bg-opacity-10 text-warning rounded-circle d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;"><i class="fas fa-hourglass-half fs-5"></i></div>
+                    </div>
+                    <h3 class="fw-bold text-dark mb-0" id="dash-web-curso">$0.00</h3>
+                    <p class="text-muted small mb-0 mt-3"><i class="fas fa-info-circle me-1"></i>Pedidos pendientes/armando</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="card shadow-sm mb-4 border-0 rounded-4">
         <div class="card-header bg-secondary text-white py-3 border-0 rounded-top-4 d-flex justify-content-between align-items-center">
             <h5 class="mb-0 fw-bold"><i class="fas fa-archive me-2"></i>Historial de Pedidos Entregados</h5>
