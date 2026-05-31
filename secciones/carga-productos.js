@@ -166,8 +166,8 @@ function setupEventListeners() {
             const isChecked = e.target.checked;
             variantesContainer.style.display = isChecked ? 'block' : 'none';
             
-            // Deshabilitar campos principales si hay variantes
-            [prodCodigo, prodCosto, prodGanancia, prodVenta, prodStock, prodStockMinimo].forEach(el => {
+            // Solo deshabilitamos Código y Stock general. Los precios siguen activos como valor base.
+            [prodCodigo, prodStock].forEach(el => {
                 el.disabled = isChecked;
                 if (isChecked && el.type !== 'checkbox') el.value = ''; 
             });
@@ -329,11 +329,11 @@ function renderImagenesPreview() {
 
     // 3. Imágenes de variantes (Dinámico)
     if (prodTieneVariantes && prodTieneVariantes.checked && variantesTbody) {
-        const filas = variantesTbody.querySelectorAll('tr');
-        filas.forEach(fila => {
-            const varNombre = fila.querySelector('.var-nombre').value.trim() || 'Variante';
-            const varUrl = fila.querySelector('.var-img-url').value;
-            const fileInput = fila.querySelector('.var-img-input');
+        const filas = variantesTbody.querySelectorAll('tr:not(.variant-settings-row)');
+        filas.forEach(filaMain => {
+            const varNombre = filaMain.querySelector('.var-nombre').value.trim() || 'Variante';
+            const varUrl = filaMain.querySelector('.var-img-url').value;
+            const fileInput = filaMain.querySelector('.var-img-input');
             
             const createPreviewDiv = (src) => {
                 const div = document.createElement('div');
@@ -353,13 +353,15 @@ function renderImagenesPreview() {
 
 function agregarFilaVariante(variante = null) {
     if (!variantesTbody) return;
-    const tr = document.createElement('tr');
+    
+    const trMain = document.createElement('tr');
     const imagenSrc = (variante && variante.imagenUrl) ? variante.imagenUrl : 'https://placehold.co/100x100?text=Foto';
-    tr.innerHTML = `
+    let cVal = variante && variante.costo !== undefined ? variante.costo : '';
+    let vVal = variante && variante.venta !== undefined ? variante.venta : '';
+
+    trMain.innerHTML = `
         <td><input type="text" class="form-control form-control-sm var-nombre" placeholder="Ej: Rojo - XL" value="${variante ? variante.nombre : ''}"></td>
         <td><input type="text" class="form-control form-control-sm var-codigo" placeholder="SKU Único" value="${variante ? variante.codigo : ''}"></td>
-        <td><input type="number" class="form-control form-control-sm var-costo text-end" step="0.01" value="${variante ? variante.costo : ''}"></td>
-        <td><input type="number" class="form-control form-control-sm var-venta text-end" step="0.01" value="${variante ? variante.venta : ''}"></td>
         <td><input type="number" class="form-control form-control-sm var-stock text-end" value="${variante ? (variante.stock !== undefined ? variante.stock : '1') : '1'}"></td>
         <td class="text-center">
             <label style="cursor: pointer;" class="mb-0" title="Subir foto para esta variante">
@@ -368,19 +370,58 @@ function agregarFilaVariante(variante = null) {
                 <input type="hidden" class="var-img-url" value="${variante && variante.imagenUrl ? variante.imagenUrl : ''}">
             </label>
         </td>
+        <td class="text-center"><button type="button" class="btn btn-sm btn-light btn-toggle-settings text-secondary" title="Ajustes de precio individual"><i class="fas fa-cog"></i></button></td>
         <td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger btn-remove-variante"><i class="fas fa-trash"></i></button></td>
     `;
     
-    const fileInput = tr.querySelector('.var-img-input');
-    const imgPreview = tr.querySelector('.var-img-preview');
+    const trSettings = document.createElement('tr');
+    trSettings.className = 'bg-light variant-settings-row';
+    trSettings.style.display = 'none';
+    trSettings.innerHTML = `
+        <td colspan="6" class="p-2 border-bottom">
+            <div class="d-flex gap-3 align-items-end px-2">
+                <div class="flex-grow-1">
+                    <label class="form-label small text-muted mb-1">Costo Específico</label>
+                    <input type="number" class="form-control form-control-sm var-costo text-end" step="0.01" value="${cVal}" placeholder="Igual al gral.">
+                </div>
+                <div class="flex-grow-1">
+                    <label class="form-label small text-muted mb-1">Ganancia %</label>
+                    <input type="number" class="form-control form-control-sm var-ganancia text-end" step="0.01" placeholder="Auto">
+                </div>
+                <div class="flex-grow-1">
+                    <label class="form-label small text-muted mb-1">Venta Específica</label>
+                    <input type="number" class="form-control form-control-sm var-venta text-end" step="0.01" value="${vVal}" placeholder="Igual al gral.">
+                </div>
+            </div>
+        </td>
+    `;
+
+    const iCosto = trSettings.querySelector('.var-costo');
+    const iGanancia = trSettings.querySelector('.var-ganancia');
+    const iVenta = trSettings.querySelector('.var-venta');
+
+    const calcVenta = () => { const c = parseFloat(iCosto.value) || 0; const g = parseFloat(iGanancia.value) || 0; if(c > 0 && g > 0) iVenta.value = (c * (1 + g/100)).toFixed(2); };
+    const calcGanancia = () => { const c = parseFloat(iCosto.value) || 0; const v = parseFloat(iVenta.value) || 0; if(c > 0 && v > c) iGanancia.value = (((v - c) / c) * 100).toFixed(2); };
+    iCosto.addEventListener('input', calcVenta);
+    iGanancia.addEventListener('input', calcVenta);
+    iVenta.addEventListener('input', calcGanancia);
+    if(cVal && vVal) calcGanancia();
+
+    trMain.querySelector('.btn-toggle-settings').addEventListener('click', () => {
+        trSettings.style.display = trSettings.style.display === 'none' ? 'table-row' : 'none';
+    });
+    
+    const fileInput = trMain.querySelector('.var-img-input');
+    const imgPreview = trMain.querySelector('.var-img-preview');
     fileInput.addEventListener('change', (e) => {
         const file = e.target.files[0];
         if (file) { const reader = new FileReader(); reader.onload = (ev) => { imgPreview.src = ev.target.result; renderImagenesPreview(); }; reader.readAsDataURL(file); }
     });
     
-    tr.querySelector('.var-nombre').addEventListener('input', renderImagenesPreview);
-    tr.querySelector('.btn-remove-variante').addEventListener('click', () => { tr.remove(); renderImagenesPreview(); });
-    variantesTbody.appendChild(tr);
+    trMain.querySelector('.var-nombre').addEventListener('input', renderImagenesPreview);
+    trMain.querySelector('.btn-remove-variante').addEventListener('click', () => { trMain.remove(); trSettings.remove(); renderImagenesPreview(); });
+    variantesTbody.appendChild(trMain);
+    variantesTbody.appendChild(trSettings);
     renderImagenesPreview();
 }
 
@@ -467,11 +508,35 @@ function renderizarGrilla() {
         }
         
         // Adaptación visual si tiene variantes
+        let displayCosto = `<span class="badge bg-light text-dark">N/A</span>`;
+        let displayGanancia = `<span class="badge bg-light text-dark">N/A</span>`;
+        let displayVenta = `<span class="badge bg-light text-dark">N/A</span>`;
+
+        if (p.tieneVariantes && p.variantes && p.variantes.length > 0) {
+            const firstV = p.variantes[0];
+            const allSamePricing = p.variantes.every(v => v.costo === firstV.costo && v.venta === firstV.venta);
+            if (allSamePricing) {
+                const c = firstV.costo;
+                const v = firstV.venta;
+                let g = '0.00';
+                if (c > 0) g = (((v - c) / c) * 100).toFixed(2);
+                else if (c === 0 && v > 0) g = '100+';
+
+                displayCosto = `$${c}`;
+                displayVenta = `$${v}`;
+                displayGanancia = `${g}%`;
+            } else {
+                displayCosto = `<span class="badge bg-light text-dark">Varios</span>`;
+                displayGanancia = `<span class="badge bg-light text-dark">Varios</span>`;
+                displayVenta = `<span class="badge bg-light text-dark">Varios</span>`;
+            }
+        }
+
         const vCodigo = p.tieneVariantes ? `<span class="badge bg-primary">Varios</span>` : `<input type="text" class="form-control form-control-sm" value="${p.codigo}" data-field="codigo">`;
-        const vCosto = p.tieneVariantes ? `<span class="badge bg-light text-dark">N/A</span>` : `<input type="number" class="form-control form-control-sm" value="${p.costo}" data-field="costo" step="0.01">`;
-        const vGanancia = p.tieneVariantes ? `<span class="badge bg-light text-dark">N/A</span>` : `<input type="number" class="form-control form-control-sm" value="${p.ganancia.toFixed(2)}" data-field="ganancia" step="0.01">`;
-        const vVenta = p.tieneVariantes ? `<span class="badge bg-light text-dark">N/A</span>` : `<input type="number" class="form-control form-control-sm" value="${Math.round(p.venta)}" data-field="venta" step="1">`;
-        const vStock = p.tieneVariantes ? `<span class="badge bg-info">${p.variantes.reduce((acc, v)=>acc+v.stock,0)}</span>` : `<input type="number" class="form-control form-control-sm" value="${p.stock}" data-field="stock" step="1">`;
+        const vCosto = p.tieneVariantes ? displayCosto : `<input type="number" class="form-control form-control-sm" value="${p.costo}" data-field="costo" step="0.01">`;
+        const vGanancia = p.tieneVariantes ? displayGanancia : `<input type="number" class="form-control form-control-sm" value="${p.ganancia.toFixed(2)}" data-field="ganancia" step="0.01">`;
+        const vVenta = p.tieneVariantes ? displayVenta : `<input type="number" class="form-control form-control-sm" value="${Math.round(p.venta)}" data-field="venta" step="1">`;
+        const vStock = p.tieneVariantes ? `<span class="badge bg-info">${p.variantes.reduce((acc, v)=>acc+(parseInt(v.stock)||0),0)}</span>` : `<input type="number" class="form-control form-control-sm" value="${p.stock}" data-field="stock" step="1">`;
         const vStockMin = p.tieneVariantes ? `<span class="badge bg-light text-dark">N/A</span>` : `<input type="number" class="form-control form-control-sm" value="${p.stockMinimo}" data-field="stockMinimo" step="1">`;
 
         row.innerHTML = `
@@ -560,20 +625,31 @@ async function agregarProductoAGrilla(duplicarDespues = false) {
 
     let variantes = [];
     if (tieneVariantes) {
-        const filas = variantesTbody.querySelectorAll('tr');
+        const mainCosto = parseFloat(prodCosto.value) || 0;
+        const mainVenta = parseFloat(prodVenta.value) || 0;
+
+        const filas = variantesTbody.querySelectorAll('tr:not(.variant-settings-row)');
         let varianteInvalida = false;
-        filas.forEach(fila => {
-            const vNom = fila.querySelector('.var-nombre').value.trim();
-            const vCod = fila.querySelector('.var-codigo').value.trim();
-            const fileInput = fila.querySelector('.var-img-input');
+        filas.forEach(filaMain => {
+            const filaSettings = filaMain.nextElementSibling;
+            const vNom = filaMain.querySelector('.var-nombre').value.trim();
+            const vCod = filaMain.querySelector('.var-codigo').value.trim();
+            const fileInput = filaMain.querySelector('.var-img-input');
             const vFile = fileInput && fileInput.files.length > 0 ? fileInput.files[0] : null;
-            const vUrl = fila.querySelector('.var-img-url').value;
+            const vUrl = filaMain.querySelector('.var-img-url').value;
+            const vStock = parseInt(filaMain.querySelector('.var-stock').value) || 0;
+
+            const rawCosto = filaSettings.querySelector('.var-costo').value;
+            const rawVenta = filaSettings.querySelector('.var-venta').value;
+            const vCosto = rawCosto !== '' ? (parseFloat(rawCosto) || 0) : mainCosto;
+            const vVenta = rawVenta !== '' ? (parseFloat(rawVenta) || 0) : mainVenta;
+
             if (!vNom || !vCod) varianteInvalida = true;
             else variantes.push({ 
                 nombre: vNom, codigo: vCod, 
-                costo: parseFloat(fila.querySelector('.var-costo').value) || 0, 
-                venta: parseFloat(fila.querySelector('.var-venta').value) || 0, 
-                stock: parseInt(fila.querySelector('.var-stock').value) || 0,
+                costo: vCosto, 
+                venta: vVenta, 
+                stock: vStock,
                 imagenFile: vFile, imagenUrl: vUrl
             });
         });
@@ -608,7 +684,7 @@ async function agregarProductoAGrilla(duplicarDespues = false) {
         costo: parseFloat(prodCosto.value) || 0,
         ganancia: parseFloat(prodGanancia.value) || 70,
         venta: parseFloat(prodVenta.value) || 0,
-        stock: parseInt(prodStock.value) || 0,
+        stock: tieneVariantes ? variantes.reduce((acc, v) => acc + v.stock, 0) : (parseInt(prodStock.value) || 0),
         stockMinimo: parseInt(prodStockMinimo.value) || 0,
         isGeneric: prodGenerico.checked,
         tieneVariantes: tieneVariantes,

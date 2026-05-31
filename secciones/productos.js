@@ -78,11 +78,39 @@ function renderProductRows(productos) {
         let c = p.stock <= 0 ? 'table-danger' : (p.stock <= p.stockMinimo ? 'table-warning' : '');
         const ultimaActualizacion = p.fechaUltimoCambioPrecio ? p.fechaUltimoCambioPrecio.toDate().toLocaleDateString('es-AR') : 'N/A';
 
-        let porcentajeGanancia = 'N/A';
+        let vCosto = p.costo ? formatCurrency(p.costo) : '0.00';
+        let vVenta = p.venta ? formatCurrency(p.venta) : '0.00';
+        let vGanancia = '0.00%';
+
         if (p.costo > 0) {
-            porcentajeGanancia = (((p.venta - p.costo) / p.costo) * 100).toFixed(2) + '%';
+            vGanancia = (((p.venta - p.costo) / p.costo) * 100).toFixed(2) + '%';
         } else if (p.costo === 0 && p.venta > 0) {
-            porcentajeGanancia = '100%+';
+            vGanancia = '100%+';
+        }
+
+        if (p.tieneVariantes && p.variantes && p.variantes.length > 0) {
+            const firstVariant = p.variantes[0];
+            const allSameCosto = p.variantes.every(v => v.costo === firstVariant.costo);
+            const allSameVenta = p.variantes.every(v => v.venta === firstVariant.venta);
+
+            if (allSameCosto && allSameVenta) {
+                const c = firstVariant.costo !== undefined ? firstVariant.costo : p.costo;
+                const v = firstVariant.venta !== undefined ? firstVariant.venta : p.venta;
+                vCosto = formatCurrency(c || 0);
+                vVenta = formatCurrency(v || 0);
+                
+                if (c > 0) vGanancia = (((v - c) / c) * 100).toFixed(2) + '%';
+                else if (c === 0 && v > 0) vGanancia = '100%+';
+                else vGanancia = '0.00%';
+            } else {
+                vCosto = `<span class="badge bg-light text-dark">Varios</span>`;
+                vVenta = `<span class="badge bg-light text-dark">Varios</span>`;
+                vGanancia = `<span class="badge bg-light text-dark">Varios</span>`;
+            }
+        } else if (p.tieneVariantes) {
+            vCosto = `<span class="badge bg-light text-dark">N/A</span>`;
+            vVenta = `<span class="badge bg-light text-dark">N/A</span>`;
+            vGanancia = `<span class="badge bg-light text-dark">N/A</span>`;
         }
 
         let socialPostBtn = '';
@@ -110,10 +138,7 @@ function renderProductRows(productos) {
         }
 
         const vCodigo = p.tieneVariantes ? `<span class="badge bg-primary">Varios</span>` : `<code>${p.codigo || 'N/A'}</code>`;
-        const vCosto = p.tieneVariantes ? `<span class="badge bg-light text-dark">N/A</span>` : (p.costo ? formatCurrency(p.costo) : '0.00');
-        const vVenta = p.tieneVariantes ? `<span class="badge bg-light text-dark">N/A</span>` : (p.venta ? formatCurrency(p.venta) : '0.00');
-        const vStock = p.tieneVariantes ? `<span class="badge bg-info">${p.variantes?.reduce((acc, v)=>acc+v.stock,0) || 0}</span>` : (p.stock || 0);
-        if (p.tieneVariantes) porcentajeGanancia = `<span class="badge bg-light text-dark">N/A</span>`;
+        const vStock = p.tieneVariantes ? `<span class="badge bg-info" title="Suma total de variantes">${p.variantes?.reduce((acc, v)=>acc+(parseInt(v.stock)||0),0) || 0}</span>` : (p.stock || 0);
 
         rowsHtml += `<tr class="${c}" data-id="${p.id}">
             <td>${p.nombre || 'N/A'}${cloudIcon}</td>
@@ -123,7 +148,7 @@ function renderProductRows(productos) {
             <td><span class="badge bg-secondary">${capitalizeFirstLetter(p.rubro)}</span></td>
             <td>${vCosto}</td>
             <td class="precio-venta">${vVenta}</td>
-            <td>${porcentajeGanancia}</td>
+            <td>${vGanancia}</td>
             <td>${vStock}</td>
             <td>${ultimaActualizacion}</td>
             <td>
@@ -306,11 +331,11 @@ function renderModalImagenesPreview() {
 
     // 3. Imágenes de variantes (Dinámico)
     if (modalProductoTieneVariantes && modalProductoTieneVariantes.checked && modalVariantesTbody) {
-        const filas = modalVariantesTbody.querySelectorAll('tr');
-        filas.forEach(fila => {
-            const varNombre = fila.querySelector('.var-nombre').value.trim() || 'Variante';
-            const varUrl = fila.querySelector('.var-img-url').value;
-            const fileInput = fila.querySelector('.var-img-input');
+        const filas = modalVariantesTbody.querySelectorAll('tr:not(.variant-settings-row)');
+        filas.forEach(filaMain => {
+            const varNombre = filaMain.querySelector('.var-nombre').value.trim() || 'Variante';
+            const varUrl = filaMain.querySelector('.var-img-url').value;
+            const fileInput = filaMain.querySelector('.var-img-input');
             
             const createPreviewDiv = (src) => {
                 const div = document.createElement('div');
@@ -330,13 +355,14 @@ function renderModalImagenesPreview() {
 
 function agregarFilaVarianteModal(variante = null) {
     if (!modalVariantesTbody) return;
-    const tr = document.createElement('tr');
+    const trMain = document.createElement('tr');
     const imagenSrc = (variante && variante.imagenUrl) ? variante.imagenUrl : 'https://placehold.co/100x100?text=Foto';
-    tr.innerHTML = `
+    let cVal = variante && variante.costo !== undefined ? variante.costo : '';
+    let vVal = variante && variante.venta !== undefined ? variante.venta : '';
+
+    trMain.innerHTML = `
         <td><input type="text" class="form-control form-control-sm var-nombre" placeholder="Ej: Rojo - XL" value="${variante ? variante.nombre : ''}"></td>
         <td><input type="text" class="form-control form-control-sm var-codigo" placeholder="SKU Único" value="${variante ? variante.codigo : ''}"></td>
-        <td><input type="number" class="form-control form-control-sm var-costo text-end" step="0.01" value="${variante ? variante.costo : ''}"></td>
-        <td><input type="number" class="form-control form-control-sm var-venta text-end" step="0.01" value="${variante ? variante.venta : ''}"></td>
         <td><input type="number" class="form-control form-control-sm var-stock text-end" value="${variante ? variante.stock : '1'}"></td>
         <td class="text-center">
             <label style="cursor: pointer;" class="mb-0" title="Subir foto para esta variante">
@@ -345,14 +371,54 @@ function agregarFilaVarianteModal(variante = null) {
                 <input type="hidden" class="var-img-url" value="${variante && variante.imagenUrl ? variante.imagenUrl : ''}">
             </label>
         </td>
+        <td class="text-center"><button type="button" class="btn btn-sm btn-light btn-toggle-settings text-secondary" title="Ajustes de precio individual"><i class="fas fa-cog"></i></button></td>
         <td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger btn-remove-variante"><i class="fas fa-trash"></i></button></td>
     `;
-    const fileInput = tr.querySelector('.var-img-input');
-    const imgPreview = tr.querySelector('.var-img-preview');
+    
+    const trSettings = document.createElement('tr');
+    trSettings.className = 'bg-light variant-settings-row';
+    trSettings.style.display = 'none';
+    trSettings.innerHTML = `
+        <td colspan="6" class="p-2 border-bottom">
+            <div class="d-flex gap-3 align-items-end px-2">
+                <div class="flex-grow-1">
+                    <label class="form-label small text-muted mb-1">Costo Específico</label>
+                    <input type="number" class="form-control form-control-sm var-costo text-end" step="0.01" value="${cVal}" placeholder="Igual al gral.">
+                </div>
+                <div class="flex-grow-1">
+                    <label class="form-label small text-muted mb-1">Ganancia %</label>
+                    <input type="number" class="form-control form-control-sm var-ganancia text-end" step="0.01" placeholder="Auto">
+                </div>
+                <div class="flex-grow-1">
+                    <label class="form-label small text-muted mb-1">Venta Específica</label>
+                    <input type="number" class="form-control form-control-sm var-venta text-end" step="0.01" value="${vVal}" placeholder="Igual al gral.">
+                </div>
+            </div>
+        </td>
+    `;
+
+    const iCosto = trSettings.querySelector('.var-costo');
+    const iGanancia = trSettings.querySelector('.var-ganancia');
+    const iVenta = trSettings.querySelector('.var-venta');
+
+    const calcVenta = () => { const c = parseFloat(iCosto.value) || 0; const g = parseFloat(iGanancia.value) || 0; if(c > 0 && g > 0) iVenta.value = (c * (1 + g/100)).toFixed(2); };
+    const calcGanancia = () => { const c = parseFloat(iCosto.value) || 0; const v = parseFloat(iVenta.value) || 0; if(c > 0 && v > c) iGanancia.value = (((v - c) / c) * 100).toFixed(2); };
+    iCosto.addEventListener('input', calcVenta);
+    iGanancia.addEventListener('input', calcVenta);
+    iVenta.addEventListener('input', calcGanancia);
+    if(cVal && vVal) calcGanancia();
+
+    trMain.querySelector('.btn-toggle-settings').addEventListener('click', () => {
+        trSettings.style.display = trSettings.style.display === 'none' ? 'table-row' : 'none';
+    });
+
+    const fileInput = trMain.querySelector('.var-img-input');
+    const imgPreview = trMain.querySelector('.var-img-preview');
     fileInput.addEventListener('change', (e) => { const file = e.target.files[0]; if (file) { const reader = new FileReader(); reader.onload = (ev) => imgPreview.src = ev.target.result; reader.readAsDataURL(file); } });
-    tr.querySelector('.var-nombre').addEventListener('input', renderModalImagenesPreview);
-    tr.querySelector('.btn-remove-variante').addEventListener('click', () => tr.remove());
-    modalVariantesTbody.appendChild(tr);
+    trMain.querySelector('.var-nombre').addEventListener('input', renderModalImagenesPreview);
+    trMain.querySelector('.btn-remove-variante').addEventListener('click', () => { trMain.remove(); trSettings.remove(); renderModalImagenesPreview(); });
+    modalVariantesTbody.appendChild(trMain);
+    modalVariantesTbody.appendChild(trSettings);
     renderModalImagenesPreview();
 }
 
@@ -367,20 +433,31 @@ async function handleFormSubmit(e) {
     
     let variantes = [];
     if (tieneVariantes) {
-        const filas = modalVariantesTbody.querySelectorAll('tr');
+        const mainCosto = parseFloat(productoCosto.value) || 0;
+        const mainVenta = parseFloat(productoVenta.value) || 0;
+
+        const filas = modalVariantesTbody.querySelectorAll('tr:not(.variant-settings-row)');
         let varianteInvalida = false;
-        filas.forEach(fila => {
-            const vNom = fila.querySelector('.var-nombre').value.trim();
-            const vCod = fila.querySelector('.var-codigo').value.trim();
-            const fileInput = fila.querySelector('.var-img-input');
+        filas.forEach(filaMain => {
+            const filaSettings = filaMain.nextElementSibling;
+            const vNom = filaMain.querySelector('.var-nombre').value.trim();
+            const vCod = filaMain.querySelector('.var-codigo').value.trim();
+            const fileInput = filaMain.querySelector('.var-img-input');
             const vFile = fileInput && fileInput.files.length > 0 ? fileInput.files[0] : null;
-            const vUrl = fila.querySelector('.var-img-url').value;
+            const vUrl = filaMain.querySelector('.var-img-url').value;
+            const vStock = parseInt(filaMain.querySelector('.var-stock').value) || 0;
+
+            const rawCosto = filaSettings.querySelector('.var-costo').value;
+            const rawVenta = filaSettings.querySelector('.var-venta').value;
+            const vCosto = rawCosto !== '' ? (parseFloat(rawCosto) || 0) : mainCosto;
+            const vVenta = rawVenta !== '' ? (parseFloat(rawVenta) || 0) : mainVenta;
+
             if (!vNom || !vCod) varianteInvalida = true;
             else variantes.push({ 
                 nombre: vNom, codigo: vCod, 
-                costo: parseFloat(fila.querySelector('.var-costo').value) || 0, 
-                venta: parseFloat(fila.querySelector('.var-venta').value) || 0, 
-                stock: parseInt(fila.querySelector('.var-stock').value) || 0,
+                costo: vCosto, 
+                venta: vVenta, 
+                stock: vStock,
                 imagenFile: vFile, imagenUrl: vUrl
             });
         });
@@ -428,7 +505,7 @@ async function handleFormSubmit(e) {
         rubro: normalizeString(productoRubro.value.trim()),
         costo: parseFloat(productoCosto.value) || 0,
         venta: parseFloat(productoVenta.value) || 0,
-        stock: parseInt(productoStock.value) || 0,
+        stock: tieneVariantes ? variantes.reduce((acc, v) => acc + v.stock, 0) : (parseInt(productoStock.value) || 0),
         stockMinimo: parseInt(productoStockMinimo.value) || 0,
         isGeneric: document.getElementById('producto-generico').checked,
         genericProfitMargin: parseFloat(document.getElementById('producto-margen-generico').value) || 0,
@@ -678,20 +755,48 @@ async function exportarProductosAExcel() {
         return;
     }
     const capitalize = (s) => s && typeof s === 'string' ? s.charAt(0).toUpperCase() + s.slice(1) : '';
-    const data = productosAExportar.map(p => {
-        let porcentajeGanancia = '0';
-        if (p.costo > 0) {
-            porcentajeGanancia = (((p.venta - p.costo) / p.costo) * 100).toFixed(2);
-        } else if (p.costo === 0 && p.venta > 0) {
-            porcentajeGanancia = '100';
-        }
+    
+    const data = [];
+    
+    productosAExportar.forEach(p => {
         const ultimaActualizacion = p.fechaUltimoCambioPrecio?.toDate()?.toLocaleDateString('es-AR') || 'N/A';
-        return [
-            p.codigo || 'N/A', p.nombre || 'N/A', capitalize(p.marca), capitalize(p.color), capitalize(p.rubro),
-            p.costo?.toFixed(2) || '0.00', p.venta?.toFixed(2) || '0.00', porcentajeGanancia,
-            p.stock || 0, p.stockMinimo || 0, ultimaActualizacion
-        ];
+        const marca = capitalize(p.marca);
+        const color = capitalize(p.color);
+        const rubro = capitalize(p.rubro);
+
+        if (p.tieneVariantes && p.variantes && p.variantes.length > 0) {
+            p.variantes.forEach(v => {
+                const c = v.costo !== undefined ? v.costo : p.costo;
+                const ve = v.venta !== undefined ? v.venta : p.venta;
+                let ganancia = '0';
+                if (c > 0) ganancia = (((ve - c) / c) * 100).toFixed(2);
+                else if (c === 0 && ve > 0) ganancia = '100';
+
+                data.push([
+                    v.codigo || 'N/A', 
+                    `${p.nombre} - ${v.nombre}`, 
+                    marca, color, rubro,
+                    c?.toFixed(2) || '0.00', 
+                    ve?.toFixed(2) || '0.00', 
+                    ganancia,
+                    v.stock || 0, 
+                    p.stockMinimo || 0, 
+                    ultimaActualizacion
+                ]);
+            });
+        } else {
+            let ganancia = '0';
+            if (p.costo > 0) ganancia = (((p.venta - p.costo) / p.costo) * 100).toFixed(2);
+            else if (p.costo === 0 && p.venta > 0) ganancia = '100';
+            
+            data.push([
+                p.codigo || 'N/A', p.nombre || 'N/A', marca, color, rubro,
+                p.costo?.toFixed(2) || '0.00', p.venta?.toFixed(2) || '0.00', ganancia,
+                p.stock || 0, p.stockMinimo || 0, ultimaActualizacion
+            ]);
+        }
     });
+    
     const headers = ["Codigo", "Nombre", "Marca", "Color", "Rubro", "Costo", "Venta", "Porcentaje", "Stock", "Stock Minimo", "Fecha Ultimo Cambio Precio"];
     const csvContent = [
         headers.join(';'),
@@ -1347,7 +1452,7 @@ export function init() {
             const isChecked = e.target.checked;
             if(modalVariantesContainer) modalVariantesContainer.style.display = isChecked ? 'block' : 'none';
             
-            [productoCodigo, productoCosto, productoPorcentaje, productoVenta, productoStock, productoStockMinimo].forEach(el => {
+            [productoCodigo, productoStock].forEach(el => {
                 if(el) {
                     el.disabled = isChecked;
                     if (isChecked && el.type !== 'checkbox') el.value = ''; 
