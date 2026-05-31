@@ -11,7 +11,7 @@ const environments = {
         apiKey: "AIzaSyAcEVorypor4x300Vjoa8heF0ymhGPZJCA",
         authDomain: "cajadiaria-infotech.firebaseapp.com",
         projectId: "cajadiaria-infotech",
-        storageBucket: "cajadiaria-infotech.appspot.com",
+        storageBucket: "cajadiaria-infotech.firebasestorage.app",
         messagingSenderId: "412048858405",
         appId: "1:412048858405:web:52f783d041b925ac250ecc"
     },
