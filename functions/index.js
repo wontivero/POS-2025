@@ -104,7 +104,11 @@ exports.sincronizarTiendanube = onDocumentWritten(
                     stock: parseInt(v.stock) || 0,
                     sku: v.codigo || "",
                     barcode: v.codigo || "",
-                    values: [{ es: v.nombre }]
+                    values: [{ es: v.nombre }],
+                    weight: docNuevo.peso ? String(docNuevo.peso / 1000) : "0.000",
+                    depth: docNuevo.profundidad ? String(docNuevo.profundidad) : "0.00",
+                    width: docNuevo.ancho ? String(docNuevo.ancho) : "0.00",
+                    height: docNuevo.alto ? String(docNuevo.alto) : "0.00"
                 };
                 if (v.costo) variantObj.cost = String(v.costo);
                 return variantObj;
@@ -576,7 +580,7 @@ exports.generarBackupUniversal = onCall({ timeoutSeconds: 300, memory: "512Mi" }
 // ========================================================
 exports.optimizarDescripcionIA = onCall({ secrets: [GEMINI_API_KEY], timeoutSeconds: 60 }, async (request) => {
     try {
-        const { nombre, descripcion } = request.data;
+        const { nombre, descripcion, categoriasDisponibles } = request.data;
 
         if (!nombre) {
             throw new HttpsError("invalid-argument", "El nombre del producto es obligatorio para la IA.");
@@ -584,32 +588,36 @@ exports.optimizarDescripcionIA = onCall({ secrets: [GEMINI_API_KEY], timeoutSeco
 
         // Inicializamos el modelo de Gemini usando la llave secreta
         const genAI = new GoogleGenerativeAI(GEMINI_API_KEY.value());
-        const model = genAI.getGenerativeModel({ model: "gemini-3.5-flash" });
+        // const model = genAI.getGenerativeModel({ model: "gemini-3.5-flash" });
+        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
 
         // Nuestro Prompt Maestro de Ingeniería
-        const prompt = `Eres un Copywriter experto en E-commerce y SEO. Reescribe y optimiza la descripción de este producto para una tienda online (Tiendanube).
+        const prompt = `Eres un Asistente experto en E-commerce y SEO. Tu tarea es optimizar la descripción de un producto y deducir sus datos logísticos y de categorización.
 
 DATOS DEL PRODUCTO:
 - Nombre: ${nombre}
 - Descripción original: ${descripcion || 'Sin descripción detallada.'}
+- Categorías Disponibles en la tienda: ${categoriasDisponibles ? categoriasDisponibles.join(', ') : 'Ninguna'}
 
 REGLAS ESTRICTAS:
-1. TONO: Persuasivo, profesional pero cercano, enfocado en cómo el producto resuelve un problema o mejora la vida del cliente.
-2. ESTRUCTURA: 
-   - Un párrafo introductorio corto y magnético (2-3 líneas).
-   - Una lista de viñetas (bullet points) con 3 a 5 beneficios o características principales.
-   - Un breve llamado a la acción (CTA) al final invitando a la compra de forma sutil.
-3. VERACIDAD: NO inventes especificaciones técnicas, medidas o características puntuales que no se deduzcan del nombre o la descripción original.
-4. SEO: Usa palabras clave relevantes de forma natural para mejorar el posicionamiento.
-5. FORMATO CRÍTICO: Devuelve ÚNICAMENTE código HTML puro. Usa <p> para párrafos, <ul> y <li> para listas, y <strong> para resaltar textos clave. NO uses Markdown (como \`\`\`html), no uses <html> ni <body>. Entrega el HTML crudo listo para ser inyectado.`;
+1. DESCRIPCIÓN: Escribe HTML puro (<p>, <ul>, <li>, <strong>). Persuasivo, profesional, con un gancho inicial, 3 a 5 viñetas de beneficios y un CTA sutil al final. NO inventes especificaciones técnicas exactas.
+2. CATEGORÍA: Selecciona la categoría MÁS EXACTA de la lista proporcionada. Debe ser una copia idéntica. Si ninguna encaja, devuelve "".
+3. LOGÍSTICA (IMPORTANTE): Estima el peso (en gramos) y las dimensiones empacadas (alto, ancho, profundidad en centímetros). Usa promedios prudentes para el tipo de producto.
+4. FORMATO CRÍTICO: Devuelve ÚNICAMENTE un objeto JSON válido. NO uses Markdown (como \`\`\`json), NO agregues texto antes ni después. Usa exactamente esta estructura:
+{
+  "descripcionHtml": "<p>html aquí...</p>",
+  "categoria": "Categoría Exacta de la Lista",
+  "peso": 500,
+  "alto": 15,
+  "ancho": 10,
+  "profundidad": 5
+}`;
 
         const result = await model.generateContent(prompt);
-        const responseText = result.response.text();
+        const responseText = result.response.text().replace(/```json/gi, '').replace(/```/g, '').trim();
+        const dataObj = JSON.parse(responseText);
 
-        // Limpiamos bloques de Markdown (```html ... ```) por si la IA los incluye por costumbre
-        const cleanedHtml = responseText.replace(/```html/gi, '').replace(/```/g, '').trim();
-
-        return { success: true, data: cleanedHtml };
+        return { success: true, data: dataObj };
     } catch (error) {
         logger.error("Error interno de IA:", error.message, error);
         throw new HttpsError("internal", `Error del servidor: ${error.message}`);
@@ -628,7 +636,8 @@ exports.optimizarTituloIA = onCall({ secrets: [GEMINI_API_KEY], timeoutSeconds: 
         }
 
         const genAI = new GoogleGenerativeAI(GEMINI_API_KEY.value());
-        const model = genAI.getGenerativeModel({ model: "gemini-3.5-flash" });
+        //const model = genAI.getGenerativeModel({ model: "gemini-3.5-flash" });
+        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
 
         const prompt = `Eres un especialista en SEO y E-commerce. Tu objetivo es optimizar el título de este producto para maximizar clics (CTR) y búsquedas.
 
@@ -663,7 +672,8 @@ exports.generarPostIG = onCall({ secrets: [GEMINI_API_KEY], timeoutSeconds: 60 }
         }
 
         const genAI = new GoogleGenerativeAI(GEMINI_API_KEY.value());
-        const model = genAI.getGenerativeModel({ model: "gemini-3.5-flash" });
+        //const model = genAI.getGenerativeModel({ model: "gemini-3.5-flash" });
+        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
 
         let ctaRule = "";
         let hashtagRule = "";

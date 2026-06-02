@@ -206,20 +206,32 @@ function setupEventListeners() {
             }
 
             const descripcionActual = quillCarga.root.innerHTML === '<p><br></p>' ? '' : quillCarga.root.innerHTML;
+            const categoriasOptions = Array.from(prodCategoriaWeb.options).map(o => o.value).filter(v => v !== '');
             btnIaCarga.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Pensando...';
             btnIaCarga.disabled = true;
 
             try {
                 const optimizarDescripcionIA = httpsCallable(functions, 'optimizarDescripcionIA');
-                const result = await optimizarDescripcionIA({ nombre: nombre, descripcion: descripcionActual });
+                const result = await optimizarDescripcionIA({ nombre: nombre, descripcion: descripcionActual, categoriasDisponibles: categoriasOptions });
                 if (result.data && result.data.success) {
-                    quillCarga.clipboard.dangerouslyPasteHTML(result.data.data);
+                    const aiData = result.data.data;
+                    
+                    if (aiData.descripcionHtml) quillCarga.clipboard.dangerouslyPasteHTML(aiData.descripcionHtml);
+                    if (aiData.peso) document.getElementById('prod-peso').value = aiData.peso;
+                    if (aiData.alto) document.getElementById('prod-alto').value = aiData.alto;
+                    if (aiData.ancho) document.getElementById('prod-ancho').value = aiData.ancho;
+                    if (aiData.profundidad) document.getElementById('prod-profundidad').value = aiData.profundidad;
+                    if (aiData.categoria) {
+                        const optExists = categoriasOptions.includes(aiData.categoria);
+                        if (optExists) prodCategoriaWeb.value = aiData.categoria;
+                    }
+                    showToast("¡Datos de E-commerce autocompletados con éxito!", "fa-magic", "#0dcaf0");
                 }
             } catch (error) {
                 console.error("Error con IA:", error);
-                showToast("Hubo un error al optimizar la descripción con IA.", "fa-times-circle", "#dc3545");
+                showToast("Hubo un error al autocompletar con IA.", "fa-times-circle", "#dc3545");
             } finally {
-                btnIaCarga.innerHTML = '<i class="fas fa-magic me-1"></i>Optimizar con IA';
+                btnIaCarga.innerHTML = '<i class="fas fa-magic me-1"></i>Completar E-commerce con IA';
                 btnIaCarga.disabled = false;
             }
         };
