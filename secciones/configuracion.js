@@ -507,6 +507,18 @@ async function handleAddWebCategoria() {
                         batch.update(doc(db, 'categorias_web', d.id), { ruta: childNuevaRuta });
                     }
                 });
+
+                // ACTUALIZAR PRODUCTOS ASOCIADOS (Esto disparará el robot de Tiendanube automáticamente)
+                const allProductsSnap = await getDocs(collection(db, 'productos'));
+                allProductsSnap.forEach(p => {
+                    const pData = p.data();
+                    if (pData.categoriaWeb === editingCategoriaOldRuta) {
+                        batch.update(doc(db, 'productos', p.id), { categoriaWeb: ruta });
+                    } else if (pData.categoriaWeb && pData.categoriaWeb.startsWith(editingCategoriaOldRuta + ' > ')) {
+                        const nuevaCatWeb = pData.categoriaWeb.replace(editingCategoriaOldRuta + ' > ', ruta + ' > ');
+                        batch.update(doc(db, 'productos', p.id), { categoriaWeb: nuevaCatWeb });
+                    }
+                });
             }
             
             await batch.commit();
@@ -667,8 +679,31 @@ export async function init() {
             const btnEdit = e.target.closest('.btn-edit-categoria');
             
             if (btnDelete && await showConfirmationModal(`¿Eliminar la categoría <strong>${btnDelete.dataset.nombre}</strong>?`)) {
-                await deleteDoc(doc(db, 'categorias_web', btnDelete.dataset.id));
+                const rutaAEliminar = btnDelete.dataset.nombre; // En el HTML lo guardamos en data-nombre
+                const batch = writeBatch(db);
+                batch.delete(doc(db, 'categorias_web', btnDelete.dataset.id));
+                
+                // Eliminar subcategorías en cascada
+                const allCatsSnap = await getDocs(collection(db, 'categorias_web'));
+                allCatsSnap.forEach(d => {
+                    const childData = d.data();
+                    if (childData.ruta && childData.ruta.startsWith(rutaAEliminar + ' > ')) {
+                        batch.delete(doc(db, 'categorias_web', d.id));
+                    }
+                });
+
+                // Desvincular productos de la categoría eliminada
+                const allProductsSnap = await getDocs(collection(db, 'productos'));
+                allProductsSnap.forEach(p => {
+                    const pData = p.data();
+                    if (pData.categoriaWeb === rutaAEliminar || (pData.categoriaWeb && pData.categoriaWeb.startsWith(rutaAEliminar + ' > '))) {
+                        batch.update(doc(db, 'productos', p.id), { categoriaWeb: '' });
+                    }
+                });
+
+                await batch.commit();
                 loadAndRenderWebCategorias();
+                showToast("Categoría y referencias eliminadas.");
             } else if (btnEdit) {
                 editingCategoriaId = btnEdit.dataset.id;
                 editingCategoriaOldRuta = btnEdit.dataset.ruta;

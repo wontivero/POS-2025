@@ -229,7 +229,11 @@ function setupEventListeners() {
                 }
             } catch (error) {
                 console.error("Error con IA:", error);
-                showToast("Hubo un error al autocompletar con IA.", "fa-times-circle", "#dc3545");
+                let errorMsg = "Hubo un error al autocompletar con IA.";
+                if (error.message && (error.message.includes("429") || error.message.includes("quota"))) {
+                    errorMsg = "La IA está procesando muchas consultas gratuitas. Esperá unos segundos y volvé a intentarlo.";
+                }
+                showToast(errorMsg, "fa-times-circle", "#dc3545");
             } finally {
                 btnIaCarga.innerHTML = '<i class="fas fa-magic me-1"></i>Completar E-commerce con IA';
                 btnIaCarga.disabled = false;
@@ -257,7 +261,11 @@ function setupEventListeners() {
                 }
             } catch (error) {
                 console.error("Error con IA:", error);
-                showToast("Hubo un error al optimizar el título con IA.", "fa-times-circle", "#dc3545");
+                let errorMsg = "Hubo un error al optimizar el título con IA.";
+                if (error.message && (error.message.includes("429") || error.message.includes("quota"))) {
+                    errorMsg = "La IA está procesando muchas consultas gratuitas. Esperá unos segundos y volvé a intentarlo.";
+                }
+                showToast(errorMsg, "fa-times-circle", "#dc3545");
             } finally {
                 btnIaTituloCarga.innerHTML = '<i class="fas fa-magic"></i> IA';
                 btnIaTituloCarga.disabled = false;

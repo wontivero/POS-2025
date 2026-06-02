@@ -72,22 +72,53 @@ exports.sincronizarTiendanube = onDocumentWritten(
         let categoryId = null;
         if (docNuevo.categoriaWeb) {
             try {
-                const catResponse = await fetch(`https://api.tiendanube.com/v1/${userId}/categories`, { headers });
+                // Agregamos per_page=200 para asegurarnos de traer todas las categorías
+                const catResponse = await fetch(`${apiUrl.replace('/products', '/categories')}?per_page=200`, { headers });
                 if (catResponse.ok) {
-                    const categories = await catResponse.json();
-                    const catName = docNuevo.categoriaWeb.split('>').pop().trim();
-                    const matchedCat = categories.find(c => c.name && c.name.es && c.name.es.toLowerCase() === catName.toLowerCase());
-                    if (matchedCat) {
-                        categoryId = matchedCat.id;
-                    } else {
-                        const newCat = await fetch(`https://api.tiendanube.com/v1/${userId}/categories`, {
-                            method: "POST", headers, body: JSON.stringify({ name: { es: catName } })
+                    const rawCategories = await catResponse.json();
+                    
+                    // Aplanamos el árbol de categorías anidadas (subcategories) que devuelve Tiendanube
+                    const flatCategories = [];
+                    const extractCats = (cats) => {
+                        if (!Array.isArray(cats)) return;
+                        cats.forEach(c => {
+                            flatCategories.push(c);
+                            if (c.subcategories && c.subcategories.length > 0) extractCats(c.subcategories);
                         });
-                        if (newCat.ok) {
-                            const newCatData = await newCat.json();
-                            categoryId = newCatData.id;
+                    };
+                    extractCats(rawCategories);
+
+                    const niveles = docNuevo.categoriaWeb.split('>').map(n => n.trim());
+                    let currentParentId = null;
+                    
+                    for (const levelName of niveles) {
+                        // Buscamos si existe la categoría en la lista plana
+                        let matchedCat = flatCategories.find(c => {
+                            const nameMatch = c.name && c.name.es && c.name.es.toLowerCase() === levelName.toLowerCase();
+                            const parentMatch = currentParentId === null ? (!c.parent) : (String(c.parent) === String(currentParentId));
+                            return nameMatch && parentMatch;
+                        });
+                        
+                        if (matchedCat) {
+                            currentParentId = matchedCat.id;
+                        } else {
+                            const payload = { name: { es: levelName } };
+                            if (currentParentId !== null) payload.parent = parseInt(currentParentId);
+                            
+                            const newCat = await fetch(`${apiUrl.replace('/products', '/categories')}`, { method: "POST", headers, body: JSON.stringify(payload) });
+                            
+                            if (newCat.ok) {
+                                const newCatData = await newCat.json();
+                                currentParentId = newCatData.id;
+                                flatCategories.push(newCatData);
+                            } else {
+                                logger.error(`Error creando categoría ${levelName} en TN:`, await newCat.text());
+                                currentParentId = null; // Rompemos la cadena si hay un error
+                                break; // Si falla, cortamos el ciclo
+                            }
                         }
                     }
+                    if (currentParentId !== null) categoryId = currentParentId;
                 }
             } catch (e) { logger.warn("No se pudo obtener/crear la categoría de TN", e); }
         }
@@ -134,7 +165,13 @@ exports.sincronizarTiendanube = onDocumentWritten(
             description: { es: docNuevo.descripcionWeb || "" },
             published: true
         };
-        if (categoryId) productoTN.categories = [categoryId];
+
+        // Asignamos la categoría, o limpiamos el array si el usuario la borró en el POS
+        if (categoryId) {
+            productoTN.categories = [categoryId];
+        } else if (docViejo && docViejo.categoriaWeb && !docNuevo.categoriaWeb) {
+            productoTN.categories = [];
+        }
         
         // --- SOLUCIÓN DE CONFLICTO ESTRUCTURAL ---
         const cambioDeModoVariantes = docViejo && (!!docNuevo.tieneVariantes !== !!docViejo.tieneVariantes);

@@ -1272,7 +1272,11 @@ async function handleIgPost(id) {
         }
     } catch (e) {
         console.error("Error generando post IG:", e);
-        showToast("Ocurrió un error al generar el post. Asegurate de actualizar tus Cloud Functions.", "fa-times-circle", "#dc3545");
+        let errorMsg = "Ocurrió un error al generar el post. Asegurate de actualizar tus Cloud Functions.";
+        if (e.message && (e.message.includes("429") || e.message.includes("quota"))) {
+            errorMsg = "La IA está procesando muchas consultas gratuitas. Esperá unos segundos y volvé a intentarlo.";
+        }
+        showToast(errorMsg, "fa-times-circle", "#dc3545");
         let igModalEl = document.getElementById('igPostModal');
         if (igModalEl) {
             let igModal = bootstrap.Modal.getOrCreateInstance(igModalEl);
@@ -1388,7 +1392,11 @@ export function init() {
                 }
             } catch (error) {
                 console.error("Error con IA:", error);
-                showToast("Hubo un error al autocompletar con IA.", "fa-times-circle", "#dc3545");
+                let errorMsg = "Hubo un error al autocompletar con IA.";
+                if (error.message && (error.message.includes("429") || error.message.includes("quota"))) {
+                    errorMsg = "La IA está procesando muchas consultas gratuitas. Esperá unos segundos y volvé a intentarlo.";
+                }
+                showToast(errorMsg, "fa-times-circle", "#dc3545");
             } finally {
                 btnIaModal.innerHTML = '<i class="fas fa-magic me-1"></i>Completar E-commerce con IA';
                 btnIaModal.disabled = false;
@@ -1416,7 +1424,11 @@ export function init() {
                 }
             } catch (error) {
                 console.error("Error con IA:", error);
-                showToast("Hubo un error al optimizar el título con IA.", "fa-times-circle", "#dc3545");
+                let errorMsg = "Hubo un error al optimizar el título con IA.";
+                if (error.message && (error.message.includes("429") || error.message.includes("quota"))) {
+                    errorMsg = "La IA está procesando muchas consultas gratuitas. Esperá unos segundos y volvé a intentarlo.";
+                }
+                showToast(errorMsg, "fa-times-circle", "#dc3545");
             } finally {
                 btnIaTituloModal.innerHTML = '<i class="fas fa-magic me-1"></i> IA';
                 btnIaTituloModal.disabled = false;
