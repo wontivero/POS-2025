@@ -1,7 +1,7 @@
 // utils.js
 import { db, storage } from './firebase.js';
 import {
-    collection, addDoc, getDocs, runTransaction, doc, query, orderBy, where, updateDoc, deleteDoc, getDoc
+    collection, addDoc, getDocs, runTransaction, doc, query, orderBy, where, updateDoc, deleteDoc, getDoc, setDoc
 } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
 import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-storage.js";
 import { getAppConfig } from './secciones/dataManager.js'; // <-- IMPORTAMOS EL GETTER
@@ -62,7 +62,7 @@ export const saveDocument = async (collectionName, data, docId = null) => {
     try {
         if (docId) {
             const docRef = doc(db, collectionName, docId);
-            await updateDoc(docRef, data);
+            await setDoc(docRef, data, { merge: true });
             return docId;
         } else {
             const docRef = await addDoc(collection(db, collectionName), data);
