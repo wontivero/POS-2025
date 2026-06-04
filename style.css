@@ -3,6 +3,22 @@ body {
     transition: background-color 0.3s ease-in-out;
 }
 
+/* ==========================================================================
+   MEJORA DE CONTRASTE GLOBAL PARA FORMULARIOS (Monitores Básicos)
+   ========================================================================== */
+.form-control:not(.is-invalid), .form-select:not(.is-invalid), .input-group-text {
+    border-color: #adb5bd; /* Borde gris un punto más oscuro para mayor definición */
+}
+
+.form-control:not(:focus):not(:disabled):not(.is-invalid), .form-select:not(:focus):not(:disabled):not(.is-invalid) {
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.08); /* Sombra interior sutil para crear "profundidad" (efecto hundido) */
+}
+
+.form-floating > label {
+    color: #495057; /* Texto del label flotante más oscuro y nítido */
+    font-weight: 500;
+}
+
 /* Agrega esto al final de tu archivo style.css */
 
 /* ==========================================================================
@@ -27,8 +43,9 @@ body {
 /* Inputs y campos de texto */
 #seccion-ventas .form-control {
     border-radius: 0.75rem;
-    background-color: #f8f9fa;
-    border: 1px solid #e9ecef;
+    background-color: #ffffff;
+    border: 1px solid #adb5bd;
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.04);
     padding: 0.6rem 1rem;
     transition: all 0.2s ease;
 }
