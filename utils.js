@@ -148,7 +148,7 @@ export const resizeAndPadImage = (file, targetSize = 1024) => {
 
                 canvas.toBlob((blob) => {
                     resolve(blob || file);
-                }, 'image/jpeg', 0.90);
+                }, 'image/webp', 0.80); // Cambiado a WebP con compresión optimizada
             };
             img.onerror = () => resolve(file); // Fallback
             img.src = event.target.result; // IMPORTANTE: Asignar src DESPUÉS de definir onload
@@ -174,9 +174,9 @@ export const uploadProductImage = async (file, productId, index, productName = '
     
     const baseName = cleanCode ? `${cleanName}-${cleanCode}` : cleanName;
     
-    const fileName = `${baseName}-${Date.now()}-${index}.jpg`;
+    const fileName = `${baseName}-${Date.now()}-${index}.webp`;
     const storageRef = ref(storage, `productos/${productId}/${fileName}`);
-    const snapshot = await uploadBytesResumable(storageRef, optimizedBlob, { contentType: 'image/jpeg' });
+    const snapshot = await uploadBytesResumable(storageRef, optimizedBlob, { contentType: 'image/webp' });
     return await getDownloadURL(snapshot.ref);
 };
 
@@ -1231,9 +1231,9 @@ export const fetchAndSquareImageUrl = async (url, fileName = 'imagen') => {
             ctx.drawImage(img, x, y, drawWidth, drawHeight);
 
             canvas.toBlob((blob) => {
-                if (blob) resolve(new File([blob], `${fileName}.jpg`, { type: 'image/jpeg' }));
+                if (blob) resolve(new File([blob], `${fileName}.webp`, { type: 'image/webp' }));
                 else reject(new Error("No se pudo crear el blob de la imagen"));
-            }, 'image/jpeg', 0.90);
+            }, 'image/webp', 0.80); // Cambiado a WebP
         };
 
         const img = new Image();
@@ -1275,7 +1275,11 @@ export const autoSquareImageIfNeeded = async (url, fileName = 'imagen') => {
         const needsFix = await new Promise((resolve) => {
             const img = new Image();
             img.crossOrigin = 'Anonymous';
-            img.onload = () => resolve(img.width !== 1024 || img.height !== 1024);
+            img.onload = () => {
+                // Verificamos si no es 1024x1024 O si no es formato WebP
+                const isNotWebp = !url.toLowerCase().includes('.webp');
+                resolve(img.width !== 1024 || img.height !== 1024 || isNotWebp);
+            };
             img.onerror = () => resolve(true); // Ante la duda (CORS block), forzamos el re-encuadre con proxy
             img.src = url;
         });
