@@ -2,7 +2,7 @@
 import { db, functions } from '../firebase.js';
 import { collection, writeBatch, doc, getDocs, query, where, addDoc, orderBy, Timestamp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
 import { httpsCallable } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-functions.js";
-import { showAlertModal, showConfirmationModal, roundUpToNearest50, formatCurrency, normalizeString, capitalizeFirstLetter, showToast } from '../utils.js';
+import { showAlertModal, showConfirmationModal, roundUpToNearest50, formatCurrency, normalizeString, capitalizeFirstLetter, showToast, fetchAndSquareImageUrl } from '../utils.js';
 import { getProductos, getMarcas, getColores, getRubros } from './dataManager.js';
 // --- ESTADO Y ELEMENTOS DEL DOM ---
 let productosEnPreparacion = [];
@@ -314,9 +314,22 @@ function setupEventListeners() {
 async function handleAddImagenUrl() {
     const url = prodImagenUrlInput.value.trim();
     if (url && (url.startsWith('http://') || url.startsWith('https://'))) {
-        currentImagenes.push({ type: 'existing', url });
+        const originalText = btnAddImagenUrl.innerHTML;
+        btnAddImagenUrl.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+        btnAddImagenUrl.disabled = true;
+        try {
+            const file = await fetchAndSquareImageUrl(url, `link_${Date.now()}`);
+            currentImagenes.push({ type: 'new', file });
+            showToast('Link descargado y encuadrado automáticamente', 'fa-check', '#1cc88a');
+        } catch(e) {
+            console.warn("Fallo descarga, usando link directo", e);
+            currentImagenes.push({ type: 'existing', url });
+            showToast('Añadido como link directo (no se pudo encuadrar)', 'fa-info-circle', '#f6c23e');
+        }
         renderImagenesPreview();
         prodImagenUrlInput.value = '';
+        btnAddImagenUrl.innerHTML = originalText;
+        btnAddImagenUrl.disabled = false;
     } else if (url) {
         showToast('Por favor ingresa un link válido que comience con http:// o https://', 'fa-exclamation-triangle', '#f6c23e');
     }
@@ -1052,17 +1065,30 @@ async function guardarTodoEnBD() {
     );
     if (!confirmado) return;
 
+    const originalButtonHtml = btnGuardarTodo.innerHTML;
+    btnGuardarTodo.disabled = true;
+
+    const updateStatus = (msg) => {
+        btnGuardarTodo.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> ${msg}`;
+    };
+
     const loadingOverlay = document.getElementById('loadingOverlay');
     loadingOverlay.style.display = 'flex';
     try {
+        updateStatus('Iniciando proceso...');
         const batch = writeBatch(db);
         const nuevasCategorias = { marcas: new Set(), colores: new Set(), rubros: new Set() };
 
         const { getAuth } = await import("https://www.gstatic.com/firebasejs/9.6.1/firebase-auth.js");
-        const { uploadProductImage } = await import('../utils.js');
+        const { uploadProductImage, autoSquareImageIfNeeded } = await import('../utils.js');
         const userEmail = getAuth().currentUser ? getAuth().currentUser.email : 'Sistema';
 
+        let processedCount = 0;
+        const totalProducts = productosEnPreparacion.length;
+
         for (const p of productosEnPreparacion) {
+            processedCount++;
+            updateStatus(`Procesando ${processedCount}/${totalProducts}: ${p.nombre}...`);
             const productoData = {
                 codigo: p.codigo, nombre: p.nombre, nombre_lowercase: p.nombre.toLowerCase(),
                 marca: p.marca, color: p.color, rubro: p.rubro,
@@ -1105,11 +1131,37 @@ async function guardarTodoEnBD() {
                 detailsMsg += ` | Tiendanube: Oculto`;
             }
 
-            // Subir nuevas imágenes al Storage
-            if (p.nuevasImagenes && p.nuevasImagenes.length > 0) {
-                for (let i = 0; i < p.nuevasImagenes.length; i++) {
-                    const downloadUrl = await uploadProductImage(p.nuevasImagenes[i], p.status === 'editar' ? p.id : docRef.id, i);
-                    productoData.imagenes.push(downloadUrl);
+            // Auto-cuadrar imágenes antes de procesarlas
+            if (p.imagenesTemporales && p.imagenesTemporales.length > 0) {
+                for (let i = 0; i < p.imagenesTemporales.length; i++) {
+                    if (p.imagenesTemporales[i].type === 'existing') {
+                        updateStatus(`[${processedCount}/${totalProducts}] Optimizando imagen principal...`);
+                        const fixedFile = await autoSquareImageIfNeeded(p.imagenesTemporales[i].url, `autofix_${Date.now()}_${i}`);
+                        if (fixedFile) p.imagenesTemporales[i] = { type: 'new', file: fixedFile };
+                    }
+                }
+            }
+
+            if (p.tieneVariantes && p.variantes) {
+                for (let i = 0; i < p.variantes.length; i++) {
+                    if (!p.variantes[i].imagenFile && p.variantes[i].imagenUrl) {
+                        updateStatus(`[${processedCount}/${totalProducts}] Optimizando variante ${i + 1}...`);
+                        const fixedFile = await autoSquareImageIfNeeded(p.variantes[i].imagenUrl, `autofix_var_${Date.now()}_${i}`);
+                        if (fixedFile) p.variantes[i].imagenFile = fixedFile;
+                    }
+                }
+            }
+
+            updateStatus(`[${processedCount}/${totalProducts}] Subiendo datos...`);
+            // Subir imágenes al Storage respetando el orden
+            if (p.imagenesTemporales && p.imagenesTemporales.length > 0) {
+                for (let i = 0; i < p.imagenesTemporales.length; i++) {
+                    if (p.imagenesTemporales[i].type === 'existing') {
+                        productoData.imagenes.push(p.imagenesTemporales[i].url);
+                    } else if (p.imagenesTemporales[i].type === 'new') {
+                        const downloadUrl = await uploadProductImage(p.imagenesTemporales[i].file, p.status === 'editar' ? p.id : docRef.id, i, p.nombre, p.codigo);
+                        productoData.imagenes.push(downloadUrl);
+                    }
                 }
             }
 
@@ -1117,7 +1169,7 @@ async function guardarTodoEnBD() {
             if (p.tieneVariantes && p.variantes) {
                 for (let i = 0; i < p.variantes.length; i++) {
                     if (p.variantes[i].imagenFile) {
-                        const downloadUrl = await uploadProductImage(p.variantes[i].imagenFile, p.status === 'editar' ? p.id : docRef.id, `var_${i}`);
+                        const downloadUrl = await uploadProductImage(p.variantes[i].imagenFile, p.status === 'editar' ? p.id : docRef.id, `var_${i}`, `${p.nombre}-${p.variantes[i].nombre}`, p.variantes[i].codigo);
                         p.variantes[i].imagenUrl = downloadUrl;
                     }
                     delete p.variantes[i].imagenFile; // No lo guardamos en la base de datos
@@ -1142,6 +1194,7 @@ async function guardarTodoEnBD() {
             if (p.rubro) nuevasCategorias.rubros.add(p.rubro);
         }
 
+        updateStatus('Guardando en Base de Datos...');
         await batch.commit();
 
         // Guardamos las nuevas categorías después del lote principal
@@ -1158,6 +1211,8 @@ async function guardarTodoEnBD() {
         showAlertModal("Ocurrió un error al guardar los productos.");
     } finally {
         loadingOverlay.style.display = 'none';
+        btnGuardarTodo.disabled = false;
+        btnGuardarTodo.innerHTML = originalButtonHtml;
     }
 }
 

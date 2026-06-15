@@ -1,5 +1,5 @@
 // secciones/productos.js
-import { getCollection, saveDocument, deleteDocument, formatCurrency, getTodayDate, updateDocument, capitalizeFirstLetter, showAlertModal, showConfirmationModal, roundUpToNearest50, normalizeString, showToast } from '../utils.js';
+import { getCollection, saveDocument, deleteDocument, formatCurrency, getTodayDate, updateDocument, capitalizeFirstLetter, showAlertModal, showConfirmationModal, roundUpToNearest50, normalizeString, showToast, fetchAndSquareImageUrl } from '../utils.js';
 import { getFirestore, collection, onSnapshot, query, orderBy, getDocs, writeBatch, Timestamp, doc, where, addDoc } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
 import { functions } from '../firebase.js';
 import { httpsCallable } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-functions.js";
@@ -277,9 +277,22 @@ function updateSortIcons() {
 async function handleAddModalImagenUrl() {
     const url = productoImagenUrlInput.value.trim();
     if (url && (url.startsWith('http://') || url.startsWith('https://'))) {
-        modalImagenes.push({ type: 'existing', url });
+        const originalText = btnAddProductoImagenUrl.innerHTML;
+        btnAddProductoImagenUrl.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+        btnAddProductoImagenUrl.disabled = true;
+        try {
+            const file = await fetchAndSquareImageUrl(url, `link_${Date.now()}`);
+            modalImagenes.push({ type: 'new', file });
+            showToast('Link descargado y encuadrado automáticamente', 'fa-check', '#1cc88a');
+        } catch(e) {
+            console.warn("Fallo descarga, usando link directo", e);
+            modalImagenes.push({ type: 'existing', url });
+            showToast('Añadido como link directo (no se pudo encuadrar)', 'fa-info-circle', '#f6c23e');
+        }
         renderModalImagenesPreview();
         productoImagenUrlInput.value = '';
+        btnAddProductoImagenUrl.innerHTML = originalText;
+        btnAddProductoImagenUrl.disabled = false;
     } else if (url) {
         showToast('Por favor ingresa un link válido que comience con http:// o https://', 'fa-exclamation-triangle', '#f6c23e');
     }
@@ -619,7 +632,11 @@ async function handleFormSubmit(e) {
 
     const originalButtonContent = saveButton.innerHTML;
     saveButton.disabled = true;
-    saveButton.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Guardando...`;
+    
+    const updateStatus = (msg) => {
+        saveButton.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> ${msg}`;
+    };
+    updateStatus('Preparando datos...');
 
     try {
         let oldProducto = null;
@@ -634,7 +651,35 @@ async function handleFormSubmit(e) {
             finalId = doc(collection(db, 'productos')).id;
         }
         
-        const { uploadProductImage } = await import('../utils.js');
+        const { uploadProductImage, autoSquareImageIfNeeded } = await import('../utils.js');
+
+        // Auto-cuadrar imágenes existentes si es necesario antes de procesar
+        if (modalImagenes.some(img => img.type === 'existing')) {
+            updateStatus('Revisando dimensiones de imágenes...');
+        }
+        for (let i = 0; i < modalImagenes.length; i++) {
+            if (modalImagenes[i].type === 'existing') {
+                updateStatus(`Optimizando imagen ${i + 1} de ${modalImagenes.length}...`);
+                const fixedFile = await autoSquareImageIfNeeded(modalImagenes[i].url, `autofix_${Date.now()}_${i}`);
+                if (fixedFile) modalImagenes[i] = { type: 'new', file: fixedFile };
+            }
+        }
+
+        // Auto-cuadrar imágenes de variantes si es necesario
+        if (tieneVariantes) {
+            if (variantes.some(v => !v.imagenFile && v.imagenUrl)) {
+                updateStatus('Revisando imágenes de variantes...');
+            }
+            for (let i = 0; i < variantes.length; i++) {
+                if (!variantes[i].imagenFile && variantes[i].imagenUrl) {
+                    updateStatus(`Optimizando variante ${i + 1} de ${variantes.length}...`);
+                    const fixedFile = await autoSquareImageIfNeeded(variantes[i].imagenUrl, `autofix_var_${Date.now()}_${i}`);
+                    if (fixedFile) variantes[i].imagenFile = fixedFile;
+                }
+            }
+        }
+
+        updateStatus('Subiendo imágenes y guardando...');
 
         // 2. Subimos imágenes generales del producto
         if (modalImagenes.length > 0) {
@@ -642,7 +687,7 @@ async function handleFormSubmit(e) {
                 if (modalImagenes[i].type === 'existing') {
                     productoData.imagenes.push(modalImagenes[i].url);
                 } else if (modalImagenes[i].type === 'new') {
-                    const url = await uploadProductImage(modalImagenes[i].file, finalId, i);
+                    const url = await uploadProductImage(modalImagenes[i].file, finalId, i, productoData.nombre, productoData.codigo);
                     productoData.imagenes.push(url);
                 }
             }
@@ -651,7 +696,7 @@ async function handleFormSubmit(e) {
         if (tieneVariantes) {
             for (let i = 0; i < variantes.length; i++) {
                 if (variantes[i].imagenFile) {
-                    const url = await uploadProductImage(variantes[i].imagenFile, finalId, `var_${i}`);
+                    const url = await uploadProductImage(variantes[i].imagenFile, finalId, `var_${i}`, `${productoData.nombre}-${variantes[i].nombre}`, variantes[i].codigo);
                     variantes[i].imagenUrl = url;
                 }
                 delete variantes[i].imagenFile;

@@ -118,13 +118,65 @@ export const getDocumentById = async (collectionName, docId) => {
 };
 
 /**
+ * Redimensiona y centra una imagen en un lienzo cuadrado (fondo blanco).
+ * Retorna un archivo optimizado en formato JPEG.
+ */
+export const resizeAndPadImage = (file, targetSize = 1024) => {
+    return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = (event) => {
+            const img = new Image();
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                canvas.width = targetSize;
+                canvas.height = targetSize;
+                const ctx = canvas.getContext('2d');
+                
+                // Fondo blanco
+                ctx.fillStyle = '#FFFFFF';
+                ctx.fillRect(0, 0, targetSize, targetSize);
+
+                // Calcular escala para que encaje dentro del cuadrado sin deformarse
+                const scale = Math.min(targetSize / img.width, targetSize / img.height);
+                const drawWidth = img.width * scale;
+                const drawHeight = img.height * scale;
+                const x = (targetSize - drawWidth) / 2;
+                const y = (targetSize - drawHeight) / 2;
+
+                ctx.drawImage(img, x, y, drawWidth, drawHeight);
+
+                canvas.toBlob((blob) => {
+                    resolve(blob || file);
+                }, 'image/jpeg', 0.90);
+            };
+            img.onerror = () => resolve(file); // Fallback
+            img.src = event.target.result; // IMPORTANTE: Asignar src DESPUÉS de definir onload
+        };
+        reader.onerror = () => resolve(file); // Fallback
+    });
+};
+
+/**
  * Sube una imagen de producto a Firebase Storage.
  */
-export const uploadProductImage = async (file, productId, index) => {
-    const fileExtension = file.name.split('.').pop();
-    const fileName = `img_${Date.now()}_${index}.${fileExtension}`;
+export const uploadProductImage = async (file, productId, index, productName = '', productCode = '') => {
+    // Procesamos y cuadramos la imagen antes de subirla
+    const optimizedBlob = await resizeAndPadImage(file, 1024);
+    
+    // Generar un nombre amigable SEO basado en el nombre del producto
+    let cleanName = productName ? normalizeString(productName).replace(/[^a-z0-9]/g, '-') : 'img';
+    cleanName = cleanName.replace(/-+/g, '-').replace(/(^-|-$)/g, ''); // Limpiar guiones
+
+    let cleanCode = productCode ? normalizeString(productCode).replace(/[^a-z0-9]/g, '-') : '';
+    cleanCode = cleanCode.replace(/-+/g, '-').replace(/(^-|-$)/g, ''); // Limpiar guiones
+    if (cleanCode.toLowerCase() === 'varios') cleanCode = '';
+    
+    const baseName = cleanCode ? `${cleanName}-${cleanCode}` : cleanName;
+    
+    const fileName = `${baseName}-${Date.now()}-${index}.jpg`;
     const storageRef = ref(storage, `productos/${productId}/${fileName}`);
-    const snapshot = await uploadBytesResumable(storageRef, file);
+    const snapshot = await uploadBytesResumable(storageRef, optimizedBlob, { contentType: 'image/jpeg' });
     return await getDownloadURL(snapshot.ref);
 };
 
@@ -1153,3 +1205,82 @@ export async function marcarVentaAnuladaConNC(docId, notaCreditoData) {
         console.error("Error actualizando la Nota de Crédito en la BD:", error);
     }
 }
+
+/**
+ * Descarga una imagen desde una URL (usando un proxy CORS si el servidor la bloquea),
+ * la cuadra a 1024x1024 con fondo blanco, y devuelve un File/Blob optimizado.
+ */
+export const fetchAndSquareImageUrl = async (url, fileName = 'imagen') => {
+    return new Promise((resolve, reject) => {
+        const drawAndResolve = (img) => {
+            const canvas = document.createElement('canvas');
+            const targetSize = 1024;
+            canvas.width = targetSize;
+            canvas.height = targetSize;
+            const ctx = canvas.getContext('2d');
+            
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillRect(0, 0, targetSize, targetSize);
+
+            const scale = Math.min(targetSize / img.width, targetSize / img.height);
+            const drawWidth = img.width * scale;
+            const drawHeight = img.height * scale;
+            const x = (targetSize - drawWidth) / 2;
+            const y = (targetSize - drawHeight) / 2;
+
+            ctx.drawImage(img, x, y, drawWidth, drawHeight);
+
+            canvas.toBlob((blob) => {
+                if (blob) resolve(new File([blob], `${fileName}.jpg`, { type: 'image/jpeg' }));
+                else reject(new Error("No se pudo crear el blob de la imagen"));
+            }, 'image/jpeg', 0.90);
+        };
+
+        const img = new Image();
+        img.crossOrigin = 'Anonymous';
+        img.onload = () => drawAndResolve(img);
+        img.onerror = () => {
+            if (!url.includes('wsrv.nl')) {
+                const proxyImg1 = new Image();
+                proxyImg1.crossOrigin = 'Anonymous';
+                proxyImg1.onload = () => drawAndResolve(proxyImg1);
+                proxyImg1.onerror = () => {
+                    const proxyImg2 = new Image();
+                    proxyImg2.crossOrigin = 'Anonymous';
+                    proxyImg2.onload = () => drawAndResolve(proxyImg2);
+                    proxyImg2.onerror = () => {
+                        const proxyImg3 = new Image();
+                        proxyImg3.crossOrigin = 'Anonymous';
+                        proxyImg3.onload = () => drawAndResolve(proxyImg3);
+                        proxyImg3.onerror = () => reject(new Error("Fallo al cargar la imagen con todos los proxies"));
+                        proxyImg3.src = `https://corsproxy.io/?${encodeURIComponent(url)}`;
+                    };
+                    proxyImg2.src = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+                };
+                // Primer intento: proxy especializado en caché de imágenes
+                proxyImg1.src = `https://wsrv.nl/?url=${encodeURIComponent(url)}`;
+            } else { reject(new Error("Fallo al cargar la imagen")); }
+        };
+        img.src = url;
+    });
+};
+
+/**
+ * Verifica si una imagen existente es exactamente de 1024x1024.
+ * Si no lo es, la descarga, la cuadra y devuelve el File.
+ * Si ya es cuadrada o falla, devuelve null para no alterar la original.
+ */
+export const autoSquareImageIfNeeded = async (url, fileName = 'imagen') => {
+    try {
+        const needsFix = await new Promise((resolve) => {
+            const img = new Image();
+            img.crossOrigin = 'Anonymous';
+            img.onload = () => resolve(img.width !== 1024 || img.height !== 1024);
+            img.onerror = () => resolve(true); // Ante la duda (CORS block), forzamos el re-encuadre con proxy
+            img.src = url;
+        });
+
+        if (needsFix) return await fetchAndSquareImageUrl(url, fileName);
+    } catch (e) { console.warn("Fallo al verificar o auto-cuadrar la imagen:", url); }
+    return null;
+};
