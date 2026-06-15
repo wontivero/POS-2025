@@ -170,9 +170,38 @@ function setDefaultCliente() {
     }
 }
 
-// REEMPLAZA ESTA FUNCIÓN EN ventas.js
+function checkStockIssuesGlobally() {
+    const hasStockIssues = ticket.some(item => {
+        const p = productosPlanos.find(x => x.id === item.id);
+        return p && p.publicarEnWeb && item.cantidad > p.stock;
+    });
+    
+    const metodosPagoCard = document.querySelector('.btn-pago-rapido')?.closest('.card');
+    
+    if (hasStockIssues) {
+        btnsPagoRapido.forEach(btn => btn.disabled = true);
+        camposPago.forEach(input => input.disabled = true);
+        document.getElementById('txtRecargoCredito').disabled = true;
+        
+        if (metodosPagoCard && !document.getElementById('stock-issue-banner')) {
+            const banner = document.createElement('div');
+            banner.id = 'stock-issue-banner';
+            banner.className = 'alert alert-danger m-3 fw-bold shadow-sm animate-bump';
+            banner.innerHTML = '<i class="fas fa-lock me-2"></i>Caja Bloqueada: Hay productos sin stock suficiente.';
+            metodosPagoCard.querySelector('.card-body').prepend(banner);
+        }
+    } else {
+        btnsPagoRapido.forEach(btn => btn.disabled = false);
+        camposPago.forEach(input => input.disabled = false);
+        document.getElementById('txtRecargoCredito').disabled = false;
+        
+        const banner = document.getElementById('stock-issue-banner');
+        if (banner) banner.remove();
+    }
+    
+    checkFinalizarVenta();
+}
 
-// REEMPLAZA ESTA FUNCIÓN ENTERA EN ventas.js
 
 function renderTicket() {
     ticketItems.innerHTML = '';
@@ -186,9 +215,12 @@ function renderTicket() {
         updateContadoValue();
     }
     ticket.forEach((item, index) => {
+        const productoOriginal = productosPlanos.find(p => p.id === item.id);
+        const isExceeded = productoOriginal && productoOriginal.publicarEnWeb && item.cantidad > productoOriginal.stock;
+
         const itemDiv = document.createElement('div');
-        // Añadimos una clase 'ticket-item' para darle estilos
-        itemDiv.className = 'list-group-item d-flex justify-content-between align-items-center p-2 ticket-item';
+        itemDiv.className = `list-group-item d-flex justify-content-between align-items-center p-2 ticket-item ${isExceeded ? 'bg-danger bg-opacity-10 border-danger' : ''}`;
+        
         // --- Lógica para el efecto visual ---
         if (item.justAdded || item.justChanged) {
             itemDiv.classList.add('animate-highlight');
@@ -212,12 +244,15 @@ function renderTicket() {
                title="Editar precio">
                 <i class="fas fa-pen-to-square"></i>
             </button>` : '';
+
+        const stockWarningHtml = isExceeded ? `<small class="text-danger fw-bold d-block stock-warning-text mt-1"><i class="fas fa-exclamation-triangle"></i> Límite excedido (Stock TN: ${productoOriginal.stock})</small>` : '';
         // --- FIN: Lógica para el ícono de edición de precio ---
  
         itemDiv.innerHTML = `
             <div>
                 <h6 class="mb-1 ticket-item-nombre">${item.nombre}${marcaTexto}${genericIndicator}</h6>
                 <small class="text-muted" id="desc-${index}">${item.cantidad} x ${formatCurrency(item.precio)}</small>${editPriceIcon}
+                ${stockWarningHtml}
             </div>
             <div class="d-flex align-items-center">
                 <div class="input-group me-2" style="width: 140px;">
@@ -231,7 +266,7 @@ function renderTicket() {
         `;
         ticketItems.appendChild(itemDiv);
     });
-    checkFinalizarVenta();
+    checkStockIssuesGlobally();
 }
 
 // =========================================================================
@@ -429,10 +464,34 @@ function handleQuantityLiveUpdate(e) {
     const item = ticket[index];
     if (!item) return;
 
-    const newQuantity = parseInt(e.target.value) || 0;
+    let newQuantity = parseInt(e.target.value) || 0;
 
     item.cantidad = newQuantity;
     item.total = item.precio * newQuantity;
+    
+    const productoOriginal = productosPlanos.find(p => p.id === item.id);
+    const isExceeded = productoOriginal && productoOriginal.publicarEnWeb && newQuantity > productoOriginal.stock;
+    
+    const itemDiv = e.target.closest('.ticket-item');
+    if (itemDiv) {
+        if (isExceeded) {
+            itemDiv.classList.add('bg-danger', 'bg-opacity-10', 'border-danger');
+            let warning = itemDiv.querySelector('.stock-warning-text');
+            if (!warning) {
+                const descContainer = itemDiv.querySelector('div:first-child');
+                warning = document.createElement('small');
+                warning.className = 'text-danger fw-bold d-block stock-warning-text mt-1';
+                warning.innerHTML = `<i class="fas fa-exclamation-triangle"></i> Límite excedido (Stock TN: ${productoOriginal.stock})`;
+                descContainer.appendChild(warning);
+            } else {
+                warning.innerHTML = `<i class="fas fa-exclamation-triangle"></i> Límite excedido (Stock TN: ${productoOriginal.stock})`;
+            }
+        } else {
+            itemDiv.classList.remove('bg-danger', 'bg-opacity-10', 'border-danger');
+            const warning = itemDiv.querySelector('.stock-warning-text');
+            if (warning) warning.remove();
+        }
+    }
 
     const descElement = document.getElementById(`desc-${index}`);
     const subtotalElement = document.getElementById(`subtotal-${index}`);
@@ -447,7 +506,7 @@ function handleQuantityLiveUpdate(e) {
     totalVentaBase = ticket.reduce((sum, currentItem) => sum + currentItem.total, 0);
     updateTotalDisplay();
     updateQuickPayButtons();
-    checkFinalizarVenta();
+    checkStockIssuesGlobally();
 }
 // AÑADE ESTA NUEVA FUNCIÓN COMPLETA EN ventas.js
 
@@ -457,9 +516,6 @@ async function handleQuantityManualChange(e) {
     const item = ticket[index];
 
     if (!item) return;
-
-    // Buscamos el producto original para verificar el stock
-    const productoOriginal = productosPlanos.find(p => p.id === item.id);
 
     // Si la cantidad no es un número válido o es menor a 1, eliminamos el producto
     if (isNaN(newQuantity) || newQuantity < 1) {
@@ -513,6 +569,11 @@ function updateContadoValue() {
 }
 
 function checkFinalizarVenta() {
+    const hasStockIssues = ticket.some(item => {
+        const p = productosPlanos.find(x => x.id === item.id);
+        return p && p.publicarEnWeb && item.cantidad > p.stock;
+    });
+
     const montoContado = parseFloat(txtContado.value) || 0;
     const montoTransferencia = parseFloat(document.getElementById('txtTransferencia').value) || 0;
     const montoDebito = parseFloat(document.getElementById('txtDebito').value) || 0;
@@ -524,7 +585,7 @@ function checkFinalizarVenta() {
     const totalPagado = montoContado + montoTransferencia + montoDebito + montoCreditoConRecargo;
     const totalConRecargo = totalVentaBase + Math.round(montoCredito * recargo);
 
-    if (totalPagado >= totalConRecargo && totalConRecargo > 0) {
+    if (totalPagado >= totalConRecargo && totalConRecargo > 0 && !hasStockIssues) {
         btnFinalizarVenta.disabled = false;
     } else {
         btnFinalizarVenta.disabled = true;
@@ -768,6 +829,16 @@ async function handleQuickPayment(e) {
         showToast('No hay productos en el ticket para pagar.', 'fa-exclamation-triangle', '#f6c23e');
         return;
     }
+
+    const hasStockIssues = ticket.some(item => {
+        const p = productosPlanos.find(x => x.id === item.id);
+        return p && p.publicarEnWeb && item.cantidad > p.stock;
+    });
+    if (hasStockIssues) {
+        showToast('Caja bloqueada. Ajusta el stock para continuar.', 'fa-lock', '#dc3545');
+        return;
+    }
+
     const metodo = e.target.closest('.btn-pago-rapido').dataset.metodo;
 
     camposPago.forEach(input => input.value = '0');
@@ -1670,10 +1741,10 @@ export async function init() {
             }
 
             switch (e.key) {
-                case 'F1': e.preventDefault(); document.getElementById('btnPagoRapidoContado')?.click(); break;
-                case 'F2': e.preventDefault(); document.getElementById('btnPagoRapidoTransferencia')?.click(); break;
-                case 'F3': e.preventDefault(); document.getElementById('btnPagoRapidoDebito')?.click(); break;
-                case 'F4': e.preventDefault(); document.getElementById('btnPagoRapidoCredito')?.click(); break;
+                case 'F1': e.preventDefault(); { const b = document.getElementById('btnPagoRapidoContado'); if(b && !b.disabled) b.click(); } break;
+                case 'F2': e.preventDefault(); { const b = document.getElementById('btnPagoRapidoTransferencia'); if(b && !b.disabled) b.click(); } break;
+                case 'F3': e.preventDefault(); { const b = document.getElementById('btnPagoRapidoDebito'); if(b && !b.disabled) b.click(); } break;
+                case 'F4': e.preventDefault(); { const b = document.getElementById('btnPagoRapidoCredito'); if(b && !b.disabled) b.click(); } break;
                 case 'Escape':
                     e.preventDefault();
                     if (isSearchInput) {
