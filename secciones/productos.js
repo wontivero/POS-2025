@@ -33,8 +33,8 @@ let quillModal;
 let productoAlto, productoAncho, productoProfundidad;
 let productoEcommerceFields;
 let productoImagenesInput, productoImagenesPreview, productoImagenUrlInput, btnAddProductoImagenUrl;
-let modalSelectedFiles = [];
-let modalExistingImages = [];
+let modalImagenes = [];
+let draggedImageIndex = null;
 let btnImportarProductos, importarArchivoInput;
 let cachedSocialPosts = { instagram: null, whatsapp: null }; // Memoria para los posts generados
 
@@ -277,7 +277,7 @@ function updateSortIcons() {
 async function handleAddModalImagenUrl() {
     const url = productoImagenUrlInput.value.trim();
     if (url && (url.startsWith('http://') || url.startsWith('https://'))) {
-        modalExistingImages.push(url);
+        modalImagenes.push({ type: 'existing', url });
         renderModalImagenesPreview();
         productoImagenUrlInput.value = '';
     } else if (url) {
@@ -287,45 +287,133 @@ async function handleAddModalImagenUrl() {
 
 function handleModalImagenesSelection(e) {
     const files = Array.from(e.target.files);
-    modalSelectedFiles = [...modalSelectedFiles, ...files];
+    files.forEach(file => modalImagenes.push({ type: 'new', file }));
     renderModalImagenesPreview();
     productoImagenesInput.value = '';
+}
+
+function handleDragStart(e) {
+    draggedImageIndex = parseInt(this.dataset.index);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', this.dataset.index);
+    this.classList.add('opacity-50');
+}
+
+function handleDragOver(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    return false;
+}
+
+function handleDragEnter(e) {
+    e.preventDefault();
+    this.classList.add('border-primary', 'border-2');
+}
+
+function handleDragLeave(e) {
+    this.classList.remove('border-primary', 'border-2');
+}
+
+function handleDrop(e) {
+    e.stopPropagation();
+    this.classList.remove('border-primary', 'border-2');
+    
+    const targetIndex = parseInt(this.dataset.index);
+    if (draggedImageIndex !== null && draggedImageIndex !== targetIndex) {
+        const draggedItem = modalImagenes.splice(draggedImageIndex, 1)[0];
+        modalImagenes.splice(targetIndex, 0, draggedItem);
+        renderModalImagenesPreview();
+    }
+    return false;
+}
+
+function handleDragEnd(e) {
+    this.classList.remove('opacity-50');
+    draggedImageIndex = null;
 }
 
 function renderModalImagenesPreview() {
     if (!productoImagenesPreview) return;
     productoImagenesPreview.innerHTML = '';
 
-    modalExistingImages.forEach((url, index) => {
-        const div = document.createElement('div');
-        div.className = 'position-relative border rounded p-1 bg-white';
-        div.style.width = '80px'; div.style.height = '80px';
-        div.innerHTML = `
-            <img src="${url}" class="w-100 h-100 object-fit-cover rounded" onerror="this.onerror=null; this.src='https://placehold.co/80x80/dc3545/ffffff?text=Bloqueada'; this.title='El sitio original no permite usar sus imágenes mediante un link directo.'">
-            <button type="button" class="btn btn-sm btn-danger position-absolute top-0 start-100 translate-middle rounded-circle" style="width:24px;height:24px;padding:0;line-height:1;">&times;</button>
+    if (modalImagenes.length === 0) {
+        const emptyState = document.createElement('div');
+        emptyState.className = 'w-100 d-flex flex-column align-items-center justify-content-center text-muted p-4 rounded bg-light mb-2';
+        emptyState.style.border = '2px dashed #adb5bd';
+        emptyState.style.cursor = 'pointer';
+        emptyState.innerHTML = `
+            <i class="fas fa-cloud-upload-alt fa-3x mb-2 text-secondary opacity-50"></i>
+            <p class="mb-0 fw-bold text-dark">Añadir imagen principal</p>
+            <small>Haz clic, usa un Link, o presiona <b>Ctrl+V</b> para pegar</small>
         `;
-        div.querySelector('button').onclick = () => {
-            modalExistingImages.splice(index, 1);
-            renderModalImagenesPreview();
+        emptyState.onclick = () => {
+            if (productoImagenesInput) productoImagenesInput.click();
         };
-        productoImagenesPreview.appendChild(div);
-    });
+        productoImagenesPreview.appendChild(emptyState);
+    }
 
-    modalSelectedFiles.forEach((file, index) => {
+    modalImagenes.forEach((imgObj, index) => {
         const div = document.createElement('div');
         div.className = 'position-relative border rounded p-1 bg-white';
         div.style.width = '80px'; div.style.height = '80px';
+        div.style.cursor = 'move';
+        div.draggable = true;
+        div.dataset.index = index;
+
+        div.addEventListener('dragstart', handleDragStart);
+        div.addEventListener('dragover', handleDragOver);
+        div.addEventListener('dragenter', handleDragEnter);
+        div.addEventListener('dragleave', handleDragLeave);
+        div.addEventListener('drop', handleDrop);
+        div.addEventListener('dragend', handleDragEnd);
+
         const img = document.createElement('img');
         img.className = 'w-100 h-100 object-fit-cover rounded';
-        const reader = new FileReader();
-        reader.onload = e => img.src = e.target.result;
-        reader.readAsDataURL(file);
+
+        if (imgObj.type === 'existing') {
+            img.src = imgObj.url;
+            img.onerror = function() {
+                this.onerror=null; 
+                this.src='https://placehold.co/80x80/dc3545/ffffff?text=Bloqueada'; 
+                this.title='El sitio original no permite usar sus imágenes mediante un link directo.';
+            };
+        } else {
+            if (imgObj.previewData) {
+                img.src = imgObj.previewData;
+            } else {
+                const reader = new FileReader();
+                reader.onload = e => {
+                    img.src = e.target.result;
+                    imgObj.previewData = e.target.result;
+                };
+                reader.readAsDataURL(imgObj.file);
+            }
+        }
+        
         div.appendChild(img);
+
         const btn = document.createElement('button');
+        btn.type = 'button';
         btn.className = 'btn btn-sm btn-danger position-absolute top-0 start-100 translate-middle rounded-circle';
-        btn.style = 'width:24px;height:24px;padding:0;line-height:1;'; btn.innerHTML = '&times;';
-        btn.onclick = () => { modalSelectedFiles.splice(index, 1); renderModalImagenesPreview(); };
+        btn.style = 'width:24px;height:24px;padding:0;line-height:1; z-index: 10;'; 
+        btn.innerHTML = '&times;';
+        btn.onclick = (e) => { 
+            e.stopPropagation();
+            modalImagenes.splice(index, 1); 
+            renderModalImagenesPreview(); 
+        };
         div.appendChild(btn);
+
+        if (index === 0) {
+            const badge = document.createElement('span');
+            badge.className = 'badge bg-primary position-absolute bottom-0 start-50 translate-middle-x w-100';
+            badge.style.fontSize = '0.6rem';
+            badge.style.whiteSpace = 'nowrap';
+            badge.style.borderRadius = '0 0 0.25rem 0.25rem';
+            badge.textContent = 'Principal';
+            div.appendChild(badge);
+        }
+
         productoImagenesPreview.appendChild(div);
     });
 
@@ -519,7 +607,7 @@ async function handleFormSubmit(e) {
         ancho: parseInt(productoAncho ? productoAncho.value : 0) || 0,
         profundidad: parseInt(productoProfundidad ? productoProfundidad.value : 0) || 0,
         categoriaWeb: productoCategoriaWeb ? productoCategoriaWeb.value : '',
-        imagenes: [...modalExistingImages]
+        imagenes: []
     };
     
     if (tieneVariantes) productoData.variantes = variantes;
@@ -549,10 +637,14 @@ async function handleFormSubmit(e) {
         const { uploadProductImage } = await import('../utils.js');
 
         // 2. Subimos imágenes generales del producto
-        if (modalSelectedFiles.length > 0) {
-            for (let i = 0; i < modalSelectedFiles.length; i++) {
-                const url = await uploadProductImage(modalSelectedFiles[i], finalId, i);
-                productoData.imagenes.push(url);
+        if (modalImagenes.length > 0) {
+            for (let i = 0; i < modalImagenes.length; i++) {
+                if (modalImagenes[i].type === 'existing') {
+                    productoData.imagenes.push(modalImagenes[i].url);
+                } else if (modalImagenes[i].type === 'new') {
+                    const url = await uploadProductImage(modalImagenes[i].file, finalId, i);
+                    productoData.imagenes.push(url);
+                }
             }
         }
 
@@ -986,7 +1078,7 @@ function abrirProductoModal(modo, producto = null) {
             }
             productoCategoriaWeb.value = producto.categoriaWeb ?? '';
         }
-        modalExistingImages = producto.imagenes || [];
+        modalImagenes = (producto.imagenes || []).map(url => ({ type: 'existing', url }));
         renderModalImagenesPreview();
         document.getElementById('generic-profit-fields').style.display = producto.isGeneric ? 'block' : 'none';
         updatePorcentajeField();
@@ -1054,8 +1146,7 @@ function resetProductoModal() {
         modalProductoTieneVariantes.dispatchEvent(new Event('change'));
     }
     
-    modalSelectedFiles = [];
-    modalExistingImages = [];
+    modalImagenes = [];
     if(productoImagenesInput) productoImagenesInput.value = '';
     renderModalImagenesPreview();
     if (productoImagenUrlInput) productoImagenUrlInput.value = '';
@@ -1504,6 +1595,7 @@ export function init() {
         btnAddProductoImagenUrl.removeEventListener('click', handleAddModalImagenUrl);
         btnAddProductoImagenUrl.addEventListener('click', handleAddModalImagenUrl);
     }
+
     if (productoImagenUrlInput) {
         productoImagenUrlInput.onkeydown = (e) => {
             if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); handleAddModalImagenUrl(); }
@@ -1647,6 +1739,41 @@ export function init() {
 
     tableContainer = document.querySelector('.table-responsive-scroll');
     if (tableContainer) tableContainer.addEventListener('scroll', handleScroll);
+
+    // LISTENER GLOBAL PARA CAPTURAR Ctrl+V (PEGAR IMÁGENES O LINKS)
+    if (!window.pasteListenerProductosModal) {
+        document.addEventListener('paste', (e) => {
+            if (productoModalEl && productoModalEl.classList.contains('show')) {
+                const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+                let imagePasted = false;
+                
+                for (let index in items) {
+                    const item = items[index];
+                    if (item.kind === 'file' && item.type.startsWith('image/')) {
+                        const blob = item.getAsFile();
+                        const file = new File([blob], `pasted_image_${Date.now()}.png`, { type: blob.type });
+                        modalImagenes.push({ type: 'new', file });
+                        imagePasted = true;
+                    }
+                }
+                
+                if (imagePasted) {
+                    renderModalImagenesPreview();
+                    showToast('Imagen agregada desde el portapapeles', 'fa-check', '#1cc88a');
+                } else {
+                    const pastedText = (e.clipboardData || window.clipboardData).getData('text');
+                    if (pastedText && (pastedText.startsWith('http://') || pastedText.startsWith('https://'))) {
+                        if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
+                            modalImagenes.push({ type: 'existing', url: pastedText.trim() });
+                            renderModalImagenesPreview();
+                            showToast('Link de imagen agregado automáticamente', 'fa-check', '#1cc88a');
+                        }
+                    }
+                }
+            }
+        });
+        window.pasteListenerProductosModal = true;
+    }
 
     return productoModal;
 }

@@ -17,8 +17,8 @@ let quillCarga;
 let prodAlto, prodAncho, prodProfundidad; // <-- Dimensiones E-commerce
 let prodTieneVariantes, variantesContainer, variantesTbody, btnAddVariante; // <-- Elementos de Variantes
 let prodImagenesInput, prodImagenesPreview, prodImagenUrlInput, btnAddImagenUrl;
-let currentSelectedFiles = []; // Para almacenar las imágenes a subir temporalmente
-let currentExistingImages = []; // Para imágenes que ya estaban en el producto al editar
+let currentImagenes = [];
+let currentDraggedImageIndex = null;
 let prodEcommerceFields;
 let datalistMarcas, datalistColores, datalistRubros;
 
@@ -186,6 +186,7 @@ function setupEventListeners() {
     if (btnAddImagenUrl) {
         btnAddImagenUrl.onclick = handleAddImagenUrl;
     }
+
     if (prodImagenUrlInput) {
         prodImagenUrlInput.onkeydown = (e) => {
             if (e.key === 'Enter') {
@@ -272,12 +273,48 @@ function setupEventListeners() {
             }
         };
     }
+
+    // LISTENER GLOBAL PARA CAPTURAR Ctrl+V EN CARGA RÁPIDA
+    if (!window.pasteListenerCargaProductos) {
+        document.addEventListener('paste', (e) => {
+            const seccionCarga = document.getElementById('seccion-carga-productos');
+            if (!seccionCarga || seccionCarga.style.display === 'none') return;
+            
+            const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+            let imagePasted = false;
+            
+            for (let index in items) {
+                const item = items[index];
+                if (item.kind === 'file' && item.type.startsWith('image/')) {
+                    const blob = item.getAsFile();
+                    const file = new File([blob], `pasted_image_${Date.now()}.png`, { type: blob.type });
+                    currentImagenes.push({ type: 'new', file });
+                    imagePasted = true;
+                }
+            }
+            
+            if (imagePasted) {
+                renderImagenesPreview();
+                showToast('Imagen agregada desde el portapapeles', 'fa-check', '#1cc88a');
+            } else {
+                const pastedText = (e.clipboardData || window.clipboardData).getData('text');
+                if (pastedText && (pastedText.startsWith('http://') || pastedText.startsWith('https://'))) {
+                    if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
+                        currentImagenes.push({ type: 'existing', url: pastedText.trim() });
+                        renderImagenesPreview();
+                        showToast('Link de imagen agregado automáticamente', 'fa-check', '#1cc88a');
+                    }
+                }
+            }
+        });
+        window.pasteListenerCargaProductos = true;
+    }
 }
 
 async function handleAddImagenUrl() {
     const url = prodImagenUrlInput.value.trim();
     if (url && (url.startsWith('http://') || url.startsWith('https://'))) {
-        currentExistingImages.push(url);
+        currentImagenes.push({ type: 'existing', url });
         renderImagenesPreview();
         prodImagenUrlInput.value = '';
     } else if (url) {
@@ -288,62 +325,134 @@ async function handleAddImagenUrl() {
 
 function handleImagenesSelection(e) {
     const files = Array.from(e.target.files);
-    // Agregamos los nuevos archivos
-    currentSelectedFiles = [...currentSelectedFiles, ...files];
+    files.forEach(file => currentImagenes.push({ type: 'new', file }));
     renderImagenesPreview();
     // Limpiamos el input para permitir seleccionar la misma imagen si la borraron
     prodImagenesInput.value = '';
+}
+
+function handleDragStartCarga(e) {
+    currentDraggedImageIndex = parseInt(this.dataset.index);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', this.dataset.index);
+    this.classList.add('opacity-50');
+}
+
+function handleDragOverCarga(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    return false;
+}
+
+function handleDragEnterCarga(e) {
+    e.preventDefault();
+    this.classList.add('border-primary', 'border-2');
+}
+
+function handleDragLeaveCarga(e) {
+    this.classList.remove('border-primary', 'border-2');
+}
+
+function handleDropCarga(e) {
+    e.stopPropagation();
+    this.classList.remove('border-primary', 'border-2');
+    
+    const targetIndex = parseInt(this.dataset.index);
+    if (currentDraggedImageIndex !== null && currentDraggedImageIndex !== targetIndex) {
+        const draggedItem = currentImagenes.splice(currentDraggedImageIndex, 1)[0];
+        currentImagenes.splice(targetIndex, 0, draggedItem);
+        renderImagenesPreview();
+    }
+    return false;
+}
+
+function handleDragEndCarga(e) {
+    this.classList.remove('opacity-50');
+    currentDraggedImageIndex = null;
 }
 
 function renderImagenesPreview() {
     if (!prodImagenesPreview) return;
     prodImagenesPreview.innerHTML = '';
 
-    // Renderizar imágenes existentes (de edición)
-    currentExistingImages.forEach((url, index) => {
-        const div = document.createElement('div');
-        div.className = 'position-relative border rounded p-1 bg-white';
-        div.style.width = '80px';
-        div.style.height = '80px';
-        div.innerHTML = `
-            <img src="${url}" class="w-100 h-100 object-fit-cover rounded" onerror="this.onerror=null; this.src='https://placehold.co/80x80/dc3545/ffffff?text=Bloqueada'; this.title='El sitio original no permite usar sus imágenes mediante un link directo.'">
-            <button type="button" class="btn btn-sm btn-danger position-absolute top-0 start-100 translate-middle rounded-circle" style="width:24px;height:24px;padding:0;line-height:1;" data-existing-index="${index}">&times;</button>
+    if (currentImagenes.length === 0) {
+        const emptyState = document.createElement('div');
+        emptyState.className = 'w-100 d-flex flex-column align-items-center justify-content-center text-muted p-4 rounded bg-light mb-2';
+        emptyState.style.border = '2px dashed #adb5bd';
+        emptyState.style.cursor = 'pointer';
+        emptyState.innerHTML = `
+            <i class="fas fa-cloud-upload-alt fa-3x mb-2 text-secondary opacity-50"></i>
+            <p class="mb-0 fw-bold text-dark">Añadir imagen principal</p>
+            <small>Haz clic, usa un Link, o presiona <b>Ctrl+V</b> para pegar</small>
         `;
-        div.querySelector('button').addEventListener('click', () => {
-            currentExistingImages.splice(index, 1);
-            renderImagenesPreview();
-        });
-        prodImagenesPreview.appendChild(div);
-    });
+        emptyState.onclick = () => {
+            if (prodImagenesInput) prodImagenesInput.click();
+        };
+        prodImagenesPreview.appendChild(emptyState);
+    }
 
-    // Renderizar nuevos archivos locales
-    currentSelectedFiles.forEach((file, index) => {
+    currentImagenes.forEach((imgObj, index) => {
         const div = document.createElement('div');
         div.className = 'position-relative border rounded p-1 bg-white';
-        div.style.width = '80px';
-        div.style.height = '80px';
+        div.style.width = '80px'; div.style.height = '80px';
+        div.style.cursor = 'move';
+        div.draggable = true;
+        div.dataset.index = index;
+
+        div.addEventListener('dragstart', handleDragStartCarga);
+        div.addEventListener('dragover', handleDragOverCarga);
+        div.addEventListener('dragenter', handleDragEnterCarga);
+        div.addEventListener('dragleave', handleDragLeaveCarga);
+        div.addEventListener('drop', handleDropCarga);
+        div.addEventListener('dragend', handleDragEndCarga);
 
         const img = document.createElement('img');
         img.className = 'w-100 h-100 object-fit-cover rounded';
 
-        // Leemos el archivo local para la previsualización
-        const reader = new FileReader();
-        reader.onload = (e) => img.src = e.target.result;
-        reader.readAsDataURL(file);
-
+        if (imgObj.type === 'existing') {
+            img.src = imgObj.url;
+            img.onerror = function() {
+                this.onerror=null; 
+                this.src='https://placehold.co/80x80/dc3545/ffffff?text=Bloqueada'; 
+                this.title='El sitio original no permite usar sus imágenes mediante un link directo.';
+            };
+        } else {
+            if (imgObj.previewData) {
+                img.src = imgObj.previewData;
+            } else {
+                const reader = new FileReader();
+                reader.onload = e => {
+                    img.src = e.target.result;
+                    imgObj.previewData = e.target.result;
+                };
+                reader.readAsDataURL(imgObj.file);
+            }
+        }
+        
         div.appendChild(img);
 
-        const btnRemove = document.createElement('button');
-        btnRemove.type = 'button';
-        btnRemove.className = 'btn btn-sm btn-danger position-absolute top-0 start-100 translate-middle rounded-circle';
-        btnRemove.style = 'width:24px;height:24px;padding:0;line-height:1;';
-        btnRemove.innerHTML = '&times;';
-        btnRemove.addEventListener('click', () => {
-            currentSelectedFiles.splice(index, 1);
-            renderImagenesPreview();
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn btn-sm btn-danger position-absolute top-0 start-100 translate-middle rounded-circle';
+        btn.style = 'width:24px;height:24px;padding:0;line-height:1; z-index: 10;'; 
+        btn.innerHTML = '&times;';
+        btn.addEventListener('click', (e) => { 
+            e.stopPropagation();
+            currentImagenes.splice(index, 1); 
+            renderImagenesPreview(); 
         });
+        div.appendChild(btn);
 
-        div.appendChild(btnRemove);
+        if (index === 0) {
+            const badge = document.createElement('span');
+            badge.className = 'badge bg-primary position-absolute bottom-0 start-50 translate-middle-x w-100';
+            badge.style.fontSize = '0.6rem';
+            badge.style.whiteSpace = 'nowrap';
+            badge.style.borderRadius = '0 0 0.25rem 0.25rem';
+            badge.textContent = 'Principal';
+            div.appendChild(badge);
+        }
+
         prodImagenesPreview.appendChild(div);
     });
 
@@ -718,8 +827,7 @@ async function agregarProductoAGrilla(duplicarDespues = false) {
         ancho: parseInt(prodAncho ? prodAncho.value : 0) || 0,
         profundidad: parseInt(prodProfundidad ? prodProfundidad.value : 0) || 0,
         categoriaWeb: prodCategoriaWeb ? prodCategoriaWeb.value : '',
-        nuevasImagenes: [...currentSelectedFiles], // Guardamos los archivos para la fila
-        imagenesExistentes: [...currentExistingImages] // Guardamos las URLs que se mantienen
+        imagenesTemporales: [...currentImagenes] // Guardamos todo en orden
     };
 
     const indexExistente = productosEnPreparacion.findIndex(p => p.id === productoParaGrilla.id);
@@ -747,13 +855,12 @@ function limpiarFormulario() {
     form.classList.remove('duplicando');
     modoFormulario = 'nuevo';
     productoEnEdicionId = null;
-    currentSelectedFiles = [];
+    currentImagenes = [];
     variantesTbody.innerHTML = '';
     if (prodTieneVariantes) {
         prodTieneVariantes.checked = false;
         prodTieneVariantes.dispatchEvent(new Event('change'));
     }
-    currentExistingImages = [];
     renderImagenesPreview();
     if (quillCarga) quillCarga.root.innerHTML = '';
     if (prodImagenUrlInput) prodImagenUrlInput.value = '';
@@ -797,8 +904,7 @@ function poblarFormulario(producto, modoDuplicar = false) {
         }
         prodCategoriaWeb.value = producto.categoriaWeb || '';
     }
-    currentSelectedFiles = producto.nuevasImagenes || [];
-    currentExistingImages = producto.imagenesExistentes || producto.imagenes || [];
+    currentImagenes = producto.imagenesTemporales || (producto.imagenes || []).map(url => ({ type: 'existing', url }));
     renderImagenesPreview();
     if (producto.costo > 0) {
         prodGanancia.value = ((producto.venta - producto.costo) / producto.costo * 100).toFixed(2);
