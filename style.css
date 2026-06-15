@@ -295,14 +295,16 @@ td.precio-venta {
     display: inline-block; /* Necesario para que funcione el efecto scale */
 }
 
-/* Animación de "latido" para el total al actualizarse */
-@keyframes bump-total {
-    0% { transform: scale(1); }
-    50% { transform: scale(1.08); color: #0d6efd; }
-    100% { transform: scale(1); color: #198754; }
+/* Animación de parpadeo y latido para el total al actualizarse */
+@keyframes flash-total {
+    0% { transform: scale(1); text-shadow: 0 0 0 transparent; }
+    25% { opacity: 0.5; color: #0dcaf0; }
+    50% { transform: scale(1.15); opacity: 1; color: #0d6efd; text-shadow: 0 0 20px rgba(13, 110, 253, 0.6); }
+    75% { opacity: 0.5; color: #0dcaf0; }
+    100% { transform: scale(1); opacity: 1; color: #198754; text-shadow: 0 0 0 transparent; }
 }
 .animate-bump {
-    animation: bump-total 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+    animation: flash-total 0.5s cubic-bezier(0.25, 0.8, 0.25, 1);
 }
 
 /* Añadir esto a tu archivo de estilos */
