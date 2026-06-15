@@ -1284,3 +1284,57 @@ export const autoSquareImageIfNeeded = async (url, fileName = 'imagen') => {
     } catch (e) { console.warn("Fallo al verificar o auto-cuadrar la imagen:", url); }
     return null;
 };
+
+let progressModalEl, progressModal;
+
+/**
+ * Muestra un modal de progreso no cerrable para operaciones largas.
+ * @param {string} title - El título del modal.
+ * @returns {object} - Un objeto con métodos para controlar el modal: update, finish, error, hide.
+ */
+export function showProgressModal(title) {
+    if (!progressModalEl) {
+        progressModalEl = document.createElement('div');
+        progressModalEl.className = 'modal fade';
+        progressModalEl.id = 'progressModal';
+        progressModalEl.setAttribute('data-bs-backdrop', 'static');
+        progressModalEl.setAttribute('data-bs-keyboard', 'false');
+        progressModalEl.innerHTML = `
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content border-0 shadow-lg" style="border-radius: 1rem;">
+                    <div class="modal-header border-0">
+                        <h5 class="modal-title fw-bold text-primary" id="progressModalTitle"></h5>
+                    </div>
+                    <div class="modal-body px-4">
+                        <p id="progressModalText" class="mb-2 fw-medium text-dark"></p>
+                        <div class="progress mb-2" style="height: 25px;">
+                            <div id="progressModalBar" class="progress-bar progress-bar-striped progress-bar-animated fw-bold" role="progressbar" style="width: 0%;">0%</div>
+                        </div>
+                        <p id="progressModalSubText" class="text-muted small mt-2" style="min-height: 20px;"></p>
+                    </div>
+                    <div class="modal-footer border-0 d-none">
+                        <button type="button" class="btn btn-primary rounded-pill px-4" data-bs-dismiss="modal">Cerrar</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(progressModalEl);
+        progressModal = new bootstrap.Modal(progressModalEl);
+    }
+
+    document.getElementById('progressModalTitle').textContent = title;
+    document.getElementById('progressModalText').textContent = 'Iniciando...';
+    document.getElementById('progressModalSubText').innerHTML = '';
+    const bar = document.getElementById('progressModalBar');
+    bar.style.width = '0%'; bar.textContent = '0%'; bar.classList.remove('bg-success', 'bg-danger'); bar.classList.add('progress-bar-animated');
+    progressModalEl.querySelector('.modal-footer').classList.add('d-none');
+    
+    progressModal.show();
+
+    return {
+        update: (p, txt, sub) => { const b = document.getElementById('progressModalBar'); b.style.width = `${p}%`; b.textContent = `${Math.round(p)}%`; document.getElementById('progressModalText').textContent = txt; if(sub) document.getElementById('progressModalSubText').innerHTML = sub; },
+        finish: (txt, sub) => { const b = document.getElementById('progressModalBar'); b.style.width = '100%'; b.textContent = '100%'; b.classList.remove('progress-bar-animated'); b.classList.add('bg-success'); document.getElementById('progressModalText').textContent = txt; if(sub) document.getElementById('progressModalSubText').innerHTML = sub; progressModalEl.querySelector('.modal-footer').classList.remove('d-none'); },
+        error: (err) => { const b = document.getElementById('progressModalBar'); b.classList.remove('progress-bar-animated'); b.classList.add('bg-danger'); document.getElementById('progressModalText').innerHTML = `<i class="fas fa-times-circle me-2"></i>Error`; document.getElementById('progressModalSubText').textContent = err; progressModalEl.querySelector('.modal-footer').classList.remove('d-none'); },
+        hide: () => progressModal.hide()
+    };
+}

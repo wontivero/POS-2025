@@ -596,3 +596,65 @@ form.duplicando::before {
 @keyframes toast-fade-out { 
     to { opacity: 0; transform: translateY(-20px); } 
 }
+
+/* ==========================================================================
+   MODERNIZACIÓN DEL MODAL GENÉRICO (Alertas y Confirmaciones)
+   ========================================================================== */
+#genericModal .modal-content {
+    border-radius: 1.5rem;
+    border: none;
+    box-shadow: 0 15px 35px rgba(0,0,0,0.15);
+    overflow: hidden;
+}
+
+#genericModal .modal-header {
+    border-bottom: 1px solid rgba(0,0,0,0.05);
+    background-color: #f8f9fa;
+    padding: 1.25rem 1.5rem;
+}
+
+#genericModal .modal-title {
+    font-weight: 800;
+    color: #2c3e50;
+}
+
+#genericModal .modal-body {
+    padding: 1.5rem 1.5rem 1rem 1.5rem;
+    font-size: 1.05rem;
+    color: #495057;
+    line-height: 1.5;
+}
+
+#genericModal .modal-footer {
+    border-top: none;
+    padding: 1rem 1.5rem 1.5rem;
+    gap: 0.5rem;
+}
+
+#genericModal #btn-generic-cancel,
+#genericModal #btn-generic-confirm {
+    border-radius: 50rem; /* Botones tipo píldora */
+    padding: 0.6rem 1.5rem;
+    font-weight: 700;
+    transition: all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+#genericModal #btn-generic-cancel {
+    background-color: #f1f3f5;
+    border-color: transparent;
+    color: #495057;
+}
+
+#genericModal #btn-generic-cancel:hover {
+    background-color: #e2e6ea;
+    color: #212529;
+}
+
+#genericModal #btn-generic-confirm {
+    box-shadow: 0 4px 10px rgba(13, 110, 253, 0.2);
+}
+
+#genericModal #btn-generic-confirm:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 15px rgba(13, 110, 253, 0.3);
+}

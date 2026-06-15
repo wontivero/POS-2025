@@ -1,5 +1,5 @@
 // secciones/productos.js
-import { getCollection, saveDocument, deleteDocument, formatCurrency, getTodayDate, updateDocument, capitalizeFirstLetter, showAlertModal, showConfirmationModal, roundUpToNearest50, normalizeString, showToast, fetchAndSquareImageUrl } from '../utils.js';
+import { getCollection, saveDocument, deleteDocument, formatCurrency, getTodayDate, updateDocument, capitalizeFirstLetter, showAlertModal, showConfirmationModal, roundUpToNearest50, normalizeString, showToast, fetchAndSquareImageUrl, showProgressModal } from '../utils.js';
 import { getFirestore, collection, onSnapshot, query, orderBy, getDocs, writeBatch, Timestamp, doc, where, addDoc } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
 import { functions } from '../firebase.js';
 import { httpsCallable } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-functions.js";
@@ -953,6 +953,79 @@ async function exportarProductosAExcel() {
     URL.revokeObjectURL(url);
 }
 
+async function handleOptimizarImagenesMasivo(e) {
+    const btn = e.currentTarget;
+    if (productosFiltradosActuales.length === 0) {
+        return showToast('No hay productos filtrados para optimizar.', 'fa-info-circle', '#f6c23e');
+    }
+
+    const confirmado = await showConfirmationModal(
+        `¿Deseas revisar y optimizar las imágenes de los <strong>${productosFiltradosActuales.length}</strong> productos filtrados?<br><br>
+        El sistema descargará, cuadrará a 1024x1024 y subirá a Firebase <b>solo</b> las fotos que no sean cuadradas.<br><br>
+        Al actualizarse en la base de datos, Tiendanube las reemplazará solas. <br><br><small class="text-danger">Aviso: No cierres la pestaña durante el proceso.</small>`,
+        "Optimización Masiva de Imágenes"
+    );
+    if (!confirmado) return;
+
+    const progress = showProgressModal("Optimizando Imágenes Masivamente");
+    
+    let procesados = 0;
+    let modificados = 0;
+    const total = productosFiltradosActuales.length;
+
+    try {
+        const { uploadProductImage, autoSquareImageIfNeeded } = await import('../utils.js'); // Ya estaba importado, pero lo dejamos por claridad
+        
+        for (const p of productosFiltradosActuales) {
+            procesados++;
+            const progressPercentage = (procesados / total) * 100;
+            progress.update(progressPercentage, `Procesando ${procesados} de ${total}...`, `Revisando: <strong>${p.nombre}</strong>`);
+            
+            let productChanged = false;
+            let newImagenes = [...(p.imagenes || [])];
+            let newVariantes = p.tieneVariantes && p.variantes ? JSON.parse(JSON.stringify(p.variantes)) : [];
+            
+            for (let i = 0; i < newImagenes.length; i++) {
+                const fixedFile = await autoSquareImageIfNeeded(newImagenes[i], `autofix_${Date.now()}_${i}`);
+                if (fixedFile) {
+                    const newUrl = await uploadProductImage(fixedFile, p.id, i, p.nombre, p.codigo);
+                    newImagenes[i] = newUrl;
+                    productChanged = true;
+                }
+            }
+            
+            if (p.tieneVariantes) {
+                for (let i = 0; i < newVariantes.length; i++) {
+                    if (newVariantes[i].imagenUrl) {
+                        const fixedFile = await autoSquareImageIfNeeded(newVariantes[i].imagenUrl, `autofix_var_${Date.now()}_${i}`);
+                        if (fixedFile) {
+                            const newUrl = await uploadProductImage(fixedFile, p.id, `var_${i}`, `${p.nombre}-${newVariantes[i].nombre}`, newVariantes[i].codigo);
+                            newVariantes[i].imagenUrl = newUrl;
+                            productChanged = true;
+                        }
+                    }
+                }
+            }
+            
+            if (productChanged) {
+                modificados++;
+                await updateDocument('productos', p.id, {
+                    imagenes: newImagenes,
+                    ...(p.tieneVariantes ? { variantes: newVariantes } : {})
+                });
+            }
+        }
+        
+        progress.finish(
+            "¡Optimización Completada!",
+            `Se revisaron ${procesados} productos.<br>Se corrigieron las fotos de <strong>${modificados}</strong> productos.<br><br>Tiendanube se actualizará en breve.`
+        );
+    } catch (error) {
+        console.error("Error en optimización masiva:", error);
+        progress.error("Ocurrió un error durante la optimización. Revisa la consola para más detalles.");
+    }
+}
+
 async function handleFileUpload(event) {
     const file = event.target.files[0];
     if (!file) return;
@@ -1721,6 +1794,17 @@ export function init() {
     if (btnExportarProductos) {
         btnExportarProductos.removeEventListener('click', exportarProductosAExcel);
         btnExportarProductos.addEventListener('click', exportarProductosAExcel);
+        
+        // Inyectamos el botón de Optimización Masiva al lado de Exportar
+        if (!document.getElementById('btnOptimizarImagenesMasivo')) {
+            const btnOpt = document.createElement('button');
+            btnOpt.className = 'btn btn-outline-info rounded-pill ms-2 shadow-sm fw-bold';
+            btnOpt.id = 'btnOptimizarImagenesMasivo';
+            btnOpt.innerHTML = '<i class="fas fa-magic me-1"></i> Optimizar Imágenes';
+            btnOpt.title = 'Revisa los productos filtrados y cuadra sus fotos a 1024x1024';
+            btnExportarProductos.parentNode.insertBefore(btnOpt, btnExportarProductos.nextSibling);
+            btnOpt.addEventListener('click', handleOptimizarImagenesMasivo);
+        }
     }
     if (tablaProductosBody) {
         tablaProductosBody.addEventListener('click', (e) => {
