@@ -1013,6 +1013,81 @@ export function showConfirmationModal(message, title = 'Confirmación', options 
 }
 
 /**
+ * Muestra un modal con un campo de entrada para solicitar datos al usuario.
+ * @param {string} title El título del modal.
+ * @param {string} message El mensaje o pregunta a mostrar encima del input.
+ * @param {object} [options] Opciones para personalizar.
+ * @param {string} [options.inputType='text'] Tipo de input (text, url, number, etc.).
+ * @param {string} [options.placeholder=''] Placeholder para el campo de entrada.
+ * @param {string} [options.confirmText='Aceptar'] Texto para el botón de confirmación.
+ * @returns {Promise<string|null>} Resuelve con el valor del input si el usuario confirma, o null si cancela.
+ */
+export function showInputModal(title, message, options = {}) {
+    const {
+        inputType = 'text',
+        placeholder = '',
+        confirmText = 'Aceptar'
+    } = options;
+
+    return new Promise(resolve => {
+        if (!genericModalEl) {
+            genericModalEl = document.getElementById('genericModal');
+        }
+
+        if (genericModalEl && genericModalEl.parentNode !== document.body) {
+            document.body.appendChild(genericModalEl);
+        }
+
+        if (genericModalEl) {
+            const oldInstance = bootstrap.Modal.getInstance(genericModalEl);
+            if (oldInstance) oldInstance.dispose();
+            genericModal = new bootstrap.Modal(genericModalEl);
+        }
+
+        document.getElementById('genericModalLabel').textContent = title;
+        
+        // Construimos el cuerpo del modal con el input
+        document.getElementById('genericModalBody').innerHTML = `
+            <p>${message}</p>
+            <input type="${inputType}" id="genericModalInput" class="form-control" placeholder="${placeholder}">
+        `;
+
+        const confirmButton = document.getElementById('btn-generic-confirm');
+        const cancelButton = document.getElementById('btn-generic-cancel');
+        const inputField = document.getElementById('genericModalInput');
+
+        confirmButton.textContent = confirmText;
+        cancelButton.style.display = 'inline-block';
+
+        let isResolved = false;
+
+        const resolveAndHide = (value) => {
+            if (isResolved) return;
+            isResolved = true;
+            confirmButton.removeEventListener('click', confirmListener);
+            cancelButton.removeEventListener('click', cancelListener);
+            inputField.removeEventListener('keyup', keyupListener);
+            genericModalEl.removeEventListener('hidden.bs.modal', hideListener);
+            resolve(value);
+            genericModal.hide();
+        };
+
+        const confirmListener = () => resolveAndHide(inputField.value);
+        const cancelListener = () => resolveAndHide(null);
+        const hideListener = () => resolveAndHide(null);
+        const keyupListener = (e) => { if (e.key === 'Enter') confirmListener(); };
+
+        confirmButton.addEventListener('click', confirmListener, { once: true });
+        cancelButton.addEventListener('click', cancelListener, { once: true });
+        inputField.addEventListener('keyup', keyupListener);
+        genericModalEl.addEventListener('hidden.bs.modal', hideListener, { once: true });
+
+        genericModalEl.addEventListener('shown.bs.modal', () => inputField.focus(), { once: true });
+        genericModal.show();
+    });
+}
+
+/**
  * Muestra una notificación flotante (Toast) no invasiva.
  * @param {string} message Mensaje a mostrar (soporta HTML).
  * @param {string} icon Clase del icono FontAwesome (por defecto check-circle).

@@ -1508,7 +1508,7 @@ export async function init() {
 
     await verificarEstadoCaja();
 
-    // 1. OBTENER ELEMENTOS DEL DOM (Sin cambios)
+    // 1. OBTENER ELEMENTOS DEL DOM
     productoSearch = document.getElementById('productoSearch');
     searchResults = document.getElementById('searchResults');
     ticketItems = document.getElementById('ticketItems');

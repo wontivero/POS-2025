@@ -1,5 +1,5 @@
 // secciones/productos.js
-import { getCollection, saveDocument, deleteDocument, formatCurrency, getTodayDate, updateDocument, capitalizeFirstLetter, showAlertModal, showConfirmationModal, roundUpToNearest50, normalizeString, showToast, fetchAndSquareImageUrl, showProgressModal } from '../utils.js';
+import { getCollection, saveDocument, deleteDocument, formatCurrency, getTodayDate, updateDocument, capitalizeFirstLetter, showAlertModal, showConfirmationModal, roundUpToNearest50, normalizeString, showToast, fetchAndSquareImageUrl, showProgressModal, showInputModal } from '../utils.js';
 import { getFirestore, collection, onSnapshot, query, orderBy, getDocs, writeBatch, Timestamp, doc, where, addDoc } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
 import { functions } from '../firebase.js';
 import { httpsCallable } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-functions.js";
@@ -193,8 +193,13 @@ function aplicarFiltrosYRenderizar() {
         const searchTerms = userInput.split(' ').filter(term => term.length > 0);
         if (searchTerms.length > 0) {
             productosFiltrados = productosFiltrados.filter(p => {
-                const searchableString = [p.nombre_lowercase, p.codigo, p.marca, p.color, p.rubro].join(' ').toLowerCase();
-                return searchTerms.every(term => searchableString.includes(term));
+                // Unimos los campos básicos del producto para la búsqueda.
+                let searchableString = [p.nombre_lowercase, p.codigo, p.marca, p.color, p.rubro].join(' ').toLowerCase();
+                // Si el producto tiene variantes, agregamos los códigos de cada variante a la cadena de búsqueda.
+                if (p.tieneVariantes && p.variantes) {
+                    searchableString += ' ' + p.variantes.map(v => v.codigo).join(' ');
+                }
+                return searchTerms.every(term => searchableString.includes(term.toLowerCase()));
             });
         }
     }
@@ -465,12 +470,17 @@ function agregarFilaVarianteModal(variante = null) {
         <td><input type="text" class="form-control form-control-sm var-nombre" placeholder="Ej: Rojo - XL" value="${variante ? variante.nombre : ''}"></td>
         <td><input type="text" class="form-control form-control-sm var-codigo" placeholder="SKU Único" value="${variante ? variante.codigo : ''}"></td>
         <td><input type="number" class="form-control form-control-sm var-stock text-end" value="${variante ? variante.stock : '1'}"></td>
-        <td class="text-center">
-            <label style="cursor: pointer;" class="mb-0" title="Subir foto para esta variante">
-                <img src="${imagenSrc}" class="var-img-preview rounded shadow-sm border" style="width: 35px; height: 35px; object-fit: cover;">
-                <input type="file" class="var-img-input d-none" accept="image/png, image/jpeg, image/webp">
-                <input type="hidden" class="var-img-url" value="${variante && variante.imagenUrl ? variante.imagenUrl : ''}">
-            </label>
+        <td class="text-center align-middle">
+            <div class="d-flex align-items-center justify-content-center gap-2">
+                <label style="cursor: pointer;" class="mb-0" title="Subir foto para esta variante">
+                    <img src="${imagenSrc}" class="var-img-preview rounded shadow-sm border" style="width: 35px; height: 35px; object-fit: cover;">
+                    <input type="file" class="var-img-input d-none" accept="image/png, image/jpeg, image/webp">
+                    <input type="hidden" class="var-img-url" value="${variante && variante.imagenUrl ? variante.imagenUrl : ''}">
+                </label>
+                <button type="button" class="btn btn-sm btn-outline-primary btn-add-link-variante" title="Agregar imagen desde un link">
+                    <i class="fas fa-link"></i>
+                </button>
+            </div>
         </td>
         <td class="text-center"><button type="button" class="btn btn-sm btn-light btn-toggle-settings text-secondary" title="Ajustes de precio individual"><i class="fas fa-cog"></i></button></td>
         <td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger btn-remove-variante"><i class="fas fa-trash"></i></button></td>
@@ -516,6 +526,45 @@ function agregarFilaVarianteModal(variante = null) {
     const fileInput = trMain.querySelector('.var-img-input');
     const imgPreview = trMain.querySelector('.var-img-preview');
     fileInput.addEventListener('change', (e) => { const file = e.target.files[0]; if (file) { const reader = new FileReader(); reader.onload = (ev) => imgPreview.src = ev.target.result; reader.readAsDataURL(file); } });
+
+    // --- INICIO DE LA MODIFICACIÓN: Usamos el modal personalizado ---
+    trMain.querySelector('.btn-add-link-variante').addEventListener('click', async (e) => {
+        // --- INICIO DE LA CORRECCIÓN ---
+        // 1. Capturamos el botón y su estado ANTES de mostrar el modal.
+        const btn = e.currentTarget;
+        const originalHtml = btn.innerHTML;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+        btn.disabled = true;
+        // --- FIN DE LA CORRECCIÓN ---
+
+        const url = await showInputModal('Agregar Imagen desde Link', 'Pega aquí el link de la imagen para la variante:', {
+            inputType: 'url',
+            placeholder: 'https://ejemplo.com/imagen.jpg',
+            confirmText: 'Agregar Link'
+        });
+
+        if (!url || !(url.startsWith('http://') || url.startsWith('https://'))) {
+            if (url) showToast('El link no es válido.', 'fa-exclamation-triangle', '#f6c23e');
+            if (btn) { btn.innerHTML = originalHtml; btn.disabled = false; } // Restauramos si el link es inválido
+            return;
+        }
+
+        try {
+            const file = await fetchAndSquareImageUrl(url, `variant_link_${Date.now()}`); // Descargamos la imagen
+            const dataTransfer = new DataTransfer();
+            dataTransfer.items.add(file);
+            fileInput.files = dataTransfer.files;
+            fileInput.dispatchEvent(new Event('change')); // Disparamos el evento para que la preview se actualice
+            showToast('Imagen de variante descargada y asignada.', 'fa-check', '#1cc88a');
+        } catch (error) {
+            showToast('No se pudo descargar la imagen del link.', 'fa-times-circle', '#dc3545');
+        } finally {
+            // --- CORRECCIÓN CLAVE ---
+            // Restauramos el botón solo si fue definido.
+            if (btn) { btn.innerHTML = originalHtml; btn.disabled = false; }
+        }
+    });
+
     trMain.querySelector('.var-nombre').addEventListener('input', renderModalImagenesPreview);
     trMain.querySelector('.btn-remove-variante').addEventListener('click', () => { trMain.remove(); trSettings.remove(); renderModalImagenesPreview(); });
     modalVariantesTbody.appendChild(trMain);
