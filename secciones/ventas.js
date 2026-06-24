@@ -639,8 +639,17 @@ function handleSearch(e) {
             // Unimos los detalles con un guion si ambos existen.
             const detallesTexto = detalles.join(' - ');
             // --- FIN DE LA NUEVA LÓGICA DE VISUALIZACIÓN ---
+            
+            // --- INICIO: Indicador visual de stock bajo o nulo ---
+            let stockIndicator = '';
+            if (producto.stock <= 0) {
+                stockIndicator = ` <span class="badge bg-danger rounded-pill" title="Sin stock"><i class="fas fa-times-circle"></i></span>`;
+            } else if (producto.stockMinimo > 0 && producto.stock <= producto.stockMinimo) {
+                stockIndicator = ` <span class="badge bg-warning rounded-pill" title="Stock bajo"><i class="fas fa-exclamation-triangle"></i></span>`;
+            }
+            // --- FIN: Indicador visual de stock ---
 
-            resultItem.innerHTML = `<span class="fw-bold">${producto.nombre}</span> (${producto.codigo || 'S/C'}) [${detallesTexto}] - <span class="fw-bold text-primary">${formatCurrency(producto.venta)}</span> - Stock: ${producto.stock || 0}`;
+            resultItem.innerHTML = `<span class="fw-bold">${producto.nombre}</span> (${producto.codigo || 'S/C'}) [${detallesTexto}] - <span class="fw-bold text-primary">${formatCurrency(producto.venta)}</span> - Stock: ${producto.stock || 0}${stockIndicator}`;
             resultItem.dataset.id = producto.id;
             searchResults.appendChild(resultItem);
         });

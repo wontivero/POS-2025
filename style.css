@@ -104,12 +104,19 @@ body {
 }
 
 #searchResults .list-group-item-action.active {
-    background-color: #0d6efd;
-    /* Color primario de Bootstrap */
+    background: linear-gradient(45deg, #0d6efd, #0a58ca); /* Degradado de azules */
     color: white;
-    border-color: #0d6efd;
+    border-color: #0a58ca; /* Borde del color más oscuro del degradado */
 }
 
+/* --- INICIO DE LA MEJORA --- */
+/* Cuando un item de la lista de búsqueda está activo,
+   forzamos a que el texto del precio (que tiene la clase .text-primary)
+   se vuelva blanco para que sea legible sobre el fondo azul. */
+#searchResults .list-group-item-action.active .text-primary {
+    color: white !important;
+}
+/* --- FIN DE LA MEJORA --- */
 /* Estilo para resaltar el precio de venta en la tabla de productos */
 td.precio-venta {
     font-weight: bold;

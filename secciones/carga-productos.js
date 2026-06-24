@@ -2,7 +2,7 @@
 import { db, functions } from '../firebase.js';
 import { collection, writeBatch, doc, getDocs, query, where, addDoc, orderBy, Timestamp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
 import { httpsCallable } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-functions.js";
-import { showAlertModal, showConfirmationModal, roundUpToNearest50, formatCurrency, normalizeString, capitalizeFirstLetter, showToast, fetchAndSquareImageUrl } from '../utils.js';
+import { showAlertModal, showConfirmationModal, roundUpToNearest50, formatCurrency, normalizeString, capitalizeFirstLetter, showToast, fetchAndSquareImageUrl, showInputModal } from '../utils.js';
 import { getProductos, getMarcas, getColores, getRubros } from './dataManager.js';
 // --- ESTADO Y ELEMENTOS DEL DOM ---
 let productosEnPreparacion = [];
@@ -505,12 +505,17 @@ function agregarFilaVariante(variante = null) {
         <td><input type="text" class="form-control form-control-sm var-nombre" placeholder="Ej: Rojo - XL" value="${variante ? variante.nombre : ''}"></td>
         <td><input type="text" class="form-control form-control-sm var-codigo" placeholder="SKU Único" value="${variante ? variante.codigo : ''}"></td>
         <td><input type="number" class="form-control form-control-sm var-stock text-end" value="${variante ? (variante.stock !== undefined ? variante.stock : '1') : '1'}"></td>
-        <td class="text-center">
-            <label style="cursor: pointer;" class="mb-0" title="Subir foto para esta variante">
-                <img src="${imagenSrc}" class="var-img-preview rounded shadow-sm border" style="width: 35px; height: 35px; object-fit: cover;">
-                <input type="file" class="var-img-input d-none" accept="image/png, image/jpeg, image/webp">
-                <input type="hidden" class="var-img-url" value="${variante && variante.imagenUrl ? variante.imagenUrl : ''}">
-            </label>
+        <td class="text-center align-middle">
+            <div class="d-flex align-items-center justify-content-center gap-2">
+                <label style="cursor: pointer;" class="mb-0" title="Subir foto para esta variante">
+                    <img src="${imagenSrc}" class="var-img-preview rounded shadow-sm border" style="width: 35px; height: 35px; object-fit: cover;">
+                    <input type="file" class="var-img-input d-none" accept="image/png, image/jpeg, image/webp">
+                    <input type="hidden" class="var-img-url" value="${variante && variante.imagenUrl ? variante.imagenUrl : ''}">
+                </label>
+                <button type="button" class="btn btn-sm btn-outline-primary btn-add-link-variante" title="Agregar imagen desde un link">
+                    <i class="fas fa-link"></i>
+                </button>
+            </div>
         </td>
         <td class="text-center"><button type="button" class="btn btn-sm btn-light btn-toggle-settings text-secondary" title="Ajustes de precio individual"><i class="fas fa-cog"></i></button></td>
         <td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger btn-remove-variante"><i class="fas fa-trash"></i></button></td>
@@ -558,6 +563,38 @@ function agregarFilaVariante(variante = null) {
     fileInput.addEventListener('change', (e) => {
         const file = e.target.files[0];
         if (file) { const reader = new FileReader(); reader.onload = (ev) => { imgPreview.src = ev.target.result; renderImagenesPreview(); }; reader.readAsDataURL(file); }
+    });
+
+    trMain.querySelector('.btn-add-link-variante').addEventListener('click', async (e) => {
+        const btn = e.currentTarget;
+        const originalHtml = btn.innerHTML;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+        btn.disabled = true;
+
+        const url = await showInputModal('Agregar Imagen desde Link', 'Pega aquí el link de la imagen para la variante:', {
+            inputType: 'url',
+            placeholder: 'https://ejemplo.com/imagen.jpg',
+            confirmText: 'Agregar Link'
+        });
+
+        if (!url || !(url.startsWith('http://') || url.startsWith('https://'))) {
+            if (url) showToast('El link no es válido.', 'fa-exclamation-triangle', '#f6c23e');
+            if (btn) { btn.innerHTML = originalHtml; btn.disabled = false; }
+            return;
+        }
+
+        try {
+            const file = await fetchAndSquareImageUrl(url, `variant_link_${Date.now()}`);
+            const dataTransfer = new DataTransfer();
+            dataTransfer.items.add(file);
+            fileInput.files = dataTransfer.files;
+            fileInput.dispatchEvent(new Event('change'));
+            showToast('Imagen de variante descargada y asignada.', 'fa-check', '#1cc88a');
+        } catch (error) {
+            showToast('No se pudo descargar la imagen del link.', 'fa-times-circle', '#dc3545');
+        } finally {
+            if (btn) { btn.innerHTML = originalHtml; btn.disabled = false; }
+        }
     });
     
     trMain.querySelector('.var-nombre').addEventListener('input', renderImagenesPreview);
