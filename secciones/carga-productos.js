@@ -87,8 +87,7 @@ export async function init() {
     // Cargar Categorías Web desde Firestore
     if (prodCategoriaWeb) {
         try {
-            const { orderBy } = await import("https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js");
-            const catSnap = await getDocs(query(collection(db, 'categorias_web'), orderBy('nombre')));
+            const catSnap = await getDocs(query(collection(db, 'categorias_web'), orderBy('ruta')));
             prodCategoriaWeb.innerHTML = '<option value="">-- Seleccionar Categoría --</option>';
             catSnap.forEach(doc => {
                 const catData = doc.data();

@@ -1716,7 +1716,7 @@ export function init() {
     actualizarDatalists();
     
     if (productoCategoriaWeb) {
-        getDocs(query(collection(db, 'categorias_web'), orderBy('nombre'))).then(catSnap => {
+        getDocs(query(collection(db, 'categorias_web'), orderBy('ruta'))).then(catSnap => {
             productoCategoriaWeb.innerHTML = '<option value="">-- Seleccionar --</option>';
             catSnap.forEach(doc => {
                 const catData = doc.data();
