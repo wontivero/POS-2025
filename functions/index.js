@@ -129,17 +129,22 @@ exports.sincronizarTiendanube = onDocumentWritten(
 
         if (docNuevo.tieneVariantes && docNuevo.variantes && docNuevo.variantes.length > 0) {
             tnAttributes = [{ es: "Opción" }]; // Atributo genérico requerido por Tiendanube
-            tnVariants = docNuevo.variantes.map(v => {
+            // --- INICIO DE LA CORRECCIÓN ---
+            // Si el producto tiene variantes, los precios y el destaque se aplican a CADA variante.
+            tnVariants = docNuevo.variantes.map((v, index) => {
                 const variantObj = {
-                    price: v.venta ? String(v.venta) : "0",
+                    price: String(v.venta || docNuevo.venta || "0"), // Usa precio de variante o el general
+                    promotional_price: docNuevo.promotional_price > 0 ? String(docNuevo.promotional_price) : "", // <-- CORRECCIÓN: Enviar "" para borrar la oferta
+                    // Si es la primera variante, hereda el peso y dimensiones generales.
+                    // Las demás se ponen en 0 para evitar que Tiendanube sume los pesos.
+                    weight: index === 0 && docNuevo.peso ? String(docNuevo.peso / 1000) : "0.000",
+                    depth: index === 0 && docNuevo.profundidad ? String(docNuevo.profundidad) : "0.00",
+                    width: index === 0 && docNuevo.ancho ? String(docNuevo.ancho) : "0.00",
+                    height: index === 0 && docNuevo.alto ? String(docNuevo.alto) : "0.00",
                     stock: parseInt(v.stock) || 0,
                     sku: v.codigo || "",
                     barcode: v.codigo || "",
-                    values: [{ es: v.nombre }],
-                    weight: docNuevo.peso ? String(docNuevo.peso / 1000) : "0.000",
-                    depth: docNuevo.profundidad ? String(docNuevo.profundidad) : "0.00",
-                    width: docNuevo.ancho ? String(docNuevo.ancho) : "0.00",
-                    height: docNuevo.alto ? String(docNuevo.alto) : "0.00"
+                    values: [{ es: v.nombre }]
                 };
                 if (v.costo) variantObj.cost = String(v.costo);
                 return variantObj;
@@ -147,25 +152,27 @@ exports.sincronizarTiendanube = onDocumentWritten(
         } else {
             const singleVariant = {
                 price: docNuevo.venta ? String(docNuevo.venta) : "0",
+                promotional_price: docNuevo.promotional_price > 0 ? String(docNuevo.promotional_price) : "", // <-- CORRECCIÓN: Enviar "" para borrar la oferta
                 stock: parseInt(docNuevo.stock) || 0,
                 sku: docNuevo.codigo || "",
                 barcode: docNuevo.codigo || "",
                 weight: docNuevo.peso ? String(docNuevo.peso / 1000) : "0.000",
                 depth: docNuevo.profundidad ? String(docNuevo.profundidad) : "0.00",
                 width: docNuevo.ancho ? String(docNuevo.ancho) : "0.00",
-                height: docNuevo.alto ? String(docNuevo.alto) : "0.00"
+                height: docNuevo.alto ? String(docNuevo.alto) : "0.00",
             };
             if (docNuevo.costo) singleVariant.cost = String(docNuevo.costo);
             tnVariants.push(singleVariant);
         }
+        // --- FIN DE LA CORRECCIÓN ---
 
         // ESTRUCTURA BASE DEL PRODUCTO
         const productoTN = {
             name: { es: docNuevo.nombre },
+            brand: docNuevo.marca || null,
             description: { es: docNuevo.descripcionWeb || "" },
             published: true
         };
-
         // Asignamos la categoría, o limpiamos el array si el usuario la borró en el POS
         if (categoryId) {
             productoTN.categories = [categoryId];

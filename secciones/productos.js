@@ -30,6 +30,7 @@ let productoId, productoNombre, productoCodigo, productoMarca, productoColor, pr
 let productoPublicarWeb, productoPeso, productoCategoriaWeb;
 let modalProductoTieneVariantes, modalVariantesContainer, modalVariantesTbody, btnModalAddVariante;
 let quillModal;
+let productoDestacadoWeb, productoEnOfertaWeb, productoOfertaFields, productoPrecioPromocional;
 let productoAlto, productoAncho, productoProfundidad;
 let productoEcommerceFields;
 let productoImagenesInput, productoImagenesPreview, productoImagenUrlInput, btnAddProductoImagenUrl;
@@ -669,7 +670,9 @@ async function handleFormSubmit(e) {
         ancho: parseInt(productoAncho ? productoAncho.value : 0) || 0,
         profundidad: parseInt(productoProfundidad ? productoProfundidad.value : 0) || 0,
         categoriaWeb: productoCategoriaWeb ? productoCategoriaWeb.value : '',
-        imagenes: []
+        imagenes: [],
+        featured: productoDestacadoWeb ? productoDestacadoWeb.checked : false,
+        promotional_price: (productoEnOfertaWeb && productoEnOfertaWeb.checked) ? (parseFloat(productoPrecioPromocional.value) || 0) : 0
     };
     
     if (tieneVariantes) productoData.variantes = variantes;
@@ -1220,6 +1223,13 @@ function abrirProductoModal(modo, producto = null) {
         document.getElementById('producto-destacado').checked = producto.isFeatured ?? false;
         
         if (modalProductoTieneVariantes) {
+            // --- INICIO DE LA MODIFICACIÓN PARA CARGAR DATOS DE DESTAQUE ---
+            if (productoEnOfertaWeb) {
+                const enOferta = (producto.promotional_price || 0) > 0;
+                productoEnOfertaWeb.checked = enOferta;
+                productoOfertaFields.style.display = enOferta ? 'block' : 'none';
+                if (productoPrecioPromocional) productoPrecioPromocional.value = producto.promotional_price || '';
+            }
             modalProductoTieneVariantes.checked = producto.tieneVariantes || false;
             modalProductoTieneVariantes.dispatchEvent(new Event('change'));
             if (modalVariantesTbody) modalVariantesTbody.innerHTML = '';
@@ -1307,6 +1317,11 @@ function resetProductoModal() {
     if (genericProfitFields) genericProfitFields.style.display = 'none';
     if (productoCodigo) productoCodigo.classList.remove('is-invalid');
     
+    if (productoEnOfertaWeb) productoEnOfertaWeb.checked = false;
+    if (productoOfertaFields) productoOfertaFields.style.display = 'none';
+    if (productoPrecioPromocional) productoPrecioPromocional.value = '';
+    // --- FIN DE LA MODIFICACIÓN ---
+
     if (modalVariantesTbody) modalVariantesTbody.innerHTML = '';
     if (modalProductoTieneVariantes) {
         modalProductoTieneVariantes.checked = false;
@@ -1603,6 +1618,11 @@ export function init() {
     productoImagenesPreview = document.getElementById('producto-imagenes-preview');
     productoImagenUrlInput = document.getElementById('producto-imagen-url');
     btnAddProductoImagenUrl = document.getElementById('btn-add-producto-imagen-url');
+    productoDestacadoWeb = document.getElementById('producto-destacado-web');
+    productoEnOfertaWeb = document.getElementById('producto-en-oferta-web');
+    productoOfertaFields = document.getElementById('producto-oferta-fields');
+    productoPrecioPromocional = document.getElementById('producto-precio-promocional');
+
     const productoGenericoSwitch = document.getElementById('producto-generico');
     const genericProfitFields = document.getElementById('generic-profit-fields');
     btnImportarProductos = document.getElementById('btnImportarProductos');
@@ -1905,6 +1925,12 @@ export function init() {
     if (productoPublicarWeb && productoEcommerceFields) {
         productoPublicarWeb.addEventListener('change', (e) => {
             productoEcommerceFields.style.display = e.target.checked ? 'flex' : 'none';
+        });
+    }
+    if (productoEnOfertaWeb && productoOfertaFields) {
+        productoEnOfertaWeb.addEventListener('change', (e) => {
+            productoOfertaFields.style.display = e.target.checked ? 'block' : 'none';
+            if (e.target.checked) productoPrecioPromocional.focus();
         });
     }
 

@@ -1727,19 +1727,24 @@ export async function init() {
                 lastEnterPressTime = currentTime;
 
                 if (isSearchInput) {
-                    const searchTerm = productoSearch.value.trim();
-                    const items = searchResults.querySelectorAll('.list-group-item-action');
-                    let productIdToAdd = null;
+                    // --- INICIO DE LA CORRECCIÓN ---
+                    const searchTerm = productoSearch.value.trim(); // El texto en el buscador
+                    const items = searchResults.querySelectorAll('.list-group-item-action'); // Los resultados en la lista
+
+                    // 1. Prioridad Máxima: Búsqueda por código de barras exacto.
                     const productByBarcode = searchTerm ? productosPlanos.find(p => p.codigo === searchTerm) : null;
                     if (productByBarcode) {
                         addProductToTicket(productByBarcode.id);
-                    } else {
-                        if (selectedIndex >= 0 && items[selectedIndex]) {
-                            productIdToAdd = items[selectedIndex].dataset.id;
-                        } else if (items.length === 1) {
-                            productIdToAdd = items[0].dataset.id;
-                        }
-                        if (productIdToAdd) addProductToTicket(productIdToAdd);
+                        return; // Salimos para no continuar con las otras lógicas
+                    }
+
+                    // 2. Si hay un ítem seleccionado con las flechas, lo agregamos.
+                    const activeItem = searchResults.querySelector('.list-group-item-action.active');
+                    if (activeItem) {
+                        addProductToTicket(activeItem.dataset.id);
+                    // 3. Si NO hay selección manual, solo agregamos si la lista tiene UN ÚNICO resultado.
+                    } else if (items.length === 1) {
+                        addProductToTicket(items[selectedIndex].dataset.id);
                     }
                 } else if (isQuantityInput) {
                     activeElement.blur();

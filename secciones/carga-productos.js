@@ -17,6 +17,7 @@ let quillCarga;
 let prodAlto, prodAncho, prodProfundidad; // <-- Dimensiones E-commerce
 let prodTieneVariantes, variantesContainer, variantesTbody, btnAddVariante; // <-- Elementos de Variantes
 let prodImagenesInput, prodImagenesPreview, prodImagenUrlInput, btnAddImagenUrl;
+let prodDestacadoWeb, prodEnOfertaWeb, prodOfertaFields, prodPrecioPromocional; // <-- NUEVOS
 let currentImagenes = [];
 let currentDraggedImageIndex = null;
 let prodEcommerceFields;
@@ -50,6 +51,11 @@ export async function init() {
     prodImagenesPreview = document.getElementById('prod-imagenes-preview');
     prodImagenUrlInput = document.getElementById('prod-imagen-url');
     btnAddImagenUrl = document.getElementById('btn-add-imagen-url');
+    prodDestacadoWeb = document.getElementById('prod-destacado-web');
+    prodEnOfertaWeb = document.getElementById('prod-en-oferta-web');
+    prodOfertaFields = document.getElementById('prod-oferta-fields');
+    prodPrecioPromocional = document.getElementById('prod-precio-promocional');
+
     prodEcommerceFields = document.getElementById('prod-ecommerce-fields');
     btnAgregar = document.getElementById('btn-agregar-a-grilla');
     btnAgregarYDuplicar = document.getElementById('btn-agregar-y-duplicar');
@@ -156,6 +162,13 @@ function setupEventListeners() {
     if (prodPublicarWeb && prodEcommerceFields) {
         prodPublicarWeb.onchange = (e) => {
             prodEcommerceFields.style.display = e.target.checked ? 'flex' : 'none';
+        };
+    }
+
+    if (prodEnOfertaWeb && prodOfertaFields) {
+        prodEnOfertaWeb.onchange = (e) => {
+            prodOfertaFields.style.display = e.target.checked ? 'block' : 'none';
+            if (e.target.checked) prodPrecioPromocional.focus();
         };
     }
 
@@ -876,6 +889,8 @@ async function agregarProductoAGrilla(duplicarDespues = false) {
         ancho: parseInt(prodAncho ? prodAncho.value : 0) || 0,
         profundidad: parseInt(prodProfundidad ? prodProfundidad.value : 0) || 0,
         categoriaWeb: prodCategoriaWeb ? prodCategoriaWeb.value : '',
+        featured: prodDestacadoWeb ? prodDestacadoWeb.checked : false,
+        promotional_price: (prodEnOfertaWeb && prodEnOfertaWeb.checked) ? (parseFloat(prodPrecioPromocional.value) || 0) : 0,
         imagenesTemporales: [...currentImagenes] // Guardamos todo en orden
     };
 
@@ -910,6 +925,10 @@ function limpiarFormulario() {
         prodTieneVariantes.checked = false;
         prodTieneVariantes.dispatchEvent(new Event('change'));
     }
+    if (prodDestacadoWeb) prodDestacadoWeb.checked = false;
+    if (prodEnOfertaWeb) prodEnOfertaWeb.checked = false;
+    if (prodOfertaFields) prodOfertaFields.style.display = 'none';
+    if (prodPrecioPromocional) prodPrecioPromocional.value = '';
     renderImagenesPreview();
     if (quillCarga) quillCarga.root.innerHTML = '';
     if (prodImagenUrlInput) prodImagenUrlInput.value = '';
@@ -946,6 +965,13 @@ function poblarFormulario(producto, modoDuplicar = false) {
     if (prodAncho) prodAncho.value = producto.ancho || 0;
     if (prodProfundidad) prodProfundidad.value = producto.profundidad || 0;
     if (prodCategoriaWeb) {
+        // --- INICIO: Lógica de destaque y oferta ---
+        if (prodEnOfertaWeb) {
+            const enOferta = (producto.promotional_price || 0) > 0;
+            prodEnOfertaWeb.checked = enOferta;
+            prodOfertaFields.style.display = enOferta ? 'block' : 'none';
+            if (prodPrecioPromocional) prodPrecioPromocional.value = producto.promotional_price || '';
+        }
         if (producto.categoriaWeb && !Array.from(prodCategoriaWeb.options).some(o => o.value === producto.categoriaWeb)) {
             const opt = document.createElement('option');
             opt.value = producto.categoriaWeb; opt.textContent = producto.categoriaWeb;
@@ -1140,7 +1166,8 @@ async function guardarTodoEnBD() {
                 alto: p.alto || 0,
                 ancho: p.ancho || 0,
                 profundidad: p.profundidad || 0,
-                categoriaWeb: p.categoriaWeb || '',
+                categoriaWeb: p.categoriaWeb || '',                
+                promotional_price: p.promotional_price || 0,
                 imagenes: p.imagenesExistentes || []
             };
             
