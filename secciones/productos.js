@@ -1859,6 +1859,16 @@ export function init() {
     if (formProducto) {
         formProducto.removeEventListener('submit', handleFormSubmit);
         formProducto.addEventListener('submit', handleFormSubmit);
+        // --- INICIO DE LA CORRECCIÓN: Prevenir submit con Enter en campos de código ---
+        formProducto.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                const targetId = e.target.id;
+                const targetClassList = e.target.classList;
+                if (targetId === 'producto-codigo' || targetClassList.contains('var-codigo')) {
+                    e.preventDefault(); // Detiene el envío del formulario
+                }
+            }
+        });
     }
     if (btnExportarProductos) {
         btnExportarProductos.removeEventListener('click', exportarProductosAExcel);

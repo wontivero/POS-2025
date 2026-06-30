@@ -129,6 +129,16 @@ function setupEventListeners() {
     // que los eventos se dupliquen si la sección se inicializa múltiples veces.
     form.onsubmit = async (e) => { e.preventDefault(); await agregarProductoAGrilla(); };
     form.onkeydown = (e) => { handleEnterAsTab(e); restrictToNumericInput(e); };
+    // --- INICIO DE LA CORRECCIÓN: Prevenir submit con Enter en campos de código ---
+    form.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            const targetId = e.target.id;
+            const targetClassList = e.target.classList;
+            if (targetId === 'prod-codigo' || targetClassList.contains('var-codigo')) {
+                e.preventDefault(); // Detiene el envío del formulario
+            }
+        }
+    });
 
     prodCodigo.onblur = () => verificarCodigo(prodCodigo);
     btnAgregarYDuplicar.onclick = async () => { await agregarProductoAGrilla(true); };
