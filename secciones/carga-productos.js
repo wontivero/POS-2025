@@ -883,7 +883,7 @@ async function agregarProductoAGrilla(duplicarDespues = false) {
         color: normalizeString(prodColor.value.trim()),
         rubro: normalizeString(prodRubro.value.trim()),
         costo: parseFloat(prodCosto.value) || 0,
-        ganancia: parseFloat(prodGanancia.value) || 70,
+        ganancia: parseFloat(prodGanancia.value) || 75,
         venta: parseFloat(prodVenta.value) || 0,
         stock: tieneVariantes ? variantes.reduce((acc, v) => acc + v.stock, 0) : (parseInt(prodStock.value) || 0),
         stockMinimo: parseInt(prodStockMinimo.value) || 0,
@@ -942,6 +942,11 @@ function limpiarFormulario() {
     renderImagenesPreview();
     if (quillCarga) quillCarga.root.innerHTML = '';
     if (prodImagenUrlInput) prodImagenUrlInput.value = '';
+    // --- INICIO DE LA MODIFICACIÓN: Porcentaje por defecto ---
+    if (prodGanancia) {
+        prodGanancia.value = '75';
+    }
+    // --- FIN DE LA MODIFICACIÓN ---
     prodCodigo.focus();
 }
 
@@ -994,7 +999,7 @@ function poblarFormulario(producto, modoDuplicar = false) {
     if (producto.costo > 0) {
         prodGanancia.value = ((producto.venta - producto.costo) / producto.costo * 100).toFixed(2);
     } else {
-        prodGanancia.value = 70;
+        prodGanancia.value = 75;
     }
     if (modoDuplicar) {
         form.classList.add('duplicando');

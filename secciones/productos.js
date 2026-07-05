@@ -1318,6 +1318,11 @@ function resetProductoModal() {
     if (productoCodigo) productoCodigo.classList.remove('is-invalid');
     
     if (productoEnOfertaWeb) productoEnOfertaWeb.checked = false;
+    // --- INICIO DE LA MODIFICACIÓN: Porcentaje por defecto ---
+    if (productoPorcentaje) {
+        productoPorcentaje.value = '75';
+    }
+    // --- FIN DE LA MODIFICACIÓN ---
     if (productoOfertaFields) productoOfertaFields.style.display = 'none';
     if (productoPrecioPromocional) productoPrecioPromocional.value = '';
     // --- FIN DE LA MODIFICACIÓN ---
