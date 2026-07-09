@@ -211,84 +211,100 @@ exports.sincronizarTiendanube = onDocumentWritten(
                 const tnId = docNuevo.tiendanubeId;
 
                 // A) Actualizar Datos Básicos
+                logger.info(`🔄 Actualizando datos básicos para producto TN ID: ${tnId}`);
                 const resProd = await fetch(`${apiUrl}/${tnId}`, { method: "PUT", headers, body: JSON.stringify(productoTN) });
                 if (!resProd.ok) logger.error(`❌ Error actualizando producto en TN:`, await resProd.text());
 
                 // B) Obtener la Variante actual y actualizarla
+                logger.info(`🔎 Obteniendo variantes actuales de TN para el producto ID: ${tnId}`);
                 const getProd = await fetch(`${apiUrl}/${tnId}`, { headers });
-                if (getProd.ok) {
-                    const prodData = await getProd.json();
-                    const currentTnVariants = prodData.variants || [];
+                if (!getProd.ok) {
+                    logger.error(`❌ No se pudo obtener el producto ${tnId} de TN para sincronizar variantes:`, await getProd.text());
+                    return;
+                }
+                
+                const prodData = await getProd.json();
+                const currentTnVariants = prodData.variants || [];
+                const posSkus = new Set(tnVariants.map(v => v.sku).filter(Boolean));
+                const posVariantsBySku = new Map(tnVariants.map(v => [v.sku, v]));
 
-                    // Crear o Actualizar Variantes comparando por SKU
-                    for (const tv of tnVariants) {
-                        let existingTnVar;
-                        if (!docNuevo.tieneVariantes && currentTnVariants.length > 0) {
-                            // Si pasamos a Simple, forzamos a actualizar la primera variante en lugar de crear una nueva
-                            existingTnVar = currentTnVariants[0];
-                        } else {
-                            existingTnVar = currentTnVariants.find(v => v.sku === tv.sku && v.sku !== "");
-                        }
+                // --- PASO 1: Eliminar variantes que ya no existen en el POS ---
+                const variantsToDelete = currentTnVariants.filter(tnVar => !posSkus.has(tnVar.sku));
+                if (variantsToDelete.length > 0) {
+                    logger.info(`🗑️ Se eliminarán ${variantsToDelete.length} variantes obsoletas de TN.`);
+                    for (const v of variantsToDelete) {
+                        logger.info(`   - Eliminando SKU: ${v.sku} (ID: ${v.id})`);
+                        await fetch(`${apiUrl}/${tnId}/variants/${v.id}`, { method: "DELETE", headers });
+                    }
+                }
 
-                        if (existingTnVar) {
-                            await fetch(`${apiUrl}/${tnId}/variants/${existingTnVar.id}`, { method: "PUT", headers, body: JSON.stringify(tv) });
-                        } else {
-                            await fetch(`${apiUrl}/${tnId}/variants`, { method: "POST", headers, body: JSON.stringify(tv) });
+                // --- PASO 2: Actualizar o Crear variantes ---
+                const currentTnVariantsBySku = new Map(currentTnVariants.map(v => [v.sku, v]));
+
+                // Si es un producto simple y el SKU cambió, lo actualizamos directamente.
+                if (!docNuevo.tieneVariantes && currentTnVariants.length === 1 && tnVariants.length === 1) {
+                    const oldTnVariant = currentTnVariants[0];
+                    const newPosVariant = tnVariants[0];
+                    if (oldTnVariant.sku !== newPosVariant.sku) {
+                        logger.info(`🔄 Actualizando SKU de producto simple: ${oldTnVariant.sku} -> ${newPosVariant.sku}`);
+                        await fetch(`${apiUrl}/${tnId}/variants/${oldTnVariant.id}`, { method: "PUT", headers, body: JSON.stringify(newPosVariant) });
+                    }
+                }
+
+                // Para cada variante en el POS, decidimos si crearla o actualizarla.
+                for (const [sku, posVariant] of posVariantsBySku.entries()) {
+                    const existingTnVar = currentTnVariantsBySku.get(sku);
+                    if (existingTnVar) {
+                        logger.info(`🔄 Actualizando variante SKU: ${sku}`);
+                        await fetch(`${apiUrl}/${tnId}/variants/${existingTnVar.id}`, { method: "PUT", headers, body: JSON.stringify(posVariant) });
+                    } else {
+                        logger.info(`✨ Creando nueva variante SKU: ${sku}`);
+                        await fetch(`${apiUrl}/${tnId}/variants`, { method: "POST", headers, body: JSON.stringify(posVariant) });
+                    }
+                }
+
+                // C) Si las imágenes cambiaron, las sincronizamos dedicadamente
+                if (imagenesCambiaron) {
+                    logger.info(`📸 Las imágenes cambiaron, iniciando sincronización...`);
+                    // Borrar imágenes existentes en TN para no duplicar
+                    if (prodData.images && prodData.images.length > 0) {
+                        logger.info(`   - Eliminando ${prodData.images.length} imágenes antiguas de TN.`);
+                        for (const img of prodData.images) {
+                            await fetch(`${apiUrl}/${tnId}/images/${img.id}`, { method: "DELETE", headers });
                         }
                     }
-
-                    // Borrar las variantes que ya no existen en POS 2025
-                    for (const existingTnVar of currentTnVariants) {
-                        let stillExists = false;
-                        if (!docNuevo.tieneVariantes) {
-                            stillExists = currentTnVariants.indexOf(existingTnVar) === 0;
-                        } else {
-                            stillExists = tnVariants.some(tv => tv.sku === existingTnVar.sku && tv.sku !== "");
-                        }
-                        if (!stillExists) {
-                            await fetch(`${apiUrl}/${tnId}/variants/${existingTnVar.id}`, { method: "DELETE", headers });
-                        }
+                    // Subir nuevas imágenes una por una
+                    for (const imgUrl of imagenesNuevas) {
+                        logger.info(`   - Subiendo imagen principal: ${imgUrl.substring(0, 50)}...`);
+                        const resImg = await fetch(`${apiUrl}/${tnId}/images`, { method: "POST", headers, body: JSON.stringify({ src: imgUrl }) });
+                        if (!resImg.ok) logger.error(`❌ Error subiendo imagen:`, await resImg.json());
                     }
-                    // C) Si las imágenes cambiaron, las sincronizamos dedicadamente
-                    if (imagenesCambiaron) {
-                        // Borrar imágenes existentes en TN para no duplicar
-                        if (prodData.images && prodData.images.length > 0) {
-                            for (const img of prodData.images) {
-                                await fetch(`${apiUrl}/${tnId}/images/${img.id}`, { method: "DELETE", headers });
-                            }
-                        }
-                        // Subir nuevas imágenes una por una
-                        for (const imgUrl of imagenesNuevas) {
-                            const resImg = await fetch(`${apiUrl}/${tnId}/images`, { method: "POST", headers, body: JSON.stringify({ src: imgUrl }) });
-                            if (!resImg.ok) logger.error(`❌ Error subiendo imagen:`, await resImg.json());
-                        }
-                        
-                        // Subir imágenes de variantes y enlazarlas a la opción correspondiente
-                        if (docNuevo.tieneVariantes) {
-                            const getProdVars = await fetch(`${apiUrl}/${tnId}`, { headers });
-                            if (getProdVars.ok) {
-                                const prodVarsData = await getProdVars.json();
-                                for (const v of variantesNuevas) {
-                                    if (v.imagenUrl) {
-                                        const tnVar = prodVarsData.variants.find(tv => tv.sku === v.codigo);
-                                        const payload = { src: v.imagenUrl };
-                                        if (tnVar) payload.product_variant_ids = [tnVar.id];
-                                        
-                                        const resImg = await fetch(`${apiUrl}/${tnId}/images`, { method: "POST", headers, body: JSON.stringify(payload) });
-                                        if (!resImg.ok) {
-                                            logger.error(`Error subiendo imagen para variante ${v.codigo}:`, await resImg.text());
-                                        } else {
-                                            const imgData = await resImg.json();
-                                            if (tnVar) {
-                                                // FORZAMOS LA VINCULACIÓN EXPLÍCITA
-                                                await fetch(`${apiUrl}/${tnId}/variants/${tnVar.id}`, { method: "PUT", headers, body: JSON.stringify({ image_id: imgData.id }) });
-                                            }
+                    
+                    // Subir imágenes de variantes y enlazarlas a la opción correspondiente
+                    if (docNuevo.tieneVariantes) {
+                        const getProdVars = await fetch(`${apiUrl}/${tnId}`, { headers });
+                        if (getProdVars.ok) {
+                            const prodVarsData = await getProdVars.json();
+                            for (const v of variantesNuevas) {
+                                if (v.imagenUrl) {
+                                    const tnVar = prodVarsData.variants.find(tv => tv.sku === v.codigo);
+                                    const payload = { src: v.imagenUrl };
+                                    if (tnVar) payload.product_variant_ids = [tnVar.id];
+                                    
+                                    logger.info(`   - Subiendo imagen para variante ${v.codigo}...`);
+                                    const resImg = await fetch(`${apiUrl}/${tnId}/images`, { method: "POST", headers, body: JSON.stringify(payload) });
+                                    if (!resImg.ok) {
+                                        logger.error(`Error subiendo imagen para variante ${v.codigo}:`, await resImg.text());
+                                    } else {
+                                        const imgData = await resImg.json();
+                                        if (tnVar) {
+                                            // FORZAMOS LA VINCULACIÓN EXPLÍCITA
+                                            await fetch(`${apiUrl}/${tnId}/variants/${tnVar.id}`, { method: "PUT", headers, body: JSON.stringify({ image_id: imgData.id }) });
                                         }
                                     }
                                 }
                             }
                         }
-                        logger.info(`📸 Imágenes actualizadas en TN para: ${docNuevo.nombre}`);
                     }
                 }
             } else {
