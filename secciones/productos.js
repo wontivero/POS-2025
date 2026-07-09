@@ -35,6 +35,7 @@ let quillModal;
 let productoDestacadoWeb, productoEnOfertaWeb, productoOfertaFields, productoPrecioPromocional;
 let productoAlto, productoAncho, productoProfundidad;
 let productoEcommerceFields;
+let productoSeoTitulo, productoSeoDescripcion; // NUEVO: Campos SEO
 let productoImagenesInput, productoImagenesPreview, productoImagenUrlInput, btnAddProductoImagenUrl;
 let modalImagenes = [];
 let draggedImageIndex = null;
@@ -769,6 +770,8 @@ async function handleFormSubmit(e) {
         ancho: parseInt(productoAncho ? productoAncho.value : 0) || 0,
         profundidad: parseInt(productoProfundidad ? productoProfundidad.value : 0) || 0,
         categoriaWeb: productoCategoriaWeb ? productoCategoriaWeb.value : '',
+        seo_title: productoSeoTitulo ? productoSeoTitulo.value.trim() : '', // NUEVO
+        seo_description: productoSeoDescripcion ? productoSeoDescripcion.value.trim() : '', // NUEVO
         imagenes: [],
         featured: productoDestacadoWeb ? productoDestacadoWeb.checked : false,
         promotional_price: (productoEnOfertaWeb && productoEnOfertaWeb.checked) ? (parseFloat(productoPrecioPromocional.value) || 0) : 0
@@ -1376,6 +1379,10 @@ function abrirProductoModal(modo, producto = null) {
         
         if (productoPublicarWeb) productoPublicarWeb.checked = producto.publicarEnWeb ?? false;
         if (productoEcommerceFields) {
+            // --- INICIO DE LA CORRECCIÓN ---
+            // Disparamos el evento 'change' manualmente para que la UI se actualice
+            // y la pestaña se habilite/deshabilite correctamente.
+            productoPublicarWeb.dispatchEvent(new Event('change'));
             productoEcommerceFields.style.display = producto.publicarEnWeb ? 'flex' : 'none';
         }
     if (quillModal) quillModal.root.innerHTML = producto.descripcionWeb ?? '';
@@ -1384,6 +1391,8 @@ function abrirProductoModal(modo, producto = null) {
         if (productoAncho) productoAncho.value = producto.ancho ?? 0;
         if (productoProfundidad) productoProfundidad.value = producto.profundidad ?? 0;
         if (productoCategoriaWeb) {
+            if (productoSeoTitulo) productoSeoTitulo.value = producto.seo_title || ''; // NUEVO
+            if (productoSeoDescripcion) productoSeoDescripcion.value = producto.seo_description || ''; // NUEVO
             if (producto.categoriaWeb && !Array.from(productoCategoriaWeb.options).some(o => o.value === producto.categoriaWeb)) {
                 const opt = document.createElement('option');
                 opt.value = producto.categoriaWeb; opt.textContent = producto.categoriaWeb;
@@ -1463,6 +1472,8 @@ function resetProductoModal() {
     if (productoPrecioPromocional) productoPrecioPromocional.value = '';
     // --- FIN DE LA MODIFICACIÓN ---
 
+    if (productoSeoTitulo) productoSeoTitulo.value = ''; // NUEVO
+    if (productoSeoDescripcion) productoSeoDescripcion.value = ''; // NUEVO
     if (modalVariantesTbody) modalVariantesTbody.innerHTML = '';
     if (modalProductoTieneVariantes) {
         modalProductoTieneVariantes.checked = false;
@@ -1763,6 +1774,8 @@ export function init() {
     productoEnOfertaWeb = document.getElementById('producto-en-oferta-web');
     productoOfertaFields = document.getElementById('producto-oferta-fields');
     productoPrecioPromocional = document.getElementById('producto-precio-promocional');
+    productoSeoTitulo = document.getElementById('producto-seo-titulo'); // NUEVO
+    productoSeoDescripcion = document.getElementById('producto-seo-descripcion'); // NUEVO
 
     const productoGenericoSwitch = document.getElementById('producto-generico');
     const genericProfitFields = document.getElementById('generic-profit-fields');
@@ -1819,6 +1832,42 @@ export function init() {
             } finally {
                 btnIaModal.innerHTML = '<i class="fas fa-magic me-1"></i>Completar E-commerce con IA';
                 btnIaModal.disabled = false;
+            }
+        };
+    }
+
+    const btnIaSeoModal = document.getElementById('btn-ia-seo-modal');
+    if (btnIaSeoModal) {
+        btnIaSeoModal.onclick = async () => {
+            const nombre = productoNombre.value.trim();
+            if (!nombre) {
+                showToast("Ingresa el nombre del producto antes de generar el SEO.", "fa-info-circle", "#f6c23e");
+                return;
+            }
+
+            btnIaSeoModal.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Optimizando...';
+            btnIaSeoModal.disabled = true;
+
+            try {
+                const generarSeoIA = httpsCallable(functions, 'generarSeoIA');
+                const result = await generarSeoIA({ nombre: nombre, descripcion: quillModal.getText() });
+                
+                if (result.data && result.data.success) {
+                    const seoData = result.data.data;
+                    if (productoSeoTitulo && seoData.titulo) productoSeoTitulo.value = seoData.titulo;
+                    if (productoSeoDescripcion && seoData.descripcion) productoSeoDescripcion.value = seoData.descripcion;
+                    showToast("¡SEO para Google generado con éxito!", "fa-search-dollar", "#1cc88a");
+                }
+            } catch (error) {
+                console.error("Error con IA SEO:", error);
+                let errorMsg = "Hubo un error al generar el SEO con IA.";
+                if (error.message && (error.message.includes("429") || error.message.includes("quota"))) {
+                    errorMsg = "La IA está procesando muchas consultas gratuitas. Espera unos segundos.";
+                }
+                showToast(errorMsg, "fa-times-circle", "#dc3545");
+            } finally {
+                btnIaSeoModal.innerHTML = '<i class="fas fa-magic me-1"></i>Generar SEO con IA';
+                btnIaSeoModal.disabled = false;
             }
         };
     }
@@ -2088,7 +2137,12 @@ export function init() {
     }
     if (productoPublicarWeb && productoEcommerceFields) {
         productoPublicarWeb.addEventListener('change', (e) => {
-            productoEcommerceFields.style.display = e.target.checked ? 'flex' : 'none';
+            const isChecked = e.target.checked;
+            const pane = document.getElementById('ecommerce-pane');
+            if (isChecked) pane.classList.add('active-pane');
+            else pane.classList.remove('active-pane');
+            // CORRECCIÓN: Aseguramos que el contenedor se muestre u oculte.
+            productoEcommerceFields.style.display = isChecked ? 'flex' : 'none';
         });
     }
     if (productoEnOfertaWeb && productoOfertaFields) {

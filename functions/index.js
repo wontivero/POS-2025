@@ -175,7 +175,9 @@ exports.sincronizarTiendanube = onDocumentWritten(
         const productoTN = {
             name: { es: toTitleCase(docNuevo.nombre) },
             brand: docNuevo.marca || null,
-            description: { es: docNuevo.descripcionWeb || "" },
+            description: { es: docNuevo.descripcionWeb || "" }, // Descripción larga
+            seo_title: { es: docNuevo.seo_title || "" }, // NUEVO: Título SEO
+            seo_description: { es: docNuevo.seo_description || "" }, // NUEVO: Descripción SEO
             published: true
         };
         // Asignamos la categoría, o limpiamos el array si el usuario la borró en el POS
@@ -685,6 +687,46 @@ REGLAS ESTRICTAS:
         return { success: true, data: dataObj };
     } catch (error) {
         logger.error("Error interno de IA:", error.message, error);
+        throw new HttpsError("internal", `Error del servidor: ${error.message}`);
+    }
+});
+
+// ========================================================
+// IA: Generar Título y Descripción SEO con Gemini
+// ========================================================
+exports.generarSeoIA = onCall({ secrets: [GEMINI_API_KEY], timeoutSeconds: 60 }, async (request) => {
+    try {
+        const { nombre, descripcion } = request.data;
+
+        if (!nombre) {
+            throw new HttpsError("invalid-argument", "El nombre del producto es obligatorio.");
+        }
+
+        const genAI = new GoogleGenerativeAI(GEMINI_API_KEY.value());
+        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+        const prompt = `Eres un Asistente experto en SEO para E-commerce. Tu tarea es generar un Título y una Descripción optimizados para Google basados en los datos de un producto.
+
+DATOS DEL PRODUCTO:
+- Nombre: ${nombre}
+- Descripción: ${descripcion || 'Sin descripción detallada.'}
+
+REGLAS ESTRICTAS:
+1. TÍTULO SEO: Debe tener entre 50 y 60 caracteres. Incluir la palabra clave principal y la marca si es relevante. Formato Título.
+2. DESCRIPCIÓN SEO: Debe tener entre 120 y 160 caracteres. Ser un resumen atractivo que invite al clic, incluyendo palabras clave secundarias. No repetir el título.
+3. FORMATO CRÍTICO: Devuelve ÚNICAMENTE un objeto JSON válido, sin Markdown (sin \`\`\`) ni texto adicional. Usa esta estructura exacta:
+{
+  "titulo": "Título SEO Optimizado Aquí",
+  "descripcion": "Descripción SEO optimizada aquí, concisa y atractiva."
+}`;
+
+        const result = await model.generateContent(prompt);
+        const responseText = result.response.text().replace(/```json/gi, '').replace(/```/g, '').trim();
+        const dataObj = JSON.parse(responseText);
+
+        return { success: true, data: dataObj };
+    } catch (error) {
+        logger.error("Error interno de IA (SEO):", error.message, error);
         throw new HttpsError("internal", `Error del servidor: ${error.message}`);
     }
 });

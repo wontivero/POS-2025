@@ -691,3 +691,42 @@ form.duplicando::before {
     transition: transform 0.2s ease-in-out;
     border: none;
 }
+
+/* ==========================================================================
+   NUEVO DISEÑO: TARJETAS DE INFORMACIÓN EN MODAL DE PRODUCTO
+   ========================================================================== */
+.info-card {
+    background-color: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 0.75rem;
+    padding: 1rem;
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.05);
+}
+
+.info-card-title {
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 0.75rem;
+}
+
+/* ==========================================================================
+   INTERRUPTOR INTEGRADO EN PESTAÑA DE MODAL
+   ========================================================================== */
+.nav-link-with-switch {
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+}
+
+.nav-link-switch-container {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+}
+
+/* Cuando el switch está apagado, el contenido de la pestaña se deshabilita visualmente */
+#ecommerce-pane:not(.active-pane) > #producto-ecommerce-fields {
+    opacity: 0.5;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+}
