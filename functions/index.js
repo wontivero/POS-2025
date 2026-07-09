@@ -133,14 +133,14 @@ exports.sincronizarTiendanube = onDocumentWritten(
             // Si el producto tiene variantes, los precios y el destaque se aplican a CADA variante.
             tnVariants = docNuevo.variantes.map((v, index) => {
                 const variantObj = {
-                    price: String(v.venta || docNuevo.venta || "0"), // Usa precio de variante o el general
-                    promotional_price: docNuevo.promotional_price > 0 ? String(docNuevo.promotional_price) : "", // <-- CORRECCIÓN: Enviar "" para borrar la oferta
-                    // Si es la primera variante, hereda el peso y dimensiones generales.
-                    // Las demás se ponen en 0 para evitar que Tiendanube sume los pesos.
-                    weight: index === 0 && docNuevo.peso ? String(docNuevo.peso / 1000) : "0.000",
-                    depth: index === 0 && docNuevo.profundidad ? String(docNuevo.profundidad) : "0.00",
-                    width: index === 0 && docNuevo.ancho ? String(docNuevo.ancho) : "0.00",
-                    height: index === 0 && docNuevo.alto ? String(docNuevo.alto) : "0.00",
+                    price: String(v.venta ?? docNuevo.venta ?? "0"), // Usa precio de variante o el general
+                    promotional_price: docNuevo.promotional_price > 0 ? String(docNuevo.promotional_price) : "",
+                    // --- CORRECCIÓN: Aplicar peso y dimensiones a TODAS las variantes ---
+                    weight: docNuevo.peso ? String(docNuevo.peso / 1000) : "0.000",
+                    depth: docNuevo.profundidad ? String(docNuevo.profundidad) : "0.00",
+                    width: docNuevo.ancho ? String(docNuevo.ancho) : "0.00",
+                    height: docNuevo.alto ? String(docNuevo.alto) : "0.00",
+                    // --- FIN CORRECCIÓN ---
                     stock: parseInt(v.stock) || 0,
                     sku: v.codigo || "",
                     barcode: v.codigo || "",
@@ -166,9 +166,14 @@ exports.sincronizarTiendanube = onDocumentWritten(
         }
         // --- FIN DE LA CORRECCIÓN ---
 
+        // --- CORRECCIÓN: Convertir nombre a Formato Título ---
+        const toTitleCase = (str) => {
+            return str.replace(/\w\S*/g, (txt) => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase());
+        };
+
         // ESTRUCTURA BASE DEL PRODUCTO
         const productoTN = {
-            name: { es: docNuevo.nombre },
+            name: { es: toTitleCase(docNuevo.nombre) },
             brand: docNuevo.marca || null,
             description: { es: docNuevo.descripcionWeb || "" },
             published: true
