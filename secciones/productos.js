@@ -19,6 +19,8 @@ const PRODUCTS_PER_PAGE = 50;
 let isLoading = false;
 let tableContainer;
 
+let expandedProducts = new Set(); // NUEVO: Almacena los IDs de los productos expandidos
+
 // --- Elementos del DOM ---
 let tablaProductosBody, tablaProductosHead, btnNuevoProducto, productoModalEl, productoModal, formProducto, modalProductoLabel, btnExportarProductos;
 let filtroProductos, filtroMarca, filtroColor, filtroRubro, filtroStockMin, filtroStockMax, filtroVentaMin, filtroVentaMax, filtroWeb, btnAplicarFiltros, btnLimpiarFiltros;
@@ -42,6 +44,17 @@ let cachedSocialPosts = { instagram: null, whatsapp: null }; // Memoria para los
 // --- Funciones de la Sección de Productos ---
 
 function sortProducts(products, column, direction) {
+    // --- INICIO DE LA MODIFICACIÓN: Ordenamiento por bloques ---
+    // Creamos un mapa para agrupar variantes con su padre
+    const productMap = new Map();
+    products.forEach(p => {
+        // Usamos el parentId si es una variante, o el id propio si es un padre
+        const parentId = p.parentId || p.id;
+        if (!productMap.has(parentId)) {
+            productMap.set(parentId, products.find(prod => prod.id === parentId));
+        }
+    });
+    // --- FIN DE LA MODIFICACIÓN ---
     return [...products].sort((a, b) => {
         let valA = a[column];
         let valB = b[column];
@@ -62,6 +75,27 @@ function sortProducts(products, column, direction) {
             valB = calcPercent(b);
         }
 
+        // --- INICIO DE LA MODIFICACIÓN: Lógica de ordenamiento por grupo ---
+        const parentA = productMap.get(a.parentId || a.id);
+        const parentB = productMap.get(b.parentId || b.id);
+
+        if (parentA.id !== parentB.id) {
+            // Si son de diferentes productos padre, ordenamos los padres
+            let parentValA = parentA[column];
+            let parentValB = parentB[column];
+            if (typeof parentValA === 'string') parentValA = parentValA.toLowerCase();
+            if (typeof parentValB === 'string') parentValB = parentValB.toLowerCase();
+
+            if (parentValA < parentValB) return direction === 'asc' ? -1 : 1;
+            if (parentValA > parentValB) return direction === 'asc' ? 1 : -1;
+        }
+
+        // Si son del mismo producto padre (o son el mismo producto), ordenamos por su propia data
+        // Esto asegura que el padre siempre vaya primero que sus variantes
+        if (a.isVariant && !b.isVariant) return 1;
+        if (!a.isVariant && b.isVariant) return -1;
+        // --- FIN DE LA MODIFICACIÓN ---
+
         if (valA < valB) return direction === 'asc' ? -1 : 1;
         if (valA > valB) return direction === 'asc' ? 1 : -1;
         return 0;
@@ -76,6 +110,7 @@ function renderProductRows(productos) {
 
     let rowsHtml = '';
     productos.forEach(p => {
+        // --- INICIO DE LA MODIFICACIÓN: Renderizado con filas anidadas ---
         let c = p.stock <= 0 ? 'table-danger' : (p.stock <= p.stockMinimo ? 'table-warning' : '');
         const ultimaActualizacion = p.fechaUltimoCambioPrecio ? p.fechaUltimoCambioPrecio.toDate().toLocaleDateString('es-AR') : 'N/A';
 
@@ -141,8 +176,11 @@ function renderProductRows(productos) {
         const vCodigo = p.tieneVariantes ? `<span class="badge bg-primary">Varios</span>` : `<code>${p.codigo || 'N/A'}</code>`;
         const vStock = p.tieneVariantes ? `<span class="badge bg-info" title="Suma total de variantes">${p.variantes?.reduce((acc, v)=>acc+(parseInt(v.stock)||0),0) || 0}</span>` : (p.stock || 0);
 
-        rowsHtml += `<tr class="${c}" data-id="${p.id}">
-            <td>${p.nombre || 'N/A'}${cloudIcon}</td>
+        const isExpanded = expandedProducts.has(p.id);
+        const toggleIcon = p.tieneVariantes ? `<button class="btn btn-sm btn-light p-0 me-2 toggle-variants-btn" data-product-id="${p.id}" style="width: 20px; height: 20px;"><i class="fas ${isExpanded ? 'fa-chevron-down' : 'fa-chevron-right'}"></i></button>` : '<span class="me-2" style="display: inline-block; width: 20px;"></span>';
+
+        rowsHtml += `<tr class="${c} parent-product" data-id="${p.id}">
+            <td><div class="d-flex align-items-center">${toggleIcon} ${p.nombre || 'N/A'}${cloudIcon}</div></td>
             <td>${vCodigo}</td>
             <td>${capitalizeFirstLetter(p.marca) || 'N/A'}</td>
             <td>${capitalizeFirstLetter(p.color) || 'N/A'}</td>
@@ -160,6 +198,37 @@ function renderProductRows(productos) {
                 <button class="btn btn-danger btn-sm btn-eliminar-producto" data-id="${p.id}" title="Eliminar"><i class="fas fa-trash-alt"></i></button>
             </td>
         </tr>`;
+
+        if (p.tieneVariantes && p.variantes) {
+            p.variantes.forEach(v => {
+                const vStockVal = v.stock !== undefined ? v.stock : 0;
+                const vCostoVal = v.costo !== undefined ? v.costo : p.costo;
+                const vVentaVal = v.venta !== undefined ? v.venta : p.venta;
+                let vGananciaVal = '0.00%';
+                if (vCostoVal > 0) vGananciaVal = (((vVentaVal - vCostoVal) / vCostoVal) * 100).toFixed(2) + '%';
+                
+                const vStockClass = vStockVal <= 0 ? 'table-danger' : '';
+
+                rowsHtml += `
+                    <tr class="variant-row ${vStockClass} ${isExpanded ? '' : 'd-none'}" data-parent-id="${p.id}">
+                        <td><div class="d-flex align-items-center"><span style="width: 28px;"></span><i class="fas fa-level-up-alt fa-rotate-90 me-2 text-muted"></i> ${v.nombre}</div></td>
+                        <td><code>${v.codigo || 'N/A'}</code></td>
+                        <td>-</td>
+                        <td>-</td>
+                        <td>-</td>
+                        <td>${formatCurrency(vCostoVal)}</td>
+                        <td class="precio-venta">${formatCurrency(vVentaVal)}</td>
+                        <td>${vGananciaVal}</td>
+                        <td>${vStockVal}</td>
+                        <td>-</td>
+                        <td>
+                            <button class="btn btn-warning btn-sm btn-editar-producto" data-id="${p.id}" title="Editar Producto Padre"><i class="fas fa-edit"></i></button>
+                        </td>
+                    </tr>
+                `;
+            });
+        }
+        // --- FIN DE LA MODIFICACIÓN ---
     });
     tablaProductosBody.innerHTML += rowsHtml;
     isLoading = false;
@@ -187,21 +256,45 @@ function handleScroll() {
 function aplicarFiltrosYRenderizar() {
     if (!tablaProductosBody) return;
 
+    // --- INICIO DE LA MODIFICACIÓN: Lógica de filtrado para grupos ---
     let productosFiltrados = [...listaCompletaProductos];
 
+    // Limpiamos y preparamos el set de expansión automática solo si hay un término de búsqueda.
+    const searchTerm = filtroProductos ? filtroProductos.value.trim() : '';
+    if (searchTerm) {
+        expandedProducts.clear();
+    }
     if (filtroProductos && filtroProductos.value.trim() !== '') {
         const userInput = filtroProductos.value.toLowerCase().trim();
         const searchTerms = userInput.split(' ').filter(term => term.length > 0);
         if (searchTerms.length > 0) {
-            productosFiltrados = productosFiltrados.filter(p => {
-                // Unimos los campos básicos del producto para la búsqueda.
+            // Obtenemos los IDs de los productos padre que coinciden
+            const matchingParentIds = new Set();
+            listaCompletaProductos.forEach(p => {
+                // --- INICIO DE LA CORRECCIÓN ---
+                // Unimos la información del padre y de las variantes en una sola cadena de texto para la búsqueda.
                 let searchableString = [p.nombre_lowercase, p.codigo, p.marca, p.color, p.rubro].join(' ').toLowerCase();
-                // Si el producto tiene variantes, agregamos los códigos de cada variante a la cadena de búsqueda.
+                let variantMatch = false;
+
                 if (p.tieneVariantes && p.variantes) {
-                    searchableString += ' ' + p.variantes.map(v => v.codigo).join(' ');
+                    const variantsSearchableString = p.variantes.map(v => `${v.codigo} ${v.nombre}`).join(' ').toLowerCase();
+                    // Verificamos si algún término de búsqueda está en las variantes para saber si debemos expandir.
+                    if (searchTerms.some(term => variantsSearchableString.includes(term))) {
+                        variantMatch = true;
+                    }
+                    searchableString += ' ' + variantsSearchableString;
                 }
-                return searchTerms.every(term => searchableString.includes(term.toLowerCase()));
+
+                // Ahora buscamos en la cadena de texto unificada.
+                if (searchTerms.every(term => searchableString.includes(term))) {
+                   matchingParentIds.add(p.id);
+                    if (variantMatch) {
+                        expandedProducts.add(p.id); // Si hubo coincidencia en variantes, expandimos.
+                    }
+                }
             });
+            // Filtramos la lista para quedarnos solo con los padres que coinciden
+            productosFiltrados = productosFiltrados.filter(p => matchingParentIds.has(p.id));
         }
     }
 
@@ -248,6 +341,7 @@ function aplicarFiltrosYRenderizar() {
         const estadoWeb = filtroWeb.value;
         productosFiltrados = productosFiltrados.filter(p => estadoWeb === 'publicados' ? p.publicarEnWeb === true : !p.publicarEnWeb);
     }
+    // --- FIN DE LA MODIFICACIÓN ---
 
     productosFiltradosActuales = sortProducts(productosFiltrados, currentSortColumn, currentSortDirection);
 
@@ -463,9 +557,14 @@ function renderModalImagenesPreview() {
 function agregarFilaVarianteModal(variante = null) {
     if (!modalVariantesTbody) return;
     const trMain = document.createElement('tr');
+    // --- INICIO DE LA CORRECCIÓN ---
+    // Si la variante no tiene un costo/venta, usamos el valor del campo general del formulario como fallback.
+    const mainCosto = parseFloat(productoCosto.value) || '';
+    const mainVenta = parseFloat(productoVenta.value) || '';
     const imagenSrc = (variante && variante.imagenUrl) ? variante.imagenUrl : 'https://placehold.co/100x100?text=Foto';
-    let cVal = variante && variante.costo !== undefined ? variante.costo : '';
-    let vVal = variante && variante.venta !== undefined ? variante.venta : '';
+    let cVal = variante && variante.costo !== undefined ? variante.costo : mainCosto;
+    let vVal = variante && variante.venta !== undefined ? variante.venta : mainVenta;
+    // --- FIN DE LA CORRECCIÓN ---
 
     trMain.innerHTML = `
         <td><input type="text" class="form-control form-control-sm var-nombre" placeholder="Ej: Rojo - XL" value="${variante ? variante.nombre : ''}"></td>
@@ -600,8 +699,8 @@ async function handleFormSubmit(e) {
 
             const rawCosto = filaSettings.querySelector('.var-costo').value;
             const rawVenta = filaSettings.querySelector('.var-venta').value;
-            const vCosto = rawCosto !== '' ? (parseFloat(rawCosto) || 0) : mainCosto;
-            const vVenta = rawVenta !== '' ? (parseFloat(rawVenta) || 0) : mainVenta;
+            const vCosto = rawCosto !== '' ? (parseFloat(rawCosto) || mainCosto) : mainCosto;
+            const vVenta = rawVenta !== '' ? (parseFloat(rawVenta) || mainVenta) : mainVenta;
 
             if (!vNom || !vCod) varianteInvalida = true;
             else variantes.push({ 
@@ -834,6 +933,41 @@ async function handleDelete(e) {
     }
 }
 
+/**
+ * Actualiza los campos de precio de todas las variantes en el modal
+ * basándose en los valores de los campos principales del producto.
+ */
+function actualizarPreciosVariantes() {
+    if (!modalProductoTieneVariantes || !modalProductoTieneVariantes.checked || !modalVariantesTbody) {
+        return;
+    }
+
+    const mainCosto = parseFloat(productoCosto.value) || 0;
+    const mainVenta = parseFloat(productoVenta.value) || 0;
+
+    const filas = modalVariantesTbody.querySelectorAll('tr:not(.variant-settings-row)');
+    filas.forEach(filaMain => {
+        const filaSettings = filaMain.nextElementSibling;
+        if (!filaSettings) return;
+
+        const iCosto = filaSettings.querySelector('.var-costo');
+        const iGanancia = filaSettings.querySelector('.var-ganancia');
+        const iVenta = filaSettings.querySelector('.var-venta');
+
+        // Asignamos los nuevos valores base a los campos de la variante
+        iCosto.value = mainCosto > 0 ? mainCosto.toFixed(2) : '';
+        iVenta.value = mainVenta > 0 ? mainVenta.toFixed(2) : '';
+
+        // Recalculamos la ganancia de la variante con los nuevos valores
+        if (mainCosto > 0 && mainVenta > mainCosto) {
+            const ganancia = ((mainVenta - mainCosto) / mainCosto) * 100;
+            iGanancia.value = ganancia.toFixed(2);
+        } else {
+            iGanancia.value = '';
+        }
+    });
+}
+
 function updatePorcentajeField() {
     if (!productoCosto || !productoVenta || !productoPorcentaje) return;
     const costo = parseFloat(productoCosto.value) || 0;
@@ -845,6 +979,7 @@ function updatePorcentajeField() {
         porcentaje = "100+";
     }
     productoPorcentaje.value = `${porcentaje}%`;
+    actualizarPreciosVariantes(); // Sincronizamos variantes
 }
 
 function updateVentaField() {
@@ -856,6 +991,7 @@ function updateVentaField() {
         const venta = costo * (1 + porcentaje / 100);
         const ventaRedondeada = roundUpToNearest50(venta);
         productoVenta.value = ventaRedondeada.toFixed(2);
+        actualizarPreciosVariantes(); // Sincronizamos variantes
     }
 }
 
@@ -1903,6 +2039,19 @@ export function init() {
                 if (radioIg) radioIg.checked = true;
                 openSocialPostModal(id);
             }
+            // --- INICIO DE LA MODIFICACIÓN: Listener para expandir/colapsar ---
+            const toggleBtn = e.target.closest('.toggle-variants-btn');
+            if (toggleBtn) {
+                const productId = toggleBtn.dataset.productId;
+                const icon = toggleBtn.querySelector('i');
+                document.querySelectorAll(`.variant-row[data-parent-id="${productId}"]`).forEach(row => {
+                    row.classList.toggle('d-none');
+                });
+                icon.classList.toggle('fa-chevron-right');
+                icon.classList.toggle('fa-chevron-down');
+                if (icon.classList.contains('fa-chevron-down')) expandedProducts.add(productId); else expandedProducts.delete(productId);
+            }
+            // --- FIN DE LA MODIFICACIÓN ---
         });
     }
     if (tablaProductosHead) tablaProductosHead.addEventListener('click', handleSort);

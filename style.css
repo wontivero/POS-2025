@@ -665,3 +665,29 @@ form.duplicando::before {
     transform: translateY(-2px);
     box-shadow: 0 6px 15px rgba(13, 110, 253, 0.3);
 }
+
+/* ==========================================================================
+   ESTILOS PARA TABLA DE PRODUCTOS CON FILAS ANIDADAS
+   ========================================================================== */
+
+/* Fila del producto padre */
+.parent-product {
+    font-weight: 600; /* Texto ligeramente más grueso */
+    background-color: #f8f9fa; /* Fondo sutil para distinguirlo */
+}
+
+/* Fila de una variante */
+.variant-row {
+    background-color: #ffffff; /* Fondo blanco normal */
+}
+
+/* Estilo para la celda de la variante para crear la indentación */
+.variant-row td:first-child {
+    padding-left: 2.5rem !important; /* Aumentamos el padding izquierdo para la sangría */
+}
+
+/* Botón para expandir/colapsar */
+.toggle-variants-btn {
+    transition: transform 0.2s ease-in-out;
+    border: none;
+}
