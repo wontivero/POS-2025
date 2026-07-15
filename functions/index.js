@@ -133,7 +133,8 @@ exports.sincronizarTiendanube = onDocumentWritten(
             // Si el producto tiene variantes, los precios y el destaque se aplican a CADA variante.
             tnVariants = docNuevo.variantes.map((v, index) => {
                 const variantObj = {
-                    price: String(v.venta ?? docNuevo.venta ?? "0"), // Usa precio de variante o el general
+                    // --- INICIO CORRECCIÓN PRECIO WEB ---
+                    price: String(v.precio_web ?? docNuevo.precio_web ?? v.venta ?? docNuevo.venta ?? "0"),
                     promotional_price: docNuevo.promotional_price > 0 ? String(docNuevo.promotional_price) : "",
                     // --- CORRECCIÓN: Aplicar peso y dimensiones a TODAS las variantes ---
                     weight: docNuevo.peso ? String(docNuevo.peso / 1000) : "0.000",
@@ -151,7 +152,8 @@ exports.sincronizarTiendanube = onDocumentWritten(
             });
         } else {
             const singleVariant = {
-                price: docNuevo.venta ? String(docNuevo.venta) : "0",
+                price: String(docNuevo.precio_web ?? docNuevo.venta ?? "0"),
+                // --- FIN CORRECCIÓN PRECIO WEB ---
                 promotional_price: docNuevo.promotional_price > 0 ? String(docNuevo.promotional_price) : "", // <-- CORRECCIÓN: Enviar "" para borrar la oferta
                 stock: parseInt(docNuevo.stock) || 0,
                 sku: docNuevo.codigo || "",

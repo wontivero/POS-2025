@@ -35,6 +35,7 @@ let quillModal;
 let productoDestacadoWeb, productoEnOfertaWeb, productoOfertaFields, productoPrecioPromocional;
 let productoAlto, productoAncho, productoProfundidad;
 let productoEcommerceFields;
+let tnPrecioBase, tnRecargo, tnPrecioFinal, btnResetTnPrecio; // NUEVO: Campos de precios TN
 let productoSeoTitulo, productoSeoDescripcion; // NUEVO: Campos SEO
 let productoImagenesInput, productoImagenesPreview, productoImagenUrlInput, btnAddProductoImagenUrl;
 let modalImagenes = [];
@@ -771,6 +772,7 @@ async function handleFormSubmit(e) {
         profundidad: parseInt(productoProfundidad ? productoProfundidad.value : 0) || 0,
         categoriaWeb: productoCategoriaWeb ? productoCategoriaWeb.value : '',
         seo_title: productoSeoTitulo ? productoSeoTitulo.value.trim() : '', // NUEVO
+        precio_web: parseFloat(tnPrecioFinal.value) || 0, // NUEVO
         seo_description: productoSeoDescripcion ? productoSeoDescripcion.value.trim() : '', // NUEVO
         imagenes: [],
         featured: productoDestacadoWeb ? productoDestacadoWeb.checked : false,
@@ -1391,6 +1393,18 @@ function abrirProductoModal(modo, producto = null) {
         if (productoAncho) productoAncho.value = producto.ancho ?? 0;
         if (productoProfundidad) productoProfundidad.value = producto.profundidad ?? 0;
         if (productoCategoriaWeb) {
+            if (tnPrecioBase) tnPrecioBase.value = producto.venta?.toFixed(2) || '0.00';
+            if (tnRecargo) tnRecargo.value = getAppConfig().tiendanube?.surchargePercentage || 10;
+            if (tnPrecioFinal) tnPrecioFinal.value = producto.precio_web || 0;
+            
+            // --- INICIO DE LA CORRECCIÓN ---
+            // Comparamos el precio guardado con el que se calcularía. Si son diferentes,
+            // significa que el usuario guardó un precio manual y no debemos recalcularlo al abrir.
+            const recargo = parseFloat(tnRecargo.value) || 0;
+            const precioCalculado = (producto.venta || 0) * (1 + recargo / 100);
+            if (Math.abs(precioCalculado - (producto.precio_web || 0)) < 0.01) {
+                if(tnRecargo) tnRecargo.dispatchEvent(new Event('input')); // Solo recalculamos si el precio no fue modificado manualmente.
+            }
             if (productoSeoTitulo) productoSeoTitulo.value = producto.seo_title || ''; // NUEVO
             if (productoSeoDescripcion) productoSeoDescripcion.value = producto.seo_description || ''; // NUEVO
             if (producto.categoriaWeb && !Array.from(productoCategoriaWeb.options).some(o => o.value === producto.categoriaWeb)) {
@@ -1472,6 +1486,9 @@ function resetProductoModal() {
     if (productoPrecioPromocional) productoPrecioPromocional.value = '';
     // --- FIN DE LA MODIFICACIÓN ---
 
+    if (tnPrecioBase) tnPrecioBase.value = '';
+    if (tnRecargo) tnRecargo.value = getAppConfig().tiendanube?.surchargePercentage || 10;
+    if (tnPrecioFinal) tnPrecioFinal.value = '';
     if (productoSeoTitulo) productoSeoTitulo.value = ''; // NUEVO
     if (productoSeoDescripcion) productoSeoDescripcion.value = ''; // NUEVO
     if (modalVariantesTbody) modalVariantesTbody.innerHTML = '';
@@ -1774,6 +1791,10 @@ export function init() {
     productoEnOfertaWeb = document.getElementById('producto-en-oferta-web');
     productoOfertaFields = document.getElementById('producto-oferta-fields');
     productoPrecioPromocional = document.getElementById('producto-precio-promocional');
+    tnPrecioBase = document.getElementById('tn-precio-base');
+    tnRecargo = document.getElementById('tn-recargo');
+    tnPrecioFinal = document.getElementById('tn-precio-final');
+    btnResetTnPrecio = document.getElementById('btn-reset-tn-precio');
     productoSeoTitulo = document.getElementById('producto-seo-titulo'); // NUEVO
     productoSeoDescripcion = document.getElementById('producto-seo-descripcion'); // NUEVO
 
@@ -2143,6 +2164,26 @@ export function init() {
             else pane.classList.remove('active-pane');
             // CORRECCIÓN: Aseguramos que el contenedor se muestre u oculte.
             productoEcommerceFields.style.display = isChecked ? 'flex' : 'none';
+        });
+    }
+    const calcularPrecioWeb = () => {
+        const precioBase = parseFloat(productoVenta.value) || 0;
+        const recargo = parseFloat(tnRecargo.value) || 0;
+        const precioCalculado = precioBase * (1 + recargo / 100);
+        if (tnPrecioBase) tnPrecioBase.value = precioBase.toFixed(2);
+        tnPrecioFinal.value = precioCalculado.toFixed(2);
+    };
+
+    if (tnRecargo) {
+        tnRecargo.addEventListener('input', calcularPrecioWeb);
+    }
+    if (productoVenta) {
+        productoVenta.addEventListener('input', calcularPrecioWeb);
+    }
+    if (btnResetTnPrecio) {
+        btnResetTnPrecio.addEventListener('click', () => {
+            calcularPrecioWeb();
+            showToast('Precio online restaurado al valor calculado.', 'fa-sync-alt', '#0dcaf0');
         });
     }
     if (productoEnOfertaWeb && productoOfertaFields) {

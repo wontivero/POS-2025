@@ -16,14 +16,14 @@ let saveCommissionButton;
 let companyNameInput, companyAddressInput, companyCuitInput, companyIibbInput, companyStartDateInput, companyPhoneInput, companyIvaInput, companyEmailInput, companyLogoInput, userEmailInput, userRoleSelect, btnAddUser, usersTableBody;
 let saveCompanyButton;
 let autoPrintTicketCheck, savePrintingButton;
-let loyaltyPercentageInput, loyaltyPrintCheck, loyaltyExpirationCheck, loyaltyExpirationDaysInput, btnSaveLoyalty; // <-- NUEVO
+let loyaltyPercentageInput, loyaltyPrintCheck, loyaltyExpirationCheck, loyaltyExpirationDaysInput, btnSaveLoyalty;
 let arcaAutoContado, arcaAutoTransferencia, arcaAutoDebito, arcaAutoCredito, btnSaveArca; // <-- NUEVO ARCA
 let arcaBaseUrl, arcaCuit, arcaApiKey, arcaIsProd; // <-- NUEVO ARCA CREDENCIALES
 let webCategoriaNombreInput, webCategoriaPadreSelect, btnAddWebCategoria, btnCancelEditCategoria, webCategoriasTableBody; // <-- NUEVO CATEGORÍAS WEB
 let editingCategoriaId = null;
 let editingCategoriaOldRuta = null;
-let tnUrlInput, tnUserIdInput, tnTokenInput, saveTnConfigButton; // <-- NUEVO TIENDANUBE
-let btnGenerarBackup; // <-- NUEVO BACKUP
+let tnUrlInput, tnUserIdInput, tnTokenInput, tnSurchargeInput, saveTnConfigButton; // <-- MODIFICADO TIENDANUBE
+let btnGenerarBackup;
 // --- FIN DE LA MODIFICACIÓN ---
 
 /**
@@ -62,6 +62,9 @@ async function loadConfiguration() {
             }
             if (tnTokenInput) {
                 tnTokenInput.value = configData.tiendanube?.token || '';
+            }
+            if (tnSurchargeInput) {
+                tnSurchargeInput.value = configData.tiendanube?.surchargePercentage || 10;
             }
 
             // Cargar configuración de ARCA
@@ -147,7 +150,8 @@ async function saveTnConfig() {
         const storeUrl = tnUrlInput.value.trim();
         const userId = tnUserIdInput.value.trim();
         const token = tnTokenInput.value.trim();
-        await setDoc(configRef, { tiendanube: { storeUrl, userId, token } }, { merge: true });
+        const surchargePercentage = parseFloat(tnSurchargeInput.value) || 0;
+        await setDoc(configRef, { tiendanube: { storeUrl, userId, token, surchargePercentage } }, { merge: true });
         showToast("Configuración de Tiendanube guardada.");
     } catch (error) {
         console.error(error);
@@ -631,6 +635,7 @@ export async function init() {
     tnUrlInput = document.getElementById('config-tn-url');
     tnUserIdInput = document.getElementById('config-tn-userid');
     tnTokenInput = document.getElementById('config-tn-token');
+    tnSurchargeInput = document.getElementById('config-tn-surcharge');
     saveTnConfigButton = document.getElementById('btn-guardar-tn-config');
     btnGenerarBackup = document.getElementById('btn-generar-backup');
 
