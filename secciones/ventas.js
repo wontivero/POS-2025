@@ -1,5 +1,4 @@
 // secciones/ventas.js
-import { init as initProductosModal } from './productos.js';
 import { haySesionActiva, getSesionActivaId, verificarEstadoCaja } from './caja.js';
 import { getFirestore, collection, onSnapshot, query, orderBy, runTransaction, doc, updateDoc, serverTimestamp, getDoc, increment } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
 import { getCollection, saveDocument, formatCurrency, getTodayDate, updateDocument, deleteDocument, getFormattedDateTime, generatePDF, printThermalTicket, showAlertModal, showConfirmationModal, facturarEnArca, marcarVentaFacturada, showToast } from '../utils.js';
@@ -1487,7 +1486,7 @@ function renderQuickAccessProducts() {
 
 
 
-export async function init() {
+async function init() {
     // --- INICIO DEL NUEVO BLOQUE DE "RE-FACTURACIÓN" --- (Sin cambios)
     const ventaGuardadaStr = sessionStorage.getItem('ventaParaCorregir');
     if (ventaGuardadaStr) {
@@ -1582,7 +1581,10 @@ export async function init() {
     }
 
     // 2. INICIALIZAR MODAL (Sin cambios)
-    productoModal = initProductosModal();
+    // --- INICIO DE LA CORRECCIÓN ---
+    // Reemplazamos el import estático por uno dinámico para evitar el error de carga de módulos.
+    const productosModule = await import('./productos.js');
+    productoModal = productosModule.init();
 
     // INICIALIZAR LÓGICA DE EDICIÓN DE PRECIOS
     initEditPriceModalListeners();
@@ -1805,3 +1807,6 @@ export async function init() {
     // 5. CARGAR DATOS (Sin cambios)
     await loadData();
 }
+
+
+export { init };

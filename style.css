@@ -118,11 +118,11 @@ body {
 }
 /* --- FIN DE LA MEJORA --- */
 /* Estilo para resaltar el precio de venta en la tabla de productos */
-td.precio-venta {
-    font-weight: bold;
-    color: #0d6efd;
-    /* Color primario de Bootstrap */
-    font-size: 1.05em;
+td.precio-venta {    
+    font-weight: 800; /* Texto más grueso */
+    color: #0d6efd; /* Azul primario de Bootstrap */
+    font-size: 1.15em; /* Un poco más grande */
+    vertical-align: middle; /* Centrado vertical */
 }
 
 /* Estilos para el Grid de Acceso Rápido en Ventas */

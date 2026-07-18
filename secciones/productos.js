@@ -24,7 +24,7 @@ let expandedProducts = new Set(); // NUEVO: Almacena los IDs de los productos ex
 // --- Elementos del DOM ---
 let tablaProductosBody, tablaProductosHead, btnNuevoProducto, productoModalEl, productoModal, formProducto, modalProductoLabel, btnExportarProductos;
 let filtroProductos, filtroMarca, filtroColor, filtroRubro, filtroStockMin, filtroStockMax, filtroVentaMin, filtroVentaMax, filtroWeb, btnAplicarFiltros, btnLimpiarFiltros;
-let updateField, updateTypePercentage, updateTypeFixed, updateAmount, btnAplicarActualizacionMasiva;
+let updateField, updateTypePercentage, updateTypeFixed, updateAmount, btnAplicarActualizacionMasiva, btnCalcularPreciosWebMasivo;
 let filtroFechaActDesde, filtroFechaActHasta;
 let datalistMarcasFiltro, datalistColoresFiltro, datalistRubrosFiltro;
 let datalistMarcasModal, datalistColoresModal, datalistRubrosModal;
@@ -126,6 +126,22 @@ function renderProductRows(productos) {
             vGanancia = '100%+';
         }
 
+        // --- INICIO: Lógica para la nueva columna "Precio Web" ---
+        let precioWebHtml = '';
+        const precioWebCalculado = p.precio_web && p.precio_web > 0 && p.precio_web !== p.venta;
+
+        if (precioWebCalculado) {
+            // Si tiene un precio web calculado y distinto al de venta, lo mostramos con un ícono de éxito.
+            precioWebHtml = `${formatCurrency(p.precio_web)} <i class="fas fa-check-circle text-success" title="Precio web calculado"></i>`;
+        } else {
+            // Si no, es un producto "legacy". Mostramos el precio de venta con una advertencia.
+            precioWebHtml = `${formatCurrency(p.venta)} 
+                <i class="fas fa-exclamation-triangle text-warning" 
+                   data-bs-toggle="tooltip" 
+                   title="Precio web no calculado. Abre el producto para aplicar el recargo y guardarlo."></i>`;
+        }
+        // --- FIN: Lógica para la nueva columna "Precio Web" ---
+
         if (p.tieneVariantes && p.variantes && p.variantes.length > 0) {
             const firstVariant = p.variantes[0];
             const allSameCosto = p.variantes.every(v => v.costo === firstVariant.costo);
@@ -145,6 +161,14 @@ function renderProductRows(productos) {
                 vVenta = `<span class="badge bg-light text-dark">Varios</span>`;
                 vGanancia = `<span class="badge bg-light text-dark">Varios</span>`;
             }
+            // Para productos con variantes, el precio web se considera a nivel de producto padre.
+            if (p.precio_web && p.precio_web > 0) {
+                precioWebHtml = `${formatCurrency(p.precio_web)} <i class="fas fa-check-circle text-success" title="Precio web calculado"></i>`;
+            } else {
+                 precioWebHtml = `<span class="badge bg-light text-dark" data-bs-toggle="tooltip" title="Abre el producto para calcular el precio web.">N/A</span>`;
+            }
+
+
         } else if (p.tieneVariantes) {
             vCosto = `<span class="badge bg-light text-dark">N/A</span>`;
             vVenta = `<span class="badge bg-light text-dark">N/A</span>`;
@@ -189,6 +213,7 @@ function renderProductRows(productos) {
             <td><span class="badge bg-secondary">${capitalizeFirstLetter(p.rubro)}</span></td>
             <td>${vCosto}</td>
             <td class="precio-venta">${vVenta}</td>
+            <td>${precioWebHtml}</td>
             <td>${vGanancia}</td>
             <td>${vStock}</td>
             <td>${ultimaActualizacion}</td>
@@ -220,6 +245,7 @@ function renderProductRows(productos) {
                         <td>-</td>
                         <td>${formatCurrency(vCostoVal)}</td>
                         <td class="precio-venta">${formatCurrency(vVentaVal)}</td>
+                        <td>-</td>
                         <td>${vGananciaVal}</td>
                         <td>${vStockVal}</td>
                         <td>-</td>
@@ -234,6 +260,12 @@ function renderProductRows(productos) {
     });
     tablaProductosBody.innerHTML += rowsHtml;
     isLoading = false;
+
+    // --- INICIO: Inicializar tooltips de Bootstrap ---
+    // Después de agregar las filas al DOM, buscamos todos los elementos que necesiten un tooltip.
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl));
+    // --- FIN: Inicializar tooltips ---
 }
 
 function loadMoreProducts() {
@@ -352,10 +384,13 @@ function aplicarFiltrosYRenderizar() {
     if (tableContainer) tableContainer.scrollTop = 0;
     
     if (productosFiltradosActuales.length === 0) {
-        tablaProductosBody.innerHTML = '<tr><td colspan="11" class="text-center">No se encontraron productos con los filtros aplicados.</td></tr>';
+        tablaProductosBody.innerHTML = '<tr><td colspan="12" class="text-center">No se encontraron productos con los filtros aplicados.</td></tr>';
     } else {
         loadMoreProducts();
     }
+
+    // Habilitar o deshabilitar el botón de acción masiva
+    if (btnCalcularPreciosWebMasivo) btnCalcularPreciosWebMasivo.disabled = productosFiltradosActuales.length === 0;
     
     updateSortIcons();
 }
@@ -973,6 +1008,18 @@ function actualizarPreciosVariantes() {
     });
 }
 
+/**
+ * Calcula el precio para la web basándose en el precio de venta y el recargo.
+ */
+const calcularPrecioWeb = () => {
+    if (!productoVenta || !tnRecargo || !tnPrecioBase || !tnPrecioFinal) return;
+    const precioBase = parseFloat(productoVenta.value) || 0;
+    const recargo = parseFloat(tnRecargo.value) || 0;
+    const precioCalculado = precioBase * (1 + recargo / 100);
+    tnPrecioBase.value = precioBase.toFixed(2);
+    tnPrecioFinal.value = precioCalculado.toFixed(2);
+};
+
 function updatePorcentajeField() {
     if (!productoCosto || !productoVenta || !productoPorcentaje) return;
     const costo = parseFloat(productoCosto.value) || 0;
@@ -983,6 +1030,7 @@ function updatePorcentajeField() {
     } else if (costo === 0 && venta > 0) {
         porcentaje = "100+";
     }
+    calcularPrecioWeb(); // <-- CORRECCIÓN: Llamamos al recálculo web aquí.
     productoPorcentaje.value = `${porcentaje}%`;
     actualizarPreciosVariantes(); // Sincronizamos variantes
 }
@@ -995,8 +1043,11 @@ function updateVentaField() {
     if (!isNaN(costo) && !isNaN(porcentaje) && costo >= 0) {
         const venta = costo * (1 + porcentaje / 100);
         const ventaRedondeada = roundUpToNearest50(venta);
-        productoVenta.value = ventaRedondeada.toFixed(2);
-        actualizarPreciosVariantes(); // Sincronizamos variantes
+        if (productoVenta.value !== ventaRedondeada.toFixed(2)) {
+            productoVenta.value = ventaRedondeada.toFixed(2);
+            calcularPrecioWeb(); // <-- CORRECCIÓN: Llamamos al recálculo web aquí también.
+            actualizarPreciosVariantes(); // Sincronizamos variantes
+        }
     }
 }
 
@@ -1727,7 +1778,48 @@ async function handleIgPost(id) {
     }
 }
 
-export function init() {
+async function handleCalcularPreciosWebMasivo() {
+    const productosParaActualizar = productosFiltradosActuales.filter(p => 
+        !p.precio_web || p.precio_web === 0 || p.precio_web === p.venta
+    );
+
+    if (productosParaActualizar.length === 0) {
+        return showAlertModal("No hay productos 'legacy' en la lista filtrada que necesiten un cálculo de precio web.");
+    }
+
+    const appConfig = getAppConfig();
+    const recargoPorDefecto = appConfig?.tiendanube?.surchargePercentage || 10;
+
+    const confirmado = await showConfirmationModal(
+        `Se calculará el precio web para <strong>${productosParaActualizar.length}</strong> productos usando el recargo por defecto del <strong>${recargoPorDefecto}%</strong>.<br><br>
+         Esta acción solo afectará a productos que no tengan un precio web previamente calculado.<br><br>
+         ¿Deseas continuar?`,
+        "Cálculo Masivo de Precios Web"
+    );
+
+    if (!confirmado) return;
+
+    const progress = showProgressModal("Calculando Precios Web");
+    const batch = writeBatch(db);
+    let contador = 0;
+
+    try {
+        for (const producto of productosParaActualizar) {
+            contador++;
+            progress.update((contador / productosParaActualizar.length) * 100, `Procesando ${contador} de ${productosParaActualizar.length}...`);
+            const precioWeb = producto.venta * (1 + recargoPorDefecto / 100);
+            const docRef = doc(db, 'productos', producto.id);
+            batch.update(docRef, { precio_web: precioWeb });
+        }
+        await batch.commit();
+        progress.finish("¡Éxito!", `Se actualizaron los precios web de <strong>${productosParaActualizar.length}</strong> productos.`);
+    } catch (error) {
+        console.error("Error en el cálculo masivo de precios web:", error);
+        progress.error("Ocurrió un error durante el proceso. Revisa la consola para más detalles.");
+    }
+}
+
+function init() {
     tablaProductosBody = document.getElementById('tabla-productos');
     tablaProductosHead = document.getElementById('tablaProductosHead');
     btnNuevoProducto = document.getElementById('btnNuevoProducto');
@@ -1754,6 +1846,7 @@ export function init() {
     updateTypeFixed = document.getElementById('updateTypeFixed');
     updateAmount = document.getElementById('update-amount');
     btnAplicarActualizacionMasiva = document.getElementById('btnAplicarActualizacionMasiva');
+    btnCalcularPreciosWebMasivo = document.getElementById('btnCalcularPreciosWebMasivo');
     datalistMarcasFiltro = document.getElementById('marcas-list-filtro');
     datalistColoresFiltro = document.getElementById('colores-list-filtro');
     datalistRubrosFiltro = document.getElementById('rubros-list-filtro');
@@ -2148,6 +2241,10 @@ export function init() {
         });
     }
     if (btnAplicarActualizacionMasiva) btnAplicarActualizacionMasiva.addEventListener('click', handleActualizacionMasiva);
+    if (btnCalcularPreciosWebMasivo) {
+        btnCalcularPreciosWebMasivo.addEventListener('click', handleCalcularPreciosWebMasivo);
+        btnCalcularPreciosWebMasivo.disabled = true; // Deshabilitado por defecto
+    }
     if (productoCosto) productoCosto.addEventListener('input', updateVentaField);
     if (productoVenta) productoVenta.addEventListener('input', updatePorcentajeField);
     if (productoPorcentaje) productoPorcentaje.addEventListener('input', updateVentaField);
@@ -2165,15 +2262,7 @@ export function init() {
             // CORRECCIÓN: Aseguramos que el contenedor se muestre u oculte.
             productoEcommerceFields.style.display = isChecked ? 'flex' : 'none';
         });
-    }
-    const calcularPrecioWeb = () => {
-        const precioBase = parseFloat(productoVenta.value) || 0;
-        const recargo = parseFloat(tnRecargo.value) || 0;
-        const precioCalculado = precioBase * (1 + recargo / 100);
-        if (tnPrecioBase) tnPrecioBase.value = precioBase.toFixed(2);
-        tnPrecioFinal.value = precioCalculado.toFixed(2);
     };
-
     if (tnRecargo) {
         tnRecargo.addEventListener('input', calcularPrecioWeb);
     }
@@ -2240,3 +2329,5 @@ export function init() {
 
     return productoModal;
 }
+
+export { init };
