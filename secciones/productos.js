@@ -2330,4 +2330,4 @@ function init() {
     return productoModal;
 }
 
-export { init };
+export { init, abrirProductoModal };

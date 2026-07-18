@@ -284,55 +284,8 @@ function initEditPriceModalListeners() {
 
     const editPriceProductName = document.getElementById('editPriceProductName');
     const editPriceInput = document.getElementById('editPriceInput');
-    const permanentCheck = document.getElementById('editPricePermanentCheck');
-    const permanentFields = document.getElementById('permanentPriceFields');
-    const editCosto = document.getElementById('editPriceCosto');
-    const editPorcentaje = document.getElementById('editPricePorcentaje');
-    const editVenta = document.getElementById('editPriceVenta');
     const btnConfirmEditPrice = document.getElementById('btnConfirmEditPrice');
-
-    // --- INICIO DE LA LÓGICA MEJORADA ---
-
-    // Función para calcular el precio de VENTA basado en el COSTO y el PORCENTAJE
-    const calculateSalePrice = () => {
-        const costo = parseFloat(editCosto.value) || 0;
-        const porcentaje = parseFloat(editPorcentaje.value) || 0;
-        if (costo > 0 && porcentaje > 0) {
-            const venta = costo * (1 + porcentaje / 100);
-            editVenta.value = venta.toFixed(2);
-            if (permanentCheck.checked) editPriceInput.value = editVenta.value;
-        }
-    };
-
-    // Función para calcular el PORCENTAJE basado en el COSTO y la VENTA
-    const calculateProfitMargin = () => {
-        const costo = parseFloat(editCosto.value) || 0;
-        const venta = parseFloat(editVenta.value) || 0;
-        if (costo > 0 && venta > costo) {
-            const porcentaje = ((venta - costo) / costo) * 100;
-            editPorcentaje.value = porcentaje.toFixed(2);
-        } else {
-            editPorcentaje.value = '';
-        }
-        if (permanentCheck.checked) editPriceInput.value = editVenta.value;
-    };
-
-    // Cuando el switch de "cambio permanente" se activa/desactiva
-    permanentCheck.addEventListener('change', () => {
-        const isPermanent = permanentCheck.checked;
-        permanentFields.style.display = isPermanent ? 'block' : 'none';
-        editPriceInput.disabled = isPermanent; // Deshabilita el precio temporal
-        if (isPermanent) {
-            calculateSalePrice(); // Calcula y sincroniza el precio al activar
-        }
-    });
-
-    // Asignamos los listeners para el cálculo bidireccional
-    editCosto.addEventListener('input', calculateSalePrice);
-    editPorcentaje.addEventListener('input', calculateSalePrice);
-    editVenta.addEventListener('input', calculateProfitMargin);
-
-    // --- FIN DE LA LÓGICA MEJORADA ---
+    const btnFullEditProduct = document.getElementById('btnFullEditProduct');
 
     // Restauramos el listener nativo de Bootstrap para cuando se abre el modal
     editPriceModalEl.addEventListener('show.bs.modal', (event) => {
@@ -342,26 +295,21 @@ function initEditPriceModalListeners() {
         const productoEnTicket = ticket.find(p => p.id === currentEditingProductId);
         if (!productoEnTicket) return;
 
-        document.getElementById('editPriceProductName').textContent = productoEnTicket.nombre;
-        document.getElementById('editPriceInput').value = productoEnTicket.precio.toFixed(2);
-        document.getElementById('editPriceCosto').value = productoEnTicket.costo.toFixed(2);
-
-        if (productoEnTicket.costo > 0) {
-            const originalProfitMargin = ((productoEnTicket.precio - productoEnTicket.costo) / productoEnTicket.costo) * 100;
-            document.getElementById('editPricePorcentaje').value = originalProfitMargin.toFixed(2);
-        } else {
-            document.getElementById('editPricePorcentaje').value = '';
-        }
-        document.getElementById('editPriceVenta').value = productoEnTicket.precio.toFixed(2);
-
-        document.getElementById('editPricePermanentCheck').checked = false;
-        document.getElementById('permanentPriceFields').style.display = 'none';
-        document.getElementById('editPriceInput').disabled = false;
+        editPriceProductName.textContent = productoEnTicket.nombre;
+        editPriceInput.value = productoEnTicket.precio.toFixed(2);
     });
 
     editPriceModalEl.addEventListener('shown.bs.modal', () => {
         document.getElementById('editPriceInput').focus();
         document.getElementById('editPriceInput').select();
+    });
+
+    // --- NUEVO: Listener para confirmar con Enter ---
+    editPriceInput.addEventListener('keyup', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault(); // Previene cualquier comportamiento por defecto del Enter
+            btnConfirmEditPrice.click(); // Simula un clic en el botón de confirmar
+        }
     });
 
     // Limpieza forzada ultra-agresiva al cerrar
@@ -376,66 +324,35 @@ function initEditPriceModalListeners() {
         }, 100);
     });
 
+    // --- NUEVO: Listener para el botón de Edición Completa ---
+    btnFullEditProduct.addEventListener('click', async () => {
+        const productoEnTicket = ticket.find(p => p.id === currentEditingProductId);
+        if (!productoEnTicket) return;
+
+        // Buscamos el producto completo en la lista de productos (no la aplanada)
+        const productosOriginales = getProductos();
+        const realDocId = productoEnTicket.parentId || currentEditingProductId;
+        const productoOriginal = productosOriginales.find(p => p.id === realDocId);
+
+        if (productoOriginal) {
+            const modalInstance = bootstrap.Modal.getInstance(editPriceModalEl);
+            if (modalInstance) modalInstance.hide();
+            
+            // Esperamos un poco para que el modal se cierre bien
+            await new Promise(resolve => setTimeout(resolve, 200));
+
+            // Reutilizamos la función del módulo de productos para abrir el modal
+            const productosModule = await import('./productos.js');
+            productosModule.abrirProductoModal('editar', productoOriginal);
+        }
+    });
+
     btnConfirmEditPrice.addEventListener('click', async () => {
-        const originalButtonText = btnConfirmEditPrice.innerHTML;
-        btnConfirmEditPrice.disabled = true;
-        btnConfirmEditPrice.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Guardando...`;
-
-        try {
-            let newPriceForTicket;
-
-            if (permanentCheck.checked) {
-                const newCosto = parseFloat(editCosto.value);
-                const newVenta = parseFloat(editVenta.value);
-                if (isNaN(newCosto) || isNaN(newVenta) || newCosto < 0 || newVenta <= newCosto) {
-                    showToast('Para guardar el cambio permanente, el costo y la venta deben ser valores válidos.', 'fa-exclamation-triangle', '#f6c23e');
-                    return; // Salimos de la función, el bloque finally se ejecutará.
-                }
-
-                newPriceForTicket = newVenta;
-
-                try {
-                    const productoEnTicket = ticket.find(p => p.id === currentEditingProductId);
-                    const realDocId = productoEnTicket.parentId || currentEditingProductId;
-                    const productRef = doc(db, "productos", realDocId);
-                    
-                    if (productoEnTicket.isVariant) {
-                        const pDoc = await getDoc(productRef);
-                        if (pDoc.exists()) {
-                            const pData = pDoc.data();
-                            const vIndex = pData.variantes.findIndex(v => v.codigo === productoEnTicket.varianteCodigo);
-                            if (vIndex > -1) {
-                                pData.variantes[vIndex].costo = newCosto;
-                                pData.variantes[vIndex].venta = newVenta;
-                                await updateDoc(productRef, { variantes: pData.variantes, fechaUltimoCambioPrecio: serverTimestamp() });
-                            }
-                        }
-                    } else {
-                        await updateDoc(productRef, { costo: newCosto, venta: newVenta, fechaUltimoCambioPrecio: serverTimestamp() });
-                    }
-                    const { logProducto } = await import('../utils.js');
-                    if (productoEnTicket) {
-                        await logProducto(currentEditingProductId, productoEnTicket.nombre, 'edición', `Desde Ventas (Permanente). Venta: $${productoEnTicket.precio} -> $${newVenta} | Costo: $${productoEnTicket.costo} -> $${newCosto}`);
-                    }
-                    console.log("Producto actualizado en la base de datos.");
-                } catch (error) {
-                    console.error("Error al actualizar el producto en la base de datos: ", error);
-                    showToast("Hubo un error al guardar el cambio permanente.", 'fa-times-circle', '#dc3545');
-                    return; // Salimos si hay error en la BD.
-                }
-            } else {
-                newPriceForTicket = parseFloat(editPriceInput.value);
-                if (isNaN(newPriceForTicket) || newPriceForTicket < 0) {
-                    showToast('Por favor, ingresa un precio válido para esta venta.', 'fa-exclamation-triangle', '#f6c23e');
-                    return;
-                }
-
-                const productoEnTicket = ticket.find(p => p.id === currentEditingProductId);
-                if (productoEnTicket && productoEnTicket.precio !== newPriceForTicket) {
-                    const { logProducto } = await import('../utils.js');
-                    await logProducto(currentEditingProductId, productoEnTicket.nombre, 'edición', `Desde Ventas (Temporal). Venta: $${productoEnTicket.precio} -> $${newPriceForTicket}`);
-                }
-            }
+        const newPriceForTicket = parseFloat(editPriceInput.value);
+        if (isNaN(newPriceForTicket) || newPriceForTicket < 0) {
+            showToast('Por favor, ingresa un precio válido para esta venta.', 'fa-exclamation-triangle', '#f6c23e');
+            return;
+        }
 
             const productIndex = ticket.findIndex(p => p.id === currentEditingProductId);
             if (productIndex > -1) {
@@ -443,16 +360,10 @@ function initEditPriceModalListeners() {
                 ticket[productIndex].total = newPriceForTicket * ticket[productIndex].cantidad;
                 ticket[productIndex].justChanged = true;
             }
-
+        
             renderTicket();
             const modalInstance = bootstrap.Modal.getInstance(editPriceModalEl);
             if (modalInstance) modalInstance.hide();
-
-        } finally {
-            // Este bloque se ejecuta siempre, haya habido éxito o error.
-            btnConfirmEditPrice.disabled = false;
-            btnConfirmEditPrice.innerHTML = originalButtonText;
-        }
     });
 }
 
