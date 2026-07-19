@@ -127,27 +127,30 @@ function renderProductRows(productos) {
         }
 
         // --- INICIO: Lógica para la nueva columna "Precio Web" ---
+        const appConfig = getAppConfig();
+        const recargoPorDefectoTN = appConfig?.tiendanube?.surchargePercentage || 0;
+        const precioWebEsperado = p.venta * (1 + recargoPorDefectoTN / 100);
         let precioWebHtml = '';
-        const precioWebCalculado = p.precio_web && p.precio_web > 0 && p.precio_web !== p.venta;
+        const tienePrecioWebValido = p.precio_web && p.precio_web > 0;
 
-        if (precioWebCalculado) {
-            // Si tiene un precio web calculado y distinto al de venta, lo mostramos con un ícono de éxito.
-            precioWebHtml = `${formatCurrency(p.precio_web)} <i class="fas fa-check-circle text-success" title="Precio web calculado"></i>`;
+        if (tienePrecioWebValido && Math.abs(p.precio_web - precioWebEsperado) < 0.01) {
+            // Si el precio web existe y coincide con el cálculo, lo mostramos con un ícono de éxito.
+            precioWebHtml = `${formatCurrency(p.precio_web)} <i class="fas fa-check-circle text-success" title="Precio web actualizado"></i>`;
         } else {
-            // Si no, es un producto "legacy". Mostramos el precio de venta con una advertencia.
-            precioWebHtml = `${formatCurrency(p.venta)} 
+            // Si no coincide o no existe, mostramos el precio que debería ser con una advertencia.
+            precioWebHtml = `${formatCurrency(precioWebEsperado)} 
                 <i class="fas fa-exclamation-triangle text-warning" 
                    data-bs-toggle="tooltip" 
-                   title="Precio web no calculado. Abre el producto para aplicar el recargo y guardarlo."></i>`;
+                   title="Precio web desactualizado. Usa la acción masiva o abre el producto para guardarlo."></i>`;
         }
         // --- FIN: Lógica para la nueva columna "Precio Web" ---
 
         if (p.tieneVariantes && p.variantes && p.variantes.length > 0) {
             const firstVariant = p.variantes[0];
-            const allSameCosto = p.variantes.every(v => v.costo === firstVariant.costo);
-            const allSameVenta = p.variantes.every(v => v.venta === firstVariant.venta);
+            const allSameCosto = p.variantes.every(v => (v.costo ?? p.costo) === (firstVariant.costo ?? p.costo));
+            const allSameVenta = p.variantes.every(v => (v.venta ?? p.venta) === (firstVariant.venta ?? p.venta));
 
-            if (allSameCosto && allSameVenta) {
+            if (p.variantes.length === 1 || (allSameCosto && allSameVenta)) {
                 const c = firstVariant.costo !== undefined ? firstVariant.costo : p.costo;
                 const v = firstVariant.venta !== undefined ? firstVariant.venta : p.venta;
                 vCosto = formatCurrency(c || 0);
@@ -161,12 +164,21 @@ function renderProductRows(productos) {
                 vVenta = `<span class="badge bg-light text-dark">Varios</span>`;
                 vGanancia = `<span class="badge bg-light text-dark">Varios</span>`;
             }
-            // Para productos con variantes, el precio web se considera a nivel de producto padre.
-            if (p.precio_web && p.precio_web > 0) {
-                precioWebHtml = `${formatCurrency(p.precio_web)} <i class="fas fa-check-circle text-success" title="Precio web calculado"></i>`;
+            // --- INICIO CORRECCIÓN PRECIO WEB PADRE ---
+            // Para productos con variantes, el precio web del padre es un resumen.
+            const preciosWebVariantes = p.variantes.map(v => {
+                const precioVenta = v.venta !== undefined ? v.venta : p.venta;
+                return v.precio_web || (precioVenta * (1 + recargoPorDefectoTN / 100));
+            });
+            const firstWebPrice = preciosWebVariantes[0];
+            const allSameWebPrice = preciosWebVariantes.every(price => Math.abs(price - firstWebPrice) < 0.01);
+
+            if (allSameWebPrice) {
+                precioWebHtml = formatCurrency(firstWebPrice);
             } else {
-                 precioWebHtml = `<span class="badge bg-light text-dark" data-bs-toggle="tooltip" title="Abre el producto para calcular el precio web.">N/A</span>`;
+                precioWebHtml = `<span class="badge bg-light text-dark" title="Los precios web de las variantes son diferentes.">Varios</span>`;
             }
+            // --- FIN CORRECCIÓN PRECIO WEB PADRE ---
 
 
         } else if (p.tieneVariantes) {
@@ -233,6 +245,15 @@ function renderProductRows(productos) {
                 const vVentaVal = v.venta !== undefined ? v.venta : p.venta;
                 let vGananciaVal = '0.00%';
                 if (vCostoVal > 0) vGananciaVal = (((vVentaVal - vCostoVal) / vCostoVal) * 100).toFixed(2) + '%';
+
+                // --- INICIO CORRECCIÓN PRECIO WEB VARIANTE ---
+                const precioWebVarianteEsperado = vVentaVal * (1 + recargoPorDefectoTN / 100);
+                let precioWebVarianteHtml = `${formatCurrency(precioWebVarianteEsperado)} <i class="fas fa-exclamation-triangle text-warning" data-bs-toggle="tooltip" title="Precio web desactualizado."></i>`;
+
+                if (v.precio_web && Math.abs(v.precio_web - precioWebVarianteEsperado) < 0.01) {
+                    precioWebVarianteHtml = `${formatCurrency(v.precio_web)} <i class="fas fa-check-circle text-success" title="Precio web actualizado"></i>`;
+                }
+                // --- FIN CORRECCIÓN PRECIO WEB VARIANTE ---
                 
                 const vStockClass = vStockVal <= 0 ? 'table-danger' : '';
 
@@ -245,7 +266,7 @@ function renderProductRows(productos) {
                         <td>-</td>
                         <td>${formatCurrency(vCostoVal)}</td>
                         <td class="precio-venta">${formatCurrency(vVentaVal)}</td>
-                        <td>-</td>
+                        <td>${precioWebVarianteHtml}</td>
                         <td>${vGananciaVal}</td>
                         <td>${vStockVal}</td>
                         <td>-</td>
@@ -1779,20 +1800,32 @@ async function handleIgPost(id) {
 }
 
 async function handleCalcularPreciosWebMasivo() {
-    const productosParaActualizar = productosFiltradosActuales.filter(p => 
-        !p.precio_web || p.precio_web === 0 || p.precio_web === p.venta
-    );
+    const appConfig = getAppConfig();
+    const recargoPorDefecto = appConfig?.tiendanube?.surchargePercentage || 0;
+
+    const productosParaActualizar = productosFiltradosActuales.filter(p => {
+        if (p.tieneVariantes && p.variantes && p.variantes.length > 0) {
+            // Si tiene variantes, verificamos si alguna de ellas está desactualizada.
+            return p.variantes.some(v => {
+                const precioVentaVariante = v.venta !== undefined ? v.venta : p.venta;
+                const precioWebVarianteEsperado = precioVentaVariante * (1 + recargoPorDefecto / 100);
+                // Se actualiza si la variante no tiene precio web, o si lo tiene y es incorrecto.
+                return !v.precio_web || Math.abs(v.precio_web - precioWebVarianteEsperado) >= 0.01;
+            });
+        } else {
+            // Lógica original para productos simples.
+            const precioWebEsperado = p.venta * (1 + recargoPorDefecto / 100);
+            return !p.precio_web || Math.abs(p.precio_web - precioWebEsperado) >= 0.01;
+        }
+    });
 
     if (productosParaActualizar.length === 0) {
-        return showAlertModal("No hay productos 'legacy' en la lista filtrada que necesiten un cálculo de precio web.");
+        return showAlertModal("Todos los productos en la lista filtrada ya tienen su precio web actualizado.", "Nada que hacer");
     }
 
-    const appConfig = getAppConfig();
-    const recargoPorDefecto = appConfig?.tiendanube?.surchargePercentage || 10;
-
     const confirmado = await showConfirmationModal(
-        `Se calculará el precio web para <strong>${productosParaActualizar.length}</strong> productos usando el recargo por defecto del <strong>${recargoPorDefecto}%</strong>.<br><br>
-         Esta acción solo afectará a productos que no tengan un precio web previamente calculado.<br><br>
+        `Se recalculará el precio web para <strong>${productosParaActualizar.length}</strong> productos usando el recargo por defecto del <strong>${recargoPorDefecto}%</strong>.<br><br>
+         Esta acción sobrescribirá cualquier precio web manual que tuvieran.<br><br>
          ¿Deseas continuar?`,
         "Cálculo Masivo de Precios Web"
     );
@@ -1807,9 +1840,19 @@ async function handleCalcularPreciosWebMasivo() {
         for (const producto of productosParaActualizar) {
             contador++;
             progress.update((contador / productosParaActualizar.length) * 100, `Procesando ${contador} de ${productosParaActualizar.length}...`);
-            const precioWeb = producto.venta * (1 + recargoPorDefecto / 100);
             const docRef = doc(db, 'productos', producto.id);
-            batch.update(docRef, { precio_web: precioWeb });
+            
+            if (producto.tieneVariantes && producto.variantes && producto.variantes.length > 0) {
+                const nuevasVariantes = producto.variantes.map(v => {
+                    const precioVentaVariante = v.venta !== undefined ? v.venta : producto.venta;
+                    const nuevoPrecioWeb = precioVentaVariante * (1 + recargoPorDefecto / 100);
+                    return { ...v, precio_web: nuevoPrecioWeb };
+                });
+                batch.update(docRef, { variantes: nuevasVariantes });
+            } else {
+                const precioWeb = producto.venta * (1 + recargoPorDefecto / 100);
+                batch.update(docRef, { precio_web: precioWeb });
+            }
         }
         await batch.commit();
         progress.finish("¡Éxito!", `Se actualizaron los precios web de <strong>${productosParaActualizar.length}</strong> productos.`);
