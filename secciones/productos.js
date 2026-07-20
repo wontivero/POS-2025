@@ -1,6 +1,6 @@
 // secciones/productos.js
 import { getCollection, saveDocument, deleteDocument, formatCurrency, getTodayDate, updateDocument, capitalizeFirstLetter, showAlertModal, showConfirmationModal, roundUpToNearest50, normalizeString, showToast, fetchAndSquareImageUrl, showProgressModal, showInputModal } from '../utils.js';
-import { getFirestore, collection, onSnapshot, query, orderBy, getDocs, writeBatch, Timestamp, doc, where, addDoc } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
+import { getFirestore, collection, onSnapshot, query, orderBy, getDocs, writeBatch, Timestamp, doc, where, addDoc, updateDoc } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
 import { functions } from '../firebase.js';
 import { httpsCallable } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-functions.js";
 import { getProductos, getMarcas, getColores, getRubros, getAppConfig } from './dataManager.js';
@@ -129,7 +129,7 @@ function renderProductRows(productos) {
         // --- INICIO: Lógica para la nueva columna "Precio Web" ---
         const appConfig = getAppConfig();
         const recargoPorDefectoTN = appConfig?.tiendanube?.surchargePercentage || 0;
-        const precioWebEsperado = p.venta * (1 + recargoPorDefectoTN / 100);
+        const precioWebEsperado = Math.round(p.venta * (1 + recargoPorDefectoTN / 100));
         let precioWebHtml = '';
         const tienePrecioWebValido = p.precio_web && p.precio_web > 0;
 
@@ -165,14 +165,20 @@ function renderProductRows(productos) {
                 vGanancia = `<span class="badge bg-light text-dark">Varios</span>`;
             }
             // --- INICIO CORRECCIÓN PRECIO WEB PADRE ---
-            // Para productos con variantes, el precio web del padre es un resumen.
+            // 1. Mantenemos el estado de actualización del precio base del padre.
+            const estadoIconoPadre = precioWebHtml.includes('fa-check-circle') 
+                ? '<i class="fas fa-check-circle text-success" title="Precio web base actualizado"></i>' 
+                : '<i class="fas fa-exclamation-triangle text-warning" title="Precio web base desactualizado"></i>';
+
+            // 2. Calculamos el resumen de precios de las variantes.
             const preciosWebVariantes = p.variantes.map(v => {
-                const precioVenta = v.venta !== undefined ? v.venta : p.venta;
+                const precioVenta = (v.venta !== undefined && v.venta > 0) ? v.venta : p.venta;
                 return v.precio_web || (precioVenta * (1 + recargoPorDefectoTN / 100));
             });
             const firstWebPrice = preciosWebVariantes[0];
             const allSameWebPrice = preciosWebVariantes.every(price => Math.abs(price - firstWebPrice) < 0.01);
-
+            
+            // 3. Combinamos el resumen con el estado del padre.
             if (allSameWebPrice) {
                 precioWebHtml = formatCurrency(firstWebPrice);
             } else {
@@ -247,7 +253,7 @@ function renderProductRows(productos) {
                 if (vCostoVal > 0) vGananciaVal = (((vVentaVal - vCostoVal) / vCostoVal) * 100).toFixed(2) + '%';
 
                 // --- INICIO CORRECCIÓN PRECIO WEB VARIANTE ---
-                const precioWebVarianteEsperado = vVentaVal * (1 + recargoPorDefectoTN / 100);
+                const precioWebVarianteEsperado = Math.round(vVentaVal * (1 + recargoPorDefectoTN / 100));
                 let precioWebVarianteHtml = `${formatCurrency(precioWebVarianteEsperado)} <i class="fas fa-exclamation-triangle text-warning" data-bs-toggle="tooltip" title="Precio web desactualizado."></i>`;
 
                 if (v.precio_web && Math.abs(v.precio_web - precioWebVarianteEsperado) < 0.01) {
@@ -396,9 +402,13 @@ function aplicarFiltrosYRenderizar() {
         const estadoWeb = filtroWeb.value;
         productosFiltrados = productosFiltrados.filter(p => estadoWeb === 'publicados' ? p.publicarEnWeb === true : !p.publicarEnWeb);
     }
-    // --- FIN DE LA MODIFICACIÓN ---
 
-    productosFiltradosActuales = sortProducts(productosFiltrados, currentSortColumn, currentSortDirection);
+    // --- INICIO DE LA CORRECCIÓN ---
+    // Aseguramos que `productosFiltradosActuales` siempre tenga los objetos completos de `listaCompletaProductos`.
+    const idsFiltrados = new Set(productosFiltrados.map(p => p.id));
+    productosFiltradosActuales = listaCompletaProductos.filter(p => idsFiltrados.has(p.id));
+    productosFiltradosActuales = sortProducts(productosFiltradosActuales, currentSortColumn, currentSortDirection);
+    // --- FIN DE LA CORRECCIÓN ---
 
     currentlyDisplayedCount = 0;
     tablaProductosBody.innerHTML = '';
@@ -1036,9 +1046,9 @@ const calcularPrecioWeb = () => {
     if (!productoVenta || !tnRecargo || !tnPrecioBase || !tnPrecioFinal) return;
     const precioBase = parseFloat(productoVenta.value) || 0;
     const recargo = parseFloat(tnRecargo.value) || 0;
-    const precioCalculado = precioBase * (1 + recargo / 100);
+    const precioCalculado = Math.round(precioBase * (1 + recargo / 100));
     tnPrecioBase.value = precioBase.toFixed(2);
-    tnPrecioFinal.value = precioCalculado.toFixed(2);
+    tnPrecioFinal.value = precioCalculado;
 };
 
 function updatePorcentajeField() {
@@ -1803,29 +1813,15 @@ async function handleCalcularPreciosWebMasivo() {
     const appConfig = getAppConfig();
     const recargoPorDefecto = appConfig?.tiendanube?.surchargePercentage || 0;
 
-    const productosParaActualizar = productosFiltradosActuales.filter(p => {
-        if (p.tieneVariantes && p.variantes && p.variantes.length > 0) {
-            // Si tiene variantes, verificamos si alguna de ellas está desactualizada.
-            return p.variantes.some(v => {
-                const precioVentaVariante = v.venta !== undefined ? v.venta : p.venta;
-                const precioWebVarianteEsperado = precioVentaVariante * (1 + recargoPorDefecto / 100);
-                // Se actualiza si la variante no tiene precio web, o si lo tiene y es incorrecto.
-                return !v.precio_web || Math.abs(v.precio_web - precioWebVarianteEsperado) >= 0.01;
-            });
-        } else {
-            // Lógica original para productos simples.
-            const precioWebEsperado = p.venta * (1 + recargoPorDefecto / 100);
-            return !p.precio_web || Math.abs(p.precio_web - precioWebEsperado) >= 0.01;
-        }
-    });
+    // Se quita el filtro para forzar la actualización de TODOS los productos en la vista.
+    const productosParaActualizar = [...productosFiltradosActuales];
 
     if (productosParaActualizar.length === 0) {
-        return showAlertModal("Todos los productos en la lista filtrada ya tienen su precio web actualizado.", "Nada que hacer");
+        return showAlertModal("No hay productos en la lista filtrada para actualizar.", "Nada que hacer");
     }
 
     const confirmado = await showConfirmationModal(
-        `Se recalculará el precio web para <strong>${productosParaActualizar.length}</strong> productos usando el recargo por defecto del <strong>${recargoPorDefecto}%</strong>.<br><br>
-         Esta acción sobrescribirá cualquier precio web manual que tuvieran.<br><br>
+        `Se forzará el recálculo del precio web para <strong>${productosParaActualizar.length}</strong> productos usando el recargo del <strong>${recargoPorDefecto}%</strong>.<br><br>
          ¿Deseas continuar?`,
         "Cálculo Masivo de Precios Web"
     );
@@ -1833,33 +1829,40 @@ async function handleCalcularPreciosWebMasivo() {
     if (!confirmado) return;
 
     const progress = showProgressModal("Calculando Precios Web");
-    const batch = writeBatch(db);
     let contador = 0;
+    const totalProductos = productosParaActualizar.length;
 
     try {
         for (const producto of productosParaActualizar) {
             contador++;
-            progress.update((contador / productosParaActualizar.length) * 100, `Procesando ${contador} de ${productosParaActualizar.length}...`);
+            progress.update((contador / totalProductos) * 100, `Procesando ${contador} de ${totalProductos}: ${producto.nombre}`);
             const docRef = doc(db, 'productos', producto.id);
-            
+            let updateData = {};
+
             if (producto.tieneVariantes && producto.variantes && producto.variantes.length > 0) {
                 const nuevasVariantes = producto.variantes.map(v => {
                     const precioVentaVariante = v.venta !== undefined ? v.venta : producto.venta;
-                    const nuevoPrecioWeb = precioVentaVariante * (1 + recargoPorDefecto / 100);
+                    const nuevoPrecioWeb = Math.round(precioVentaVariante * (1 + recargoPorDefecto / 100));
                     return { ...v, precio_web: nuevoPrecioWeb };
                 });
-                batch.update(docRef, { variantes: nuevasVariantes });
+                const precioWebPadre = Math.round(producto.venta * (1 + recargoPorDefecto / 100));
+                updateData = { variantes: nuevasVariantes, precio_web: precioWebPadre };
             } else {
-                const precioWeb = producto.venta * (1 + recargoPorDefecto / 100);
-                batch.update(docRef, { precio_web: precioWeb });
+                const precioWeb = Math.round(producto.venta * (1 + recargoPorDefecto / 100));
+                updateData = { precio_web: precioWeb };
             }
+
+            // Actualizamos un producto a la vez
+            await updateDoc(docRef, updateData);
+
+            // Pausa de 1 segundo para dar tiempo a que el trigger de Tiendanube se ejecute
+            await new Promise(resolve => setTimeout(resolve, 1000));
         }
-        await batch.commit();
-        progress.finish("¡Éxito!", `Se actualizaron los precios web de <strong>${productosParaActualizar.length}</strong> productos.`);
+        progress.finish("¡Éxito!", `Se procesaron <strong>${productosParaActualizar.length}</strong> productos. La sincronización con Tiendanube puede tardar unos minutos en reflejarse.`);
     } catch (error) {
         console.error("Error en el cálculo masivo de precios web:", error);
         progress.error("Ocurrió un error durante el proceso. Revisa la consola para más detalles.");
-    }
+    }303030
 }
 
 function init() {
