@@ -667,6 +667,19 @@ form.duplicando::before {
 }
 
 /* ==========================================================================
+   ESTILOS PARA POPOVER DE IMAGEN EN TABLA DE PRODUCTOS
+   ========================================================================== */
+.image-popover .popover-body {
+    padding: 0.25rem; /* Padding mínimo para que la imagen ocupe todo el espacio */
+}
+
+.image-popover img {
+    max-width: 200px; /* El tamaño deseado para la previsualización */
+    height: auto;
+    border-radius: 0.25rem; /* Bordes redondeados consistentes con el popover */
+}
+
+/* ==========================================================================
    ESTILOS PARA TABLA DE PRODUCTOS CON FILAS ANIDADAS
    ========================================================================== */
 

@@ -208,6 +208,11 @@ function renderProductRows(productos) {
 
         let cloudIcon = '';
         if (p.publicarEnWeb) {
+            const hasImage = p.imagenes && p.imagenes.length > 0;
+            const popoverAttributes = hasImage 
+                ? `data-bs-toggle="popover" data-bs-trigger="hover" data-bs-html="true" data-bs-custom-class="image-popover" data-bs-content="<img src='${p.imagenes[0]}'>"`
+                : '';
+
             if (storeUrl) {
                 // Construimos la URL ("slug") imitando el algoritmo exacto de Tiendanube
                 const slug = p.nombre
@@ -219,9 +224,9 @@ function renderProductRows(productos) {
                     .replace(/-+/g, "-");                             // Evita guiones dobles
                 
                 const productUrl = `${storeUrl.replace(/\/$/, '')}/productos/${slug}/`;
-                cloudIcon = `<a href="${productUrl}" target="_blank" title="Ver publicación en Tiendanube" class="text-decoration-none"><i class="fas fa-cloud text-primary ms-2"></i></a>`;
+                cloudIcon = `<a href="${productUrl}" target="_blank" title="Ver publicación en Tiendanube" class="text-decoration-none" ${popoverAttributes}><i class="fas fa-cloud text-primary ms-2"></i></a>`;
             } else {
-                cloudIcon = `<i class="fas fa-cloud text-primary ms-2" title="Sincronizado con Tiendanube"></i>`;
+                cloudIcon = `<i class="fas fa-cloud text-primary ms-2" title="Sincronizado con Tiendanube" ${popoverAttributes}></i>`;
             }
         }
 
@@ -304,6 +309,11 @@ function renderProductRows(productos) {
     const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
     tooltipTriggerList.map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl));
     // --- FIN: Inicializar tooltips ---
+
+    // --- INICIO: Inicializar popovers de Bootstrap para las imágenes ---
+    const popoverTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="popover"]'));
+    popoverTriggerList.map(popoverTriggerEl => new bootstrap.Popover(popoverTriggerEl));
+    // --- FIN: Inicializar popovers ---
 }
 
 function loadMoreProducts() {
