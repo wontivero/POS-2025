@@ -23,7 +23,7 @@ let expandedProducts = new Set(); // NUEVO: Almacena los IDs de los productos ex
 
 // --- Elementos del DOM ---
 let tablaProductosBody, tablaProductosHead, btnNuevoProducto, productoModalEl, productoModal, formProducto, modalProductoLabel, btnExportarProductos;
-let filtroProductos, filtroMarca, filtroColor, filtroRubro, filtroStockMin, filtroStockMax, filtroVentaMin, filtroVentaMax, filtroWeb, btnAplicarFiltros, btnLimpiarFiltros;
+let filtroProductos, filtroMarca, filtroColor, filtroRubro, filtroStockMin, filtroStockMax, filtroVentaMin, filtroVentaMax, filtroWeb, filtroOfertas, btnAplicarFiltros, btnLimpiarFiltros;
 let updateField, updateTypePercentage, updateTypeFixed, updateAmount, btnAplicarActualizacionMasiva, btnCalcularPreciosWebMasivo;
 let filtroFechaActDesde, filtroFechaActHasta;
 let datalistMarcasFiltro, datalistColoresFiltro, datalistRubrosFiltro;
@@ -114,6 +114,11 @@ function renderProductRows(productos) {
     productos.forEach(p => {
         // --- INICIO DE LA MODIFICACIÓN: Renderizado con filas anidadas ---
         let c = p.stock <= 0 ? 'table-danger' : (p.stock <= p.stockMinimo ? 'table-warning' : '');
+        // Opción 3: Resaltar toda la fila si está en oferta
+        if (p.publicarEnWeb && p.promotional_price && p.promotional_price > 0) {
+            c += ' table-warning'; // Añade la clase de Bootstrap para un fondo amarillo
+        }
+
         const ultimaActualizacion = p.fechaUltimoCambioPrecio ? p.fechaUltimoCambioPrecio.toDate().toLocaleDateString('es-AR') : 'N/A';
 
         let vCosto = p.costo ? formatCurrency(p.costo) : '0.00';
@@ -129,19 +134,27 @@ function renderProductRows(productos) {
         // --- INICIO: Lógica para la nueva columna "Precio Web" ---
         const appConfig = getAppConfig();
         const recargoPorDefectoTN = appConfig?.tiendanube?.surchargePercentage || 0;
-        const precioWebEsperado = Math.round(p.venta * (1 + recargoPorDefectoTN / 100));
         let precioWebHtml = '';
-        const tienePrecioWebValido = p.precio_web && p.precio_web > 0;
-
-        if (tienePrecioWebValido && Math.abs(p.precio_web - precioWebEsperado) < 0.01) {
-            // Si el precio web existe y coincide con el cálculo, lo mostramos con un ícono de éxito.
-            precioWebHtml = `${formatCurrency(p.precio_web)} <i class="fas fa-check-circle text-success" title="Precio web actualizado"></i>`;
+        if (!p.publicarEnWeb) {
+            precioWebHtml = '-';
+        } else if (p.promotional_price && p.promotional_price > 0) {
+            const regularWebPrice = p.precio_web || Math.round(p.venta * (1 + recargoPorDefectoTN / 100));
+            precioWebHtml = `
+                <s class="text-muted">${formatCurrency(regularWebPrice)}</s> 
+                <strong class="text-danger">${formatCurrency(p.promotional_price)}</strong> 
+                <i class="fas fa-tag text-danger" title="¡En oferta!"></i>`;
         } else {
-            // Si no coincide o no existe, mostramos el precio que debería ser con una advertencia.
-            precioWebHtml = `${formatCurrency(precioWebEsperado)} 
-                <i class="fas fa-exclamation-triangle text-warning" 
-                   data-bs-toggle="tooltip" 
-                   title="Precio web desactualizado. Usa la acción masiva o abre el producto para guardarlo."></i>`;
+            const precioWebEsperado = Math.round(p.venta * (1 + recargoPorDefectoTN / 100));
+            const tienePrecioWebValido = p.precio_web && p.precio_web > 0;
+
+            if (tienePrecioWebValido && Math.abs(p.precio_web - precioWebEsperado) < 0.01) {
+                precioWebHtml = `${formatCurrency(p.precio_web)} <i class="fas fa-check-circle text-success" title="Precio web actualizado"></i>`;
+            } else {
+                precioWebHtml = `${formatCurrency(precioWebEsperado)} 
+                    <i class="fas fa-exclamation-triangle text-warning" 
+                       data-bs-toggle="tooltip" 
+                       title="Precio web desactualizado. Usa la acción masiva o abre el producto para guardarlo."></i>`;
+            }
         }
         // --- FIN: Lógica para la nueva columna "Precio Web" ---
 
@@ -165,24 +178,19 @@ function renderProductRows(productos) {
                 vGanancia = `<span class="badge bg-light text-dark">Varios</span>`;
             }
             // --- INICIO CORRECCIÓN PRECIO WEB PADRE ---
-            // 1. Mantenemos el estado de actualización del precio base del padre.
-            const estadoIconoPadre = precioWebHtml.includes('fa-check-circle') 
-                ? '<i class="fas fa-check-circle text-success" title="Precio web base actualizado"></i>' 
-                : '<i class="fas fa-exclamation-triangle text-warning" title="Precio web base desactualizado"></i>';
-
-            // 2. Calculamos el resumen de precios de las variantes.
-            const preciosWebVariantes = p.variantes.map(v => {
-                const precioVenta = (v.venta !== undefined && v.venta > 0) ? v.venta : p.venta;
-                return v.precio_web || (precioVenta * (1 + recargoPorDefectoTN / 100));
-            });
-            const firstWebPrice = preciosWebVariantes[0];
-            const allSameWebPrice = preciosWebVariantes.every(price => Math.abs(price - firstWebPrice) < 0.01);
-            
-            // 3. Combinamos el resumen con el estado del padre.
-            if (allSameWebPrice) {
-                precioWebHtml = formatCurrency(firstWebPrice);
+            // Si el producto padre tiene un precio promocional, lo mostramos y omitimos el cálculo de variantes.
+            if (p.publicarEnWeb && p.promotional_price && p.promotional_price > 0) {
+                const regularWebPrice = p.precio_web || Math.round(p.venta * (1 + recargoPorDefectoTN / 100));
+                precioWebHtml = `
+                    <s class="text-muted">${formatCurrency(regularWebPrice)}</s> 
+                    <strong class="text-danger">${formatCurrency(p.promotional_price)}</strong> 
+                    <i class="fas fa-tag text-danger" title="¡En oferta!"></i>`;
             } else {
-                precioWebHtml = `<span class="badge bg-light text-dark" title="Los precios web de las variantes son diferentes.">Varios</span>`;
+                // Si no hay oferta, mostramos el resumen de precios de las variantes.
+                // Esta lógica ya estaba, solo la movemos dentro del 'else'.
+                const preciosWebVariantes = p.variantes.map(v => v.precio_web || (v.venta * (1 + recargoPorDefectoTN / 100)));
+                const allSameWebPrice = preciosWebVariantes.every(price => Math.abs(price - preciosWebVariantes[0]) < 0.01);
+                precioWebHtml = allSameWebPrice ? formatCurrency(preciosWebVariantes[0]) : `<span class="badge bg-light text-dark" title="Los precios web de las variantes son diferentes.">Varios</span>`;
             }
             // --- FIN CORRECCIÓN PRECIO WEB PADRE ---
 
@@ -253,11 +261,14 @@ function renderProductRows(productos) {
                 if (vCostoVal > 0) vGananciaVal = (((vVentaVal - vCostoVal) / vCostoVal) * 100).toFixed(2) + '%';
 
                 // --- INICIO CORRECCIÓN PRECIO WEB VARIANTE ---
-                const precioWebVarianteEsperado = Math.round(vVentaVal * (1 + recargoPorDefectoTN / 100));
-                let precioWebVarianteHtml = `${formatCurrency(precioWebVarianteEsperado)} <i class="fas fa-exclamation-triangle text-warning" data-bs-toggle="tooltip" title="Precio web desactualizado."></i>`;
+                let precioWebVarianteHtml = '-';
+                if (p.publicarEnWeb) {
+                    const precioWebVarianteEsperado = Math.round(vVentaVal * (1 + recargoPorDefectoTN / 100));
+                    precioWebVarianteHtml = `${formatCurrency(precioWebVarianteEsperado)} <i class="fas fa-exclamation-triangle text-warning" data-bs-toggle="tooltip" title="Precio web desactualizado."></i>`;
 
-                if (v.precio_web && Math.abs(v.precio_web - precioWebVarianteEsperado) < 0.01) {
-                    precioWebVarianteHtml = `${formatCurrency(v.precio_web)} <i class="fas fa-check-circle text-success" title="Precio web actualizado"></i>`;
+                    if (v.precio_web && Math.abs(v.precio_web - precioWebVarianteEsperado) < 0.01) {
+                        precioWebVarianteHtml = `${formatCurrency(v.precio_web)} <i class="fas fa-check-circle text-success" title="Precio web actualizado"></i>`;
+                    }
                 }
                 // --- FIN CORRECCIÓN PRECIO WEB VARIANTE ---
                 
@@ -402,6 +413,13 @@ function aplicarFiltrosYRenderizar() {
         const estadoWeb = filtroWeb.value;
         productosFiltrados = productosFiltrados.filter(p => estadoWeb === 'publicados' ? p.publicarEnWeb === true : !p.publicarEnWeb);
     }
+
+    // --- INICIO: Lógica para el nuevo filtro de ofertas ---
+    if (filtroOfertas && filtroOfertas.value !== 'todos') {
+        const estadoOferta = filtroOfertas.value === 'en-oferta';
+        productosFiltrados = productosFiltrados.filter(p => (p.promotional_price && p.promotional_price > 0) === estadoOferta);
+    }
+    // --- FIN: Lógica para el nuevo filtro de ofertas ---
 
     // --- INICIO DE LA CORRECCIÓN ---
     // Aseguramos que `productosFiltradosActuales` siempre tenga los objetos completos de `listaCompletaProductos`.
@@ -1883,6 +1901,7 @@ function init() {
     filtroVentaMin = document.getElementById('filtro-venta-min');
     filtroVentaMax = document.getElementById('filtro-venta-max');
     filtroWeb = document.getElementById('filtro-web');
+    filtroOfertas = document.getElementById('filtro-ofertas'); // <-- Obtenemos el nuevo elemento
     filtroFechaActDesde = document.getElementById('filtro-fecha-act-desde');
     filtroFechaActHasta = document.getElementById('filtro-fecha-act-hasta');
     btnAplicarFiltros = document.getElementById('btnAplicarFiltros');
@@ -2269,6 +2288,7 @@ function init() {
     if (filtroColor) filtroColor.addEventListener('input', aplicarFiltrosYRenderizar);
     if (filtroRubro) filtroRubro.addEventListener('input', aplicarFiltrosYRenderizar);
     if (filtroWeb) filtroWeb.addEventListener('change', aplicarFiltrosYRenderizar);
+    if (filtroOfertas) filtroOfertas.addEventListener('change', aplicarFiltrosYRenderizar); // <-- Añadimos el listener
     if (btnAplicarFiltros) btnAplicarFiltros.addEventListener('click', aplicarFiltrosYRenderizar);
     if (btnLimpiarFiltros) {
         btnLimpiarFiltros.addEventListener('click', () => {
@@ -2281,6 +2301,7 @@ function init() {
             if (filtroVentaMin) filtroVentaMin.value = '';
             if (filtroVentaMax) filtroVentaMax.value = '';
             if (filtroWeb) filtroWeb.value = 'todos';
+            if (filtroOfertas) filtroOfertas.value = 'todos'; // <-- Limpiamos el nuevo filtro
             if (filtroFechaActDesde) filtroFechaActDesde.value = '';
             if (filtroFechaActHasta) filtroFechaActHasta.value = '';
             aplicarFiltrosYRenderizar();
