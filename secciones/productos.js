@@ -1975,15 +1975,8 @@ async function handleVerificarPreciosWeb() {
         }
         // --- FIN DE LA CORRECCIÓN ---
 
-        const verificarPreciosTiendanube = httpsCallable(functions, 'verificarPreciosTiendanube');
-        const result = await verificarPreciosTiendanube({ skus });
-
-        if (!result.data.success) {
-            throw new Error(result.data.error || "La función en la nube devolvió un error.");
-        }
-
         progress.update(70, "Comparando precios recibidos...");
-        const preciosTN = new Map(todosLosPreciosTN.map(item => [item.sku, item.price]));
+        const preciosTN = new Map(todosLosPreciosTN.map(item => [item.sku, parseFloat(item.price) || 0]));
         const idsDesactualizados = new Set();
         const recargoPorDefecto = getAppConfig().tiendanube?.surchargePercentage || 0;
 
