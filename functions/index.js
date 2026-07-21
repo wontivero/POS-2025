@@ -451,7 +451,7 @@ exports.actualizarPedidoTiendanube = onDocumentUpdated(
 // ========================================================
 // VERIFICADOR DE PRECIOS (POS 2025 vs TIENDANUBE)
 // ========================================================
-exports.verificarPreciosTiendanube = onCall({ secrets: [GEMINI_API_KEY], timeoutSeconds: 120, memory: "512Mi" }, async (request) => {
+exports.verificarPreciosTiendanube = onCall({ timeoutSeconds: 120, memory: "512Mi" }, async (request) => {
     const { skus } = request.data;
     if (!skus || !Array.isArray(skus) || skus.length === 0) {
         throw new HttpsError("invalid-argument", "Se requiere una lista de SKUs.");

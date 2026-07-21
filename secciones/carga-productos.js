@@ -866,6 +866,21 @@ async function agregarProductoAGrilla(duplicarDespues = false) {
         }
     }
 
+    // --- INICIO DE LA CORRECCIÓN ---
+    // Si hay variantes, recalculamos el costo y venta principal para que refleje
+    // los datos de las variantes, en lugar de usar los valores viejos del formulario.
+    let costoPrincipal = parseFloat(prodCosto.value) || 0;
+    let ventaPrincipal = parseFloat(prodVenta.value) || 0;
+
+    if (tieneVariantes && variantes.length > 0) {
+        // Usamos el precio de la primera variante como el precio "representativo" del producto padre.
+        // Esto es útil para listados y reportes generales.
+        costoPrincipal = variantes[0].costo;
+        ventaPrincipal = variantes[0].venta;
+    }
+    const gananciaPrincipal = costoPrincipal > 0 ? ((ventaPrincipal - costoPrincipal) / costoPrincipal) * 100 : 75;
+    // --- FIN DE LA CORRECCIÓN ---
+
     isVerifyingCodigo = true;
     try {
     const codigosAVerificar = tieneVariantes ? variantes.map(v => v.codigo) : [codigo];
@@ -882,9 +897,9 @@ async function agregarProductoAGrilla(duplicarDespues = false) {
         marca: normalizeString(prodMarca.value.trim()),
         color: normalizeString(prodColor.value.trim()),
         rubro: normalizeString(prodRubro.value.trim()),
-        costo: parseFloat(prodCosto.value) || 0,
-        ganancia: parseFloat(prodGanancia.value) || 75,
-        venta: parseFloat(prodVenta.value) || 0,
+        costo: costoPrincipal,
+        ganancia: gananciaPrincipal,
+        venta: ventaPrincipal,
         stock: tieneVariantes ? variantes.reduce((acc, v) => acc + v.stock, 0) : (parseInt(prodStock.value) || 0),
         stockMinimo: parseInt(prodStockMinimo.value) || 0,
         isGeneric: prodGenerico.checked,
