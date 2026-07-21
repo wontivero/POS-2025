@@ -1883,8 +1883,8 @@ async function handleCalcularPreciosWebMasivo() {
             // Actualizamos un producto a la vez
             await updateDoc(docRef, updateData);
 
-            // Pausa de 1 segundo para dar tiempo a que el trigger de Tiendanube se ejecute
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            // Pausa de 2.5 segundos para dar tiempo a que el trigger de Tiendanube se ejecute de forma segura
+            await new Promise(resolve => setTimeout(resolve, 2500));
         }
         progress.finish("¡Éxito!", `Se procesaron <strong>${productosParaActualizar.length}</strong> productos. La sincronización con Tiendanube puede tardar unos minutos en reflejarse.`);
     } catch (error) {
