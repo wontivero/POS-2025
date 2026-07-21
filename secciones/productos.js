@@ -23,7 +23,7 @@ let expandedProducts = new Set(); // NUEVO: Almacena los IDs de los productos ex
 
 // --- Elementos del DOM ---
 let tablaProductosBody, tablaProductosHead, btnNuevoProducto, productoModalEl, productoModal, formProducto, modalProductoLabel, btnExportarProductos;
-let filtroProductos, filtroMarca, filtroColor, filtroRubro, filtroStockMin, filtroStockMax, filtroVentaMin, filtroVentaMax, filtroWeb, filtroOfertas, btnAplicarFiltros, btnLimpiarFiltros;
+let filtroProductos, filtroMarca, filtroColor, filtroRubro, filtroStockMin, filtroStockMax, filtroVentaMin, filtroVentaMax, filtroWeb, filtroOfertas, btnAplicarFiltros, btnLimpiarFiltros, btnVerificarPreciosWeb;
 let updateField, updateTypePercentage, updateTypeFixed, updateAmount, btnAplicarActualizacionMasiva, btnCalcularPreciosWebMasivo;
 let filtroFechaActDesde, filtroFechaActHasta;
 let datalistMarcasFiltro, datalistColoresFiltro, datalistRubrosFiltro;
