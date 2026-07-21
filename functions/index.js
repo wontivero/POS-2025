@@ -39,7 +39,7 @@ exports.sincronizarTiendanube = onDocumentWritten(
             return;
         }
 
-        const apiUrl = `https://api.tiendanube.com/v1/${userId}/products`;
+        const apiUrl = `https://api.tiendanube.com/v1/${userId}`;
         const headers = {
             "Authentication": `bearer ${token}`,
             "User-Agent": "Sincronizador POS 2025 (wontivero@gmail.com)",
@@ -52,13 +52,25 @@ exports.sincronizarTiendanube = onDocumentWritten(
         // Evita loop infinito
         if (docNuevo && docViejo) {
             if (!docViejo.tiendanubeId && docNuevo.tiendanubeId) return;
+            // Si no hay un 'forceSync' y los datos relevantes no cambiaron, salimos para evitar loops innecesarios.
+            if (!docNuevo.forceSync) {
+                const oldData = { ...docViejo }; delete oldData.forceSync;
+                const newData = { ...docNuevo }; delete newData.forceSync;
+                if (JSON.stringify(oldData) === JSON.stringify(newData)) {
+                    logger.info(`Sincronización para ${docNuevo.nombre} omitida: no hay cambios relevantes.`);
+                    return;
+                }
+            } else {
+                // Si hay un forceSync, lo registramos y continuamos.
+                logger.info(`Sincronización forzada para ${docNuevo.nombre} detectada.`);
+            }
         }
 
         // ELIMINAR O DESPUBLICAR
         if (!docNuevo || !docNuevo.publicarEnWeb) {
             if (docViejo && docViejo.tiendanubeId) {
                 try {
-                    await fetch(`${apiUrl}/${docViejo.tiendanubeId}`, { method: 'DELETE', headers });
+                    await fetch(`${apiUrl}/products/${docViejo.tiendanubeId}`, { method: 'DELETE', headers });
                     logger.info(`🗑️ Producto eliminado en TN: ${docViejo.nombre}`);
                     if (docNuevo && !docNuevo.publicarEnWeb) {
                         await event.data.after.ref.update({ tiendanubeId: admin.firestore.FieldValue.delete() });
@@ -73,7 +85,7 @@ exports.sincronizarTiendanube = onDocumentWritten(
         if (docNuevo.categoriaWeb) {
             try {
                 // Agregamos per_page=200 para asegurarnos de traer todas las categorías
-                const catResponse = await fetch(`${apiUrl.replace('/products', '/categories')}?per_page=200`, { headers });
+                const catResponse = await fetch(`${apiUrl}/categories?per_page=200`, { headers });
                 if (catResponse.ok) {
                     const rawCategories = await catResponse.json();
                     
@@ -105,7 +117,7 @@ exports.sincronizarTiendanube = onDocumentWritten(
                             const payload = { name: { es: levelName } };
                             if (currentParentId !== null) payload.parent = parseInt(currentParentId);
                             
-                            const newCat = await fetch(`${apiUrl.replace('/products', '/categories')}`, { method: "POST", headers, body: JSON.stringify(payload) });
+                            const newCat = await fetch(`${apiUrl}/categories`, { method: "POST", headers, body: JSON.stringify(payload) });
                             
                             if (newCat.ok) {
                                 const newCatData = await newCat.json();
@@ -214,12 +226,12 @@ exports.sincronizarTiendanube = onDocumentWritten(
 
                 // A) Actualizar Datos Básicos
                 logger.info(`🔄 Actualizando datos básicos para producto TN ID: ${tnId}`);
-                const resProd = await fetch(`${apiUrl}/${tnId}`, { method: "PUT", headers, body: JSON.stringify(productoTN) });
+                const resProd = await fetch(`${apiUrl}/products/${tnId}`, { method: "PUT", headers, body: JSON.stringify(productoTN) });
                 if (!resProd.ok) logger.error(`❌ Error actualizando producto en TN:`, await resProd.text());
 
                 // B) Obtener la Variante actual y actualizarla
                 logger.info(`🔎 Obteniendo variantes actuales de TN para el producto ID: ${tnId}`);
-                const getProd = await fetch(`${apiUrl}/${tnId}`, { headers });
+                const getProd = await fetch(`${apiUrl}/products/${tnId}`, { headers });
                 if (!getProd.ok) {
                     logger.error(`❌ No se pudo obtener el producto ${tnId} de TN para sincronizar variantes:`, await getProd.text());
                     return;
@@ -236,7 +248,7 @@ exports.sincronizarTiendanube = onDocumentWritten(
                     logger.info(`🗑️ Se eliminarán ${variantsToDelete.length} variantes obsoletas de TN.`);
                     for (const v of variantsToDelete) {
                         logger.info(`   - Eliminando SKU: ${v.sku} (ID: ${v.id})`);
-                        await fetch(`${apiUrl}/${tnId}/variants/${v.id}`, { method: "DELETE", headers });
+                        await fetch(`${apiUrl}/products/${tnId}/variants/${v.id}`, { method: "DELETE", headers });
                     }
                 }
 
@@ -249,7 +261,7 @@ exports.sincronizarTiendanube = onDocumentWritten(
                     const newPosVariant = tnVariants[0];
                     if (oldTnVariant.sku !== newPosVariant.sku) {
                         logger.info(`🔄 Actualizando SKU de producto simple: ${oldTnVariant.sku} -> ${newPosVariant.sku}`);
-                        await fetch(`${apiUrl}/${tnId}/variants/${oldTnVariant.id}`, { method: "PUT", headers, body: JSON.stringify(newPosVariant) });
+                        await fetch(`${apiUrl}/products/${tnId}/variants/${oldTnVariant.id}`, { method: "PUT", headers, body: JSON.stringify(newPosVariant) });
                     }
                 }
 
@@ -257,11 +269,17 @@ exports.sincronizarTiendanube = onDocumentWritten(
                 for (const [sku, posVariant] of posVariantsBySku.entries()) {
                     const existingTnVar = currentTnVariantsBySku.get(sku);
                     if (existingTnVar) {
-                        logger.info(`🔄 Actualizando variante SKU: ${sku}`);
-                        await fetch(`${apiUrl}/${tnId}/variants/${existingTnVar.id}`, { method: "PUT", headers, body: JSON.stringify(posVariant) });
+                        logger.info(`🔄 Actualizando variante SKU: ${sku} con precio: ${posVariant.price}`);
+                        const resVar = await fetch(`${apiUrl}/products/${tnId}/variants/${existingTnVar.id}`, { method: "PUT", headers, body: JSON.stringify(posVariant) });
+                        if (!resVar.ok) {
+                            logger.error(`   ❌ Error al actualizar variante ${sku}:`, await resVar.text());
+                        }
                     } else {
-                        logger.info(`✨ Creando nueva variante SKU: ${sku}`);
-                        await fetch(`${apiUrl}/${tnId}/variants`, { method: "POST", headers, body: JSON.stringify(posVariant) });
+                        logger.info(`✨ Creando nueva variante SKU: ${sku} con precio: ${posVariant.price}`);
+                        const resVar = await fetch(`${apiUrl}/products/${tnId}/variants`, { method: "POST", headers, body: JSON.stringify(posVariant) });
+                        if (!resVar.ok) {
+                            logger.error(`   ❌ Error al crear variante ${sku}:`, await resVar.text());
+                        }
                     }
                 }
 
@@ -272,19 +290,19 @@ exports.sincronizarTiendanube = onDocumentWritten(
                     if (prodData.images && prodData.images.length > 0) {
                         logger.info(`   - Eliminando ${prodData.images.length} imágenes antiguas de TN.`);
                         for (const img of prodData.images) {
-                            await fetch(`${apiUrl}/${tnId}/images/${img.id}`, { method: "DELETE", headers });
+                            await fetch(`${apiUrl}/products/${tnId}/images/${img.id}`, { method: "DELETE", headers });
                         }
                     }
                     // Subir nuevas imágenes una por una
                     for (const imgUrl of imagenesNuevas) {
                         logger.info(`   - Subiendo imagen principal: ${imgUrl.substring(0, 50)}...`);
-                        const resImg = await fetch(`${apiUrl}/${tnId}/images`, { method: "POST", headers, body: JSON.stringify({ src: imgUrl }) });
+                        const resImg = await fetch(`${apiUrl}/products/${tnId}/images`, { method: "POST", headers, body: JSON.stringify({ src: imgUrl }) });
                         if (!resImg.ok) logger.error(`❌ Error subiendo imagen:`, await resImg.json());
                     }
                     
                     // Subir imágenes de variantes y enlazarlas a la opción correspondiente
                     if (docNuevo.tieneVariantes) {
-                        const getProdVars = await fetch(`${apiUrl}/${tnId}`, { headers });
+                        const getProdVars = await fetch(`${apiUrl}/products/${tnId}`, { headers });
                         if (getProdVars.ok) {
                             const prodVarsData = await getProdVars.json();
                             for (const v of variantesNuevas) {
@@ -294,14 +312,14 @@ exports.sincronizarTiendanube = onDocumentWritten(
                                     if (tnVar) payload.product_variant_ids = [tnVar.id];
                                     
                                     logger.info(`   - Subiendo imagen para variante ${v.codigo}...`);
-                                    const resImg = await fetch(`${apiUrl}/${tnId}/images`, { method: "POST", headers, body: JSON.stringify(payload) });
+                                    const resImg = await fetch(`${apiUrl}/products/${tnId}/images`, { method: "POST", headers, body: JSON.stringify(payload) });
                                     if (!resImg.ok) {
                                         logger.error(`Error subiendo imagen para variante ${v.codigo}:`, await resImg.text());
                                     } else {
                                         const imgData = await resImg.json();
                                         if (tnVar) {
                                             // FORZAMOS LA VINCULACIÓN EXPLÍCITA
-                                            await fetch(`${apiUrl}/${tnId}/variants/${tnVar.id}`, { method: "PUT", headers, body: JSON.stringify({ image_id: imgData.id }) });
+                                            await fetch(`${apiUrl}/products/${tnId}/variants/${tnVar.id}`, { method: "PUT", headers, body: JSON.stringify({ image_id: imgData.id }) });
                                         }
                                     }
                                 }
@@ -313,7 +331,7 @@ exports.sincronizarTiendanube = onDocumentWritten(
                 // --- 2. CREAR PRODUCTO NUEVO ---
                 productoTN.variants = tnVariants; // Pasamos todas las variantes de golpe
 
-                const response = await fetch(apiUrl, { method: "POST", headers, body: JSON.stringify(productoTN) });
+                const response = await fetch(`${apiUrl}/products`, { method: "POST", headers, body: JSON.stringify(productoTN) });
                 const result = await response.json();
 
                 if (response.ok && result.id) {
@@ -323,11 +341,11 @@ exports.sincronizarTiendanube = onDocumentWritten(
                     // Subir imágenes MANUALMENTE después de crear para asegurar que Tiendanube no las ignore
                     if (imagenesNuevas.length > 0) {
                         for (const imgUrl of imagenesNuevas) {
-                            await fetch(`${apiUrl}/${result.id}/images`, { method: "POST", headers, body: JSON.stringify({ src: imgUrl }) });
+                            await fetch(`${apiUrl}/products/${result.id}/images`, { method: "POST", headers, body: JSON.stringify({ src: imgUrl }) });
                         }
                     }
                     if (docNuevo.tieneVariantes) {
-                        const getProdVars = await fetch(`${apiUrl}/${result.id}`, { headers });
+                        const getProdVars = await fetch(`${apiUrl}/products/${result.id}`, { headers });
                         if (getProdVars.ok) {
                             const prodVarsData = await getProdVars.json();
                             for (const v of variantesNuevas) {
@@ -343,7 +361,7 @@ exports.sincronizarTiendanube = onDocumentWritten(
                                             const imgData = await resImg.json();
                                             if (tnVar) {
                                                 // FORZAMOS LA VINCULACIÓN EXPLÍCITA
-                                                await fetch(`${apiUrl}/${result.id}/variants/${tnVar.id}`, { method: "PUT", headers, body: JSON.stringify({ image_id: imgData.id }) });
+                                                await fetch(`${apiUrl}/products/${result.id}/variants/${tnVar.id}`, { method: "PUT", headers, body: JSON.stringify({ image_id: imgData.id }) });
                                             }
                                         }
                                 }
@@ -355,9 +373,17 @@ exports.sincronizarTiendanube = onDocumentWritten(
                     logger.error(`❌ Error creando en TN:`, result);
                 }
             }
+            // Limpiamos el campo 'forceSync' si existe, para evitar ejecuciones futuras innecesarias.
+            if (docNuevo.forceSync) {
+                // Usamos un try-catch porque el documento podría haber sido eliminado en el proceso.
+                try {
+                    await event.data.after.ref.update({ forceSync: admin.firestore.FieldValue.delete() });
+                } catch (e) { /* El documento ya no existe, no hay nada que limpiar. */ }
+            }
         } catch (error) { logger.error("Error crítico conectando con TN:", error); }
     }
 );
+
 
 // ========================================================
 // SINCRONIZADOR DE ESTADOS (POS 2025 -> TIENDANUBE)
@@ -421,6 +447,61 @@ exports.actualizarPedidoTiendanube = onDocumentUpdated(
         }
     }
 );
+
+// ========================================================
+// VERIFICADOR DE PRECIOS (POS 2025 vs TIENDANUBE)
+// ========================================================
+exports.verificarPreciosTiendanube = onCall({ secrets: [GEMINI_API_KEY], timeoutSeconds: 120, memory: "512Mi" }, async (request) => {
+    const { skus } = request.data;
+    if (!skus || !Array.isArray(skus) || skus.length === 0) {
+        throw new HttpsError("invalid-argument", "Se requiere una lista de SKUs.");
+    }
+
+    const tnConfig = await getTiendanubeConfig();
+    const token = tnConfig.token;
+    const userId = tnConfig.userId;
+
+    if (!token || !userId) {
+        throw new HttpsError("failed-precondition", "Credenciales de Tiendanube no configuradas.");
+    }
+
+    const headers = {
+        "Authentication": `bearer ${token}`,
+        "User-Agent": "Verificador POS 2025 (wontivero@gmail.com)",
+        "Content-Type": "application/json"
+    };
+
+    // Tiendanube permite buscar múltiples SKUs separados por coma.
+    const skuString = skus.join(',');
+    const url = `https://api.tiendanube.com/v1/${userId}/products?sku=${skuString}&per_page=200`;
+
+    try {
+        const response = await fetch(url, { headers });
+        if (!response.ok) {
+            const errorText = await response.text();
+            logger.error("Error al consultar la API de Tiendanube:", errorText);
+            throw new HttpsError("unavailable", `Error de Tiendanube: ${response.statusText}`);
+        }
+
+        const productsFromTN = await response.json();
+        const preciosTN = [];
+
+        productsFromTN.forEach(product => {
+            if (product.variants && product.variants.length > 0) {
+                product.variants.forEach(variant => {
+                    if (variant.sku) {
+                        preciosTN.push({ sku: variant.sku, price: parseFloat(variant.price) || 0 });
+                    }
+                });
+            }
+        });
+
+        return { success: true, data: preciosTN };
+    } catch (error) {
+        logger.error("Error crítico en verificarPreciosTiendanube:", error);
+        throw new HttpsError("internal", "No se pudo completar la verificación de precios.");
+    }
+});
 
 // ========================================================
 // WEBHOOK: Recibe ventas desde Tiendanube y descuenta stock

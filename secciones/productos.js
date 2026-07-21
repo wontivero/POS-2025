@@ -1870,14 +1870,16 @@ async function handleCalcularPreciosWebMasivo() {
             if (producto.tieneVariantes && producto.variantes && producto.variantes.length > 0) {
                 const nuevasVariantes = producto.variantes.map(v => {
                     const precioVentaVariante = v.venta !== undefined ? v.venta : producto.venta;
-                    const nuevoPrecioWeb = Math.round(precioVentaVariante * (1 + recargoPorDefecto / 100));
-                    return { ...v, precio_web: nuevoPrecioWeb };
+                    return { ...v, precio_web: Math.round(precioVentaVariante * (1 + recargoPorDefecto / 100)) };
                 });
-                const precioWebPadre = Math.round(producto.venta * (1 + recargoPorDefecto / 100));
-                updateData = { variantes: nuevasVariantes, precio_web: precioWebPadre };
+                // CORRECCIÓN: No se debe establecer `precio_web` en el padre si hay variantes.
+                // El precio se define a nivel de cada variante.
+                // Se elimina `precio_web` del objeto principal y se deja solo en `nuevasVariantes`.
+                // Se agrega `forceSync` para asegurar que el trigger de la nube se ejecute.
+                updateData = { variantes: nuevasVariantes, forceSync: true };
             } else {
                 const precioWeb = Math.round(producto.venta * (1 + recargoPorDefecto / 100));
-                updateData = { precio_web: precioWeb };
+                updateData = { precio_web: precioWeb, forceSync: true };
             }
 
             // Actualizamos un producto a la vez
@@ -1890,8 +1892,86 @@ async function handleCalcularPreciosWebMasivo() {
     } catch (error) {
         console.error("Error en el cálculo masivo de precios web:", error);
         progress.error("Ocurrió un error durante el proceso. Revisa la consola para más detalles.");
-    }303030
+    }
 }
+
+
+async function handleVerificarPreciosWeb() {
+    const productosParaVerificar = productosFiltradosActuales.filter(p => p.publicarEnWeb);
+
+    if (productosParaVerificar.length === 0) {
+        return showAlertModal("No hay productos publicados en la web en la lista actual para verificar.", "Nada que hacer");
+    }
+
+    const confirmado = await showConfirmationModal(
+        `Se van a comparar los precios de <strong>${productosParaVerificar.length}</strong> productos con Tiendanube.<br><br>Al finalizar, la tabla mostrará solo los productos con precios desactualizados.`,
+        "Verificar Precios Web"
+    );
+
+    if (!confirmado) return;
+
+    const progress = showProgressModal("Verificando Precios con Tiendanube");
+
+    try {
+        const skus = [];
+        productosParaVerificar.forEach(p => {
+            if (p.tieneVariantes && p.variantes) {
+                p.variantes.forEach(v => {
+                    if (v.codigo) skus.push(v.codigo);
+                });
+            } else if (p.codigo) {
+                skus.push(p.codigo);
+            }
+        });
+
+        progress.update(30, "Enviando SKUs al servidor...");
+        const verificarPreciosTiendanube = httpsCallable(functions, 'verificarPreciosTiendanube');
+        const result = await verificarPreciosTiendanube({ skus });
+
+        if (!result.data.success) {
+            throw new Error(result.data.error || "La función en la nube devolvió un error.");
+        }
+
+        progress.update(70, "Comparando precios recibidos...");
+        const preciosTN = new Map(result.data.data.map(item => [item.sku, item.price]));
+        const idsDesactualizados = new Set();
+        const recargoPorDefecto = getAppConfig().tiendanube?.surchargePercentage || 0;
+
+        productosParaVerificar.forEach(p => {
+            const checkAndUpdate = (sku, precioVentaLocal) => {
+                if (!sku || !preciosTN.has(sku)) return;
+                const precioPOSCalculado = Math.round(precioVentaLocal * (1 + recargoPorDefecto / 100));
+                const precioTiendaNube = preciosTN.get(sku);
+                const diferencia = Math.abs(precioPOSCalculado - precioTiendaNube);
+                const tolerancia = precioPOSCalculado * 0.01; // Tolerancia del 1%
+
+                if (diferencia > tolerancia) {
+                    idsDesactualizados.add(p.id);
+                }
+            };
+
+            if (p.tieneVariantes && p.variantes) {
+                p.variantes.forEach(v => checkAndUpdate(v.codigo, v.venta !== undefined ? v.venta : p.venta));
+            } else {
+                checkAndUpdate(p.codigo, p.venta);
+            }
+        });
+
+        productosFiltradosActuales = listaCompletaProductos.filter(p => idsDesactualizados.has(p.id));
+        tablaProductosBody.innerHTML = ''; // Limpiamos la tabla
+        currentlyDisplayedCount = 0; // Reseteamos el contador de carga perezosa
+        loadMoreProducts(); // Cargamos la primera página de resultados (ya filtrados)
+        progress.finish(
+            "¡Verificación Completa!", 
+            `Se encontraron <strong>${idsDesactualizados.size}</strong> productos con precios desactualizados. La tabla ahora los muestra filtrados, listos para que presiones el botón <strong>"Sincronizar Precios Web"</strong> y corregirlos.`
+        );
+
+    } catch (error) {
+        console.error("Error al verificar precios web:", error);
+        progress.error("Ocurrió un error durante la verificación. Revisa la consola para más detalles.");
+    }
+}
+
 
 function init() {
     tablaProductosBody = document.getElementById('tabla-productos');
@@ -1921,6 +2001,7 @@ function init() {
     updateTypeFixed = document.getElementById('updateTypeFixed');
     updateAmount = document.getElementById('update-amount');
     btnAplicarActualizacionMasiva = document.getElementById('btnAplicarActualizacionMasiva');
+    btnVerificarPreciosWeb = document.getElementById('btnVerificarPreciosWeb');
     btnCalcularPreciosWebMasivo = document.getElementById('btnCalcularPreciosWebMasivo');
     datalistMarcasFiltro = document.getElementById('marcas-list-filtro');
     datalistColoresFiltro = document.getElementById('colores-list-filtro');
@@ -2322,6 +2403,10 @@ function init() {
         btnCalcularPreciosWebMasivo.addEventListener('click', handleCalcularPreciosWebMasivo);
         btnCalcularPreciosWebMasivo.disabled = true; // Deshabilitado por defecto
     }
+    if (btnVerificarPreciosWeb) {
+        btnVerificarPreciosWeb.addEventListener('click', handleVerificarPreciosWeb);
+    }
+
     if (productoCosto) productoCosto.addEventListener('input', updateVentaField);
     if (productoVenta) productoVenta.addEventListener('input', updatePorcentajeField);
     if (productoPorcentaje) productoPorcentaje.addEventListener('input', updateVentaField);
