@@ -1,3 +1,11 @@
+/* ==========================================================================
+   AJUSTE DE DENSIDAD GLOBAL (Efecto "Zoom 85%")
+   ========================================================================== */
+html {
+    /* Reduce el tamaño base de 16px a 14.5px. Todo se escala proporcionalmente. */
+    font-size: 14px; 
+}
+
 /* Estilo base para el body con transición */
 body {
     transition: background-color 0.3s ease-in-out;
