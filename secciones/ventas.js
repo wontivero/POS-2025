@@ -358,6 +358,7 @@ function initEditPriceModalListeners() {
             if (productIndex > -1) {
                 ticket[productIndex].precio = newPriceForTicket;
                 ticket[productIndex].total = newPriceForTicket * ticket[productIndex].cantidad;
+                ticket[productIndex].precioManual = true; // <-- MARCAMOS EL PRECIO COMO MANUAL
                 ticket[productIndex].justChanged = true;
             }
         
@@ -1699,6 +1700,24 @@ async function init() {
             // Volvemos a obtener la lista actualizada y re-dibujamos los accesos rápidos.
             productos = getProductos();
             productosPlanos = aplanarProductos(productos);
+
+            // --- INICIO DE LA CORRECCIÓN ---
+            // Refrescamos los datos de los productos en el ticket actual.
+            if (ticket && ticket.length > 0) {
+                ticket.forEach(item => {
+                    const productoActualizado = productosPlanos.find(p => p.id === item.id);
+                    if (productoActualizado) {
+                        // Actualizamos los datos, pero respetamos el precio si fue editado manualmente.
+                        if (!item.precioManual) {
+                            item.precio = productoActualizado.venta;
+                        }
+                        item.nombre = productoActualizado.nombre;
+                        item.costo = productoActualizado.costo;
+                        item.total = item.precio * item.cantidad;
+                    }
+                });
+                renderTicket(); // Re-renderizamos el ticket para mostrar los cambios.
+            }
             renderQuickAccessProducts();
         });
         window.productosUpdateListenerAttached = true;
