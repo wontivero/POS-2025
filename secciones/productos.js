@@ -209,10 +209,10 @@ function renderProductRows(productos) {
 
             if (storeUrl) {
                 // Construimos la URL ("slug") imitando el algoritmo exacto de Tiendanube
-                const slug = p.nombre
+                const slug = p.nombre.replace(/\//g, ' ') // Reemplaza '/' por espacio
                     .toLowerCase()
                     .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // Quita tildes
-                    .replace(/[^a-z0-9\s-]/g, "")                     // Quita símbolos raros
+                    .replace(/[^a-z0-9\s-]/g, "")                     // Quita símbolos no alfanuméricos
                     .trim()
                     .replace(/\s+/g, "-")                             // Reemplaza espacios por guiones
                     .replace(/-+/g, "-");                             // Evita guiones dobles

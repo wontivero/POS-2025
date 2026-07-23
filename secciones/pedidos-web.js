@@ -436,8 +436,14 @@ function abrirDetalle(pedido) {
     const appConfig = getAppConfig();
     const tnStoreUrl = appConfig.tiendanube?.storeUrl || 'https://admin.tiendanube.com';
     const adminUrl = `${tnStoreUrl.replace(/\/$/, '')}/admin/orders/${pedido.tnOrderId}`;
+    
+    // --- INICIO DE LA CORRECCIÓN ---
+    // Se replica la lógica de slugify de productos.js para manejar caracteres especiales como '/'.
+    const slug = producto.nombre ? producto.nombre.replace(/\//g, ' ').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9\s-]/g, "").trim().replace(/\s+/g, "-").replace(/-+/g, "-") : '';
+    const productUrl = (producto.publicarEnWeb && tnStoreUrl && slug) ? `${tnStoreUrl.replace(/\/$/, '')}/productos/${slug}/` : '#';
+    // --- FIN DE LA CORRECCIÓN ---
 
-    document.getElementById('detalle-titulo').innerHTML = `Orden #${pedido.numeroOrden} 
+    document.getElementById('detalle-titulo').innerHTML = `Orden #${pedido.numeroOrden}
         <a href="${adminUrl}" target="_blank" class="btn btn-sm btn-outline-primary ms-3 rounded-pill shadow-sm" title="Abrir pedido en Tiendanube">
             <i class="fas fa-external-link-alt me-1"></i>Ver en TN
         </a>`;
@@ -447,7 +453,9 @@ function abrirDetalle(pedido) {
         productosHtml += `
             <li class="list-group-item d-flex justify-content-between align-items-center border-0 px-0 border-bottom">
                 <div>
-                    <div class="fw-bold text-dark">${p.nombre}</div>
+                    <a href="${productUrl}" target="_blank" class="fw-bold text-dark text-decoration-none" title="Ver producto en la tienda">
+                        ${p.nombre} <i class="fas fa-external-link-alt fa-xs text-muted"></i>
+                    </a>
                     <small class="text-muted">SKU: ${p.sku || 'N/A'}</small>
                 </div>
                 <div class="text-end">
