@@ -1,6 +1,6 @@
 import { getFirestore, collection, query, orderBy, onSnapshot, doc, updateDoc, increment, getDocs, where, addDoc, Timestamp, runTransaction } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
 import { getAuth } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-auth.js";
-import { showAlertModal, showConfirmationModal, formatCurrency } from '../utils.js';
+import { showAlertModal, showConfirmationModal, formatCurrency, deleteDocument, showToast } from '../utils.js';
 import { db } from '../firebase.js';
 import { getClientes } from './dataManager.js';
 
@@ -130,10 +130,12 @@ function renderTabla() {
             <td><span class="badge bg-success bg-opacity-10 text-success">Activo</span></td>
             <td class="text-end pe-4">
                 <button class="btn btn-sm btn-light text-primary btn-ver-perfil" data-id="${c.id}"><i class="fas fa-eye"></i></button>
+                <button class="btn btn-sm btn-light text-danger btn-eliminar-cliente" data-id="${c.id}" title="Eliminar Cliente"><i class="fas fa-trash-alt"></i></button>
             </td>
         `;
         
         row.querySelector('.btn-ver-perfil').addEventListener('click', () => abrirPerfil(c));
+        row.querySelector('.btn-eliminar-cliente').addEventListener('click', () => handleDeleteCliente(c.id, c.nombre));
         tablaClientesBody.appendChild(row);
     });
 }
@@ -151,6 +153,12 @@ async function abrirPerfil(cliente) {
     loyaltyPuntosDisplay.textContent = (cliente.puntos || 0).toLocaleString();
 
     await cargarHistorialUnificado(cliente);
+
+    // --- INICIO: Listener para el botón de eliminar en el modal ---
+    const btnEliminarModal = document.querySelector('#clienteLoyaltyModal .btn-eliminar-cliente-modal');
+    if (btnEliminarModal) {
+        btnEliminarModal.onclick = () => handleDeleteCliente(cliente.id, cliente.nombre, modalLoyalty);
+    }
 
     modalLoyalty.show();
 }
@@ -475,6 +483,46 @@ function abrirModalNuevoCliente() {
     document.getElementById('modalClienteABMLabel').textContent = 'Nuevo Cliente';
     modalClienteABM.show();
     setTimeout(() => abmNombre.focus(), 500);
+}
+
+async function handleDeleteCliente(clienteId, clienteNombre, modalInstance = null) {
+    // 1. Validar si el cliente tiene ventas asociadas
+    const ventasRef = collection(db, 'ventas');
+    const q = query(ventasRef, where('cliente.id', '==', clienteId));
+    const ventasSnapshot = await getDocs(q);
+
+    if (!ventasSnapshot.empty) {
+        await showAlertModal(
+            `No se puede eliminar a <strong>${clienteNombre}</strong> porque tiene <strong>${ventasSnapshot.size}</strong> venta(s) registrada(s) en su historial.<br><br>Eliminarlo afectaría la integridad de los reportes.`,
+            "Eliminación Bloqueada",
+            "warning"
+        );
+        return;
+    }
+
+    // 2. Si no tiene ventas, pedir confirmación
+    const confirmado = await showConfirmationModal(
+        `¿Estás seguro de que deseas eliminar permanentemente a <strong>${clienteNombre}</strong>?<br><br><strong class="text-danger">Esta acción no se puede deshacer.</strong>`,
+        "Confirmar Eliminación",
+        { confirmText: 'Sí, eliminar', cancelText: 'Cancelar', type: 'danger' }
+    );
+
+    if (confirmado) {
+        try {
+            await deleteDocument('clientes', clienteId);
+            
+            if (modalInstance) {
+                modalInstance.hide();
+            }
+            
+            showToast(`Cliente "${clienteNombre}" eliminado correctamente.`, 'fa-check-circle', '#1cc88a');
+            // La tabla se actualizará automáticamente gracias al listener de dataManager.
+
+        } catch (error) {
+            console.error("Error al eliminar cliente:", error);
+            showToast("Ocurrió un error al intentar eliminar el cliente.", 'fa-times-circle', '#dc3545');
+        }
+    }
 }
 
 async function guardarClienteABM() {
