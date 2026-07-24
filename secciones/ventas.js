@@ -1707,8 +1707,8 @@ async function init() {
                 ticket.forEach(item => {
                     const productoActualizado = productosPlanos.find(p => p.id === item.id);
                     if (productoActualizado) {
-                        // Actualizamos los datos, pero respetamos el precio si fue editado manualmente.
-                        if (!item.precioManual) {
+                        // Actualizamos los datos, pero respetamos el precio si fue editado manualmente O si es un producto genérico.
+                        if (!item.precioManual && !item.isGeneric) {
                             item.precio = productoActualizado.venta;
                         }
                         item.nombre = productoActualizado.nombre;
