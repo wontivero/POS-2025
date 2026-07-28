@@ -1,0 +1,135 @@
+<section id="seccion-recepcion" class="animate-fade-in">
+    <!-- Buscador Gigante -->
+    <div class="row mb-4 justify-content-center">
+        <div class="col-lg-11">
+            <div class="d-flex gap-3 align-items-stretch">
+                <div class="position-relative flex-grow-1">
+                    <input type="text" id="recepcionSearch" class="form-control text-center text-primary h-100 w-100" placeholder="Escanea o escribe el producto aquí..." autocomplete="off">
+                    <div id="recepcionSearchResults" class="list-group position-absolute w-100 shadow-lg" style="z-index: 1050; top: 100%; margin-top: 10px; border-radius: 1rem; overflow: hidden; display: none;"></div>
+                </div>
+                <button class="btn btn-primary fw-bold px-4 shadow-sm flex-shrink-0 d-flex align-items-center justify-content-center" id="btnRecepcionCrearDirecto" style="border-radius: 1.25rem; font-size: 1.25rem; transition: transform 0.2s;" title="Crear Nuevo Producto">
+                    <i class="fas fa-plus me-2"></i>Nuevo
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="row justify-content-center">
+        <!-- Tarjeta de Acción Central -->
+        <div class="col-lg-8 mb-4">
+            <!-- Estado Vacío -->
+            <div id="recepcionCardEmpty" class="recepcion-card bg-white p-5 text-center text-muted h-100 d-flex flex-column justify-content-center align-items-center">
+                <i class="fas fa-barcode fa-4x mb-3 opacity-25"></i>
+                <h4 class="fw-bold text-dark">Esperando producto...</h4>
+                <p>Escanea un código de barras o busca por nombre arriba.</p>
+            </div>
+
+            <!-- Estado Activo (Producto Seleccionado) -->
+            <div id="recepcionCardActive" class="recepcion-card bg-white h-100 d-none">
+                <div class="row g-0 h-100">
+                    <div class="col-md-5 recepcion-img-container">
+                        <img id="recepcionProdImg" src="" alt="Producto">
+                        <span id="recepcionProdTnBadge" class="position-absolute top-0 end-0 m-3 fs-3 text-primary d-none" title="Sincronizado con Tiendanube"><i class="fas fa-cloud"></i></span>
+                    </div>
+                    <div class="col-md-7 p-4 d-flex flex-column justify-content-between">
+                        <div>
+                            <p class="text-muted small fw-bold mb-1"><i class="fas fa-tag me-1"></i> <span id="recepcionProdSku"></span></p>
+                            <h4 class="fw-bold text-dark mb-3" id="recepcionProdNombre" style="line-height: 1.2;"></h4>
+                            
+                            <!-- Fila 1: Clasificación (Marca y Rubro) -->
+                            <div class="row g-2 mb-3">
+                                <div class="col-6">
+                                    <label class="form-label text-muted small fw-bold mb-1">Marca: <span id="recepcionMarcaActual" class="text-dark"></span></label>
+                                    <input type="text" class="form-control recepcion-input text-secondary fs-5 px-1" id="recepcionMarca" list="recepcionMarcasList">
+                                    <datalist id="recepcionMarcasList"></datalist>
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label text-muted small fw-bold mb-1">Rubro: <span id="recepcionRubroActual" class="text-dark"></span></label>
+                                    <input type="text" class="form-control recepcion-input text-secondary fs-5 px-1" id="recepcionRubro" list="recepcionRubrosList">
+                                    <datalist id="recepcionRubrosList"></datalist>
+                                </div>
+                            </div>
+
+                            <!-- Fila 2: Precios -->
+                            <div class="row g-2 mb-3">
+                                <div class="col-4">
+                                    <label class="form-label text-muted small fw-bold mb-1">Costo: <span id="recepcionCostoActual" class="text-dark"></span></label>
+                                    <div class="input-group">
+                                        <span class="input-group-text bg-light border-end-0 text-muted"><i class="fas fa-dollar-sign"></i></span>
+                                        <input type="number" class="form-control recepcion-input text-primary border-start-0 ps-0" id="recepcionCosto" step="0.01">
+                                    </div>
+                                </div>
+                                <div class="col-4">
+                                    <label class="form-label text-muted small fw-bold mb-1">Ganancia: <span id="recepcionGananciaActual" class="text-dark"></span></label>
+                                    <div class="input-group">
+                                        <span class="input-group-text bg-light border-end-0 text-muted"><i class="fas fa-percent"></i></span>
+                                        <input type="number" class="form-control recepcion-input text-info border-start-0 ps-0" id="recepcionGanancia" step="0.01">
+                                    </div>
+                                </div>
+                                <div class="col-4">
+                                    <label class="form-label text-muted small fw-bold mb-1">Venta: <span id="recepcionVentaActual" class="text-dark"></span></label>
+                                    <div class="input-group">
+                                        <span class="input-group-text bg-light border-end-0 text-muted"><i class="fas fa-dollar-sign"></i></span>
+                                        <input type="number" class="form-control recepcion-input text-success border-start-0 ps-0" id="recepcionVenta" step="0.01">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Fila 3: Stock -->
+                            <div class="row g-2 mb-4">
+                                <div class="col-6">
+                                    <label class="form-label text-muted small fw-bold mb-1">Sumar Stock (Act: <span id="recepcionStockActual" class="text-dark"></span>)</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text bg-light border-end-0 text-muted"><i class="fas fa-plus"></i></span>
+                                        <input type="number" class="form-control recepcion-input bg-light border-start-0 ps-0" id="recepcionStockSumar" value="1" step="1">
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label text-muted small fw-bold mb-1">Stock Final (Calculado)</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text bg-white border-end-0 text-dark"><i class="fas fa-boxes"></i></span>
+                                        <input type="number" class="form-control recepcion-input fw-bold bg-white border-start-0 ps-0 text-dark" id="recepcionStockCalculado" readonly disabled>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-success flex-grow-1 fw-bold fs-5 rounded-pill py-2 shadow-sm" id="btnRecepcionGuardar">ACTUALIZAR <small>(Enter)</small></button>
+                            <button class="btn btn-warning rounded-pill px-4 shadow-sm text-dark" id="btnRecepcionAvanzado" title="Edición Avanzada (Abre el Modal Completo)"><i class="fas fa-cog"></i></button>
+                            <button class="btn btn-light rounded-pill px-3 text-secondary border" id="btnRecepcionCancelar" title="Cancelar / Limpiar"><i class="fas fa-times"></i></button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Historial Lateral -->
+        <div class="col-lg-3 mb-4">
+            <div class="card border-0 shadow-sm rounded-4 h-100 bg-light">
+                <div class="card-header bg-transparent border-0 pt-4 pb-3 px-4">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5 class="fw-bold text-dark mb-0"><i class="fas fa-history me-2 text-primary"></i>Actividad</h5>
+                        <select id="historial-limite" class="form-select form-select-sm w-auto shadow-sm border-0 bg-white text-muted fw-bold" style="cursor: pointer;">
+                            <option value="10">Últimos 10</option>
+                            <option value="30" selected>Últimos 30</option>
+                            <option value="50">Últimos 50</option>
+                            <option value="100">Últimos 100</option>
+                        </select>
+                    </div>
+                    <!-- Pestañas de Filtro -->
+                    <div class="nav nav-pills nav-fill bg-white p-1 rounded-pill shadow-sm" role="tablist" style="font-size: 0.85rem;">
+                        <button class="nav-link active text-white rounded-pill py-1 fw-bold" id="tab-historial-todos" data-filter="todos">Todos</button>
+                        <button class="nav-link rounded-pill py-1 text-muted fw-bold" id="tab-historial-mios" data-filter="mios">Solo Míos</button>
+                    </div>
+                </div>
+                <div class="card-body px-3 overflow-auto" id="recepcionHistorialList" style="max-height: 500px;">
+                    <div class="text-center text-muted mt-5 opacity-50" id="recepcionHistorialVacio">
+                        <i class="fas fa-clipboard-list fa-3x mb-2"></i>
+                        <p>Aún no has ingresado<br>mercadería hoy.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>

@@ -111,7 +111,8 @@ body {
     border-radius: 0.5rem;
 }
 
-#searchResults .list-group-item-action.active {
+#searchResults .list-group-item-action.active,
+#recepcionSearchResults .list-group-item-action.active {
     background: linear-gradient(45deg, #0d6efd, #0a58ca); /* Degradado de azules */
     color: white;
     border-color: #0a58ca; /* Borde del color más oscuro del degradado */
@@ -121,7 +122,8 @@ body {
 /* Cuando un item de la lista de búsqueda está activo,
    forzamos a que el texto del precio (que tiene la clase .text-primary)
    se vuelva blanco para que sea legible sobre el fondo azul. */
-#searchResults .list-group-item-action.active .text-primary {
+#searchResults .list-group-item-action.active .text-primary,
+#recepcionSearchResults .list-group-item-action.active .text-primary {
     color: white !important;
 }
 /* --- FIN DE LA MEJORA --- */
@@ -750,4 +752,69 @@ form.duplicando::before {
     opacity: 0.5;
     pointer-events: none;
     transition: opacity 0.3s ease;
+}
+
+/* ==========================================================================
+   SECCIÓN INGRESO RÁPIDO (RECEPCIÓN)
+   ========================================================================== */
+#recepcionSearch {
+    font-size: 1.8rem;
+    padding: 1.2rem 1.5rem;
+    border-radius: 1.25rem;
+    border: 2px solid #0d6efd;
+    box-shadow: 0 8px 25px rgba(13, 110, 253, 0.15);
+    font-weight: 700;
+    transition: all 0.3s ease;
+}
+
+#recepcionSearch:focus {
+    box-shadow: 0 8px 30px rgba(13, 110, 253, 0.3);
+    transform: translateY(-2px);
+    outline: none;
+}
+
+.recepcion-card {
+    border-radius: 1.5rem;
+    border: 1px solid #e9ecef;
+    box-shadow: 0 10px 35px rgba(0,0,0,0.04);
+    overflow: hidden;
+}
+
+.recepcion-img-container {
+    position: relative;
+    background-color: #f8f9fa;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 250px;
+    border-right: 1px solid #f1f3f5;
+}
+
+.recepcion-img-container img {
+    max-width: 100%;
+    max-height: 250px;
+    object-fit: contain;
+    padding: 1rem;
+}
+
+.recepcion-input {
+    font-size: 1.5rem;
+    font-weight: 800;
+    text-align: center;
+    height: 60px;
+}
+
+.recepcion-historial-item {
+    border-left: none;
+    border-radius: 0.75rem;
+    margin-bottom: 0.75rem;
+    background-color: #ffffff;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.03);
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.recepcion-historial-item:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 15px rgba(0,0,0,0.06);
 }

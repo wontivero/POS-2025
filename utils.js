@@ -22,13 +22,19 @@ export const logProducto = async (productoId, productoNombre, accion, detalles) 
     try {
         const { getAuth } = await import("https://www.gstatic.com/firebasejs/9.6.1/firebase-auth.js");
         const auth = getAuth();
-        const userEmail = auth.currentUser ? auth.currentUser.email : 'Sistema';
+        const user = auth.currentUser;
+        const userEmail = user ? user.email : 'Sistema';
+        const userName = user && user.displayName ? user.displayName : userEmail.split('@')[0];
+        const userAvatar = user && user.photoURL ? user.photoURL : `https://ui-avatars.com/api/?name=${userName}&background=random`;
+        
         const logData = {
             productoId: productoId || 'Desconocido',
             productoNombre: productoNombre || 'Desconocido',
             accion, 
             detalles, 
             usuario: userEmail,
+            userName: userName,
+            userAvatar: userAvatar,
             fecha: new Date()
         };
         await addDoc(collection(db, 'productos_logs'), logData);

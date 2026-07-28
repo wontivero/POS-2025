@@ -1463,6 +1463,10 @@ async function handleFileUpload(event) {
 }
 
 function abrirProductoModal(modo, producto = null) {
+    if (!productoId) {
+        init();
+    }
+
     if (productoCodigo) productoCodigo.classList.remove('is-invalid');
     const modalTitle = document.getElementById('productoModalLabel');
     const saveButton = document.getElementById('btnGuardarProducto');
@@ -2231,10 +2235,13 @@ function init() {
         aplicarFiltrosYRenderizar();
     };
 
-    document.addEventListener('productos-updated', actualizarTablaProductos);
-    document.addEventListener('marcas-updated', actualizarDatalists);
-    document.addEventListener('colores-updated', actualizarDatalists);
-    document.addEventListener('rubros-updated', actualizarDatalists);
+    if (!window.productosGlobalListenersAttached) {
+        document.addEventListener('productos-updated', actualizarTablaProductos);
+        document.addEventListener('marcas-updated', actualizarDatalists);
+        document.addEventListener('colores-updated', actualizarDatalists);
+        document.addEventListener('rubros-updated', actualizarDatalists);
+        window.productosGlobalListenersAttached = true;
+    }
     actualizarTablaProductos();
     actualizarDatalists();
     

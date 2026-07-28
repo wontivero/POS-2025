@@ -1173,7 +1173,10 @@ async function guardarTodoEnBD() {
 
         const { getAuth } = await import("https://www.gstatic.com/firebasejs/9.6.1/firebase-auth.js");
         const { uploadProductImage, autoSquareImageIfNeeded } = await import('../utils.js');
-        const userEmail = getAuth().currentUser ? getAuth().currentUser.email : 'Sistema';
+        const currentUser = getAuth().currentUser;
+        const userEmail = currentUser ? currentUser.email : 'Sistema';
+        const userName = currentUser && currentUser.displayName ? currentUser.displayName : userEmail.split('@')[0];
+        const userAvatar = currentUser && currentUser.photoURL ? currentUser.photoURL : `https://ui-avatars.com/api/?name=${userName}&background=random`;
 
         let processedCount = 0;
         const totalProducts = productosEnPreparacion.length;
@@ -1278,6 +1281,8 @@ async function guardarTodoEnBD() {
                 accion: actionType,
                 detalles: detailsMsg,
                 usuario: userEmail,
+                userName: userName,
+                userAvatar: userAvatar,
                 fecha: new Date()
             });
 
