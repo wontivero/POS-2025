@@ -3,7 +3,7 @@ import { getFirestore, doc, updateDoc, increment, collection, query, orderBy, li
 import { db } from '../firebase.js';
 import { getProductos, getRubros, getMarcas, getAppConfig } from './dataManager.js';
 import { getActiveUserProfile } from '../app.js';
-import { formatCurrency, roundUpToNearest50, showToast, showConfirmationModal, normalizeString } from '../utils.js';
+import { formatCurrency, roundUpToNearest50, showToast, showConfirmationModal, normalizeString, capitalizeFirstLetter } from '../utils.js';
 
 let productosPlanos = [];
 let activeProduct = null;
@@ -94,10 +94,10 @@ export async function init() {
     // Cargar datalists
     const populateDatalists = () => {
         if (datalistRubros) {
-            datalistRubros.innerHTML = getRubros().map(r => `<option value="${r}"></option>`).join('');
+            datalistRubros.innerHTML = getRubros().map(r => `<option value="${capitalizeFirstLetter(r)}"></option>`).join('');
         }
         if (datalistMarcas) {
-            datalistMarcas.innerHTML = getMarcas().map(m => `<option value="${m}"></option>`).join('');
+            datalistMarcas.innerHTML = getMarcas().map(m => `<option value="${capitalizeFirstLetter(m)}"></option>`).join('');
         }
     };
     populateDatalists();
@@ -385,12 +385,51 @@ function cargarProductoEnTarjeta(producto) {
     elSku.textContent = producto.codigo || 'Sin SKU';
     elNombre.textContent = producto.nombre;
     
+    // --- INICIO LÓGICA DE CARGA DE IMAGEN ---
+    const imgLoader = document.getElementById('recepcionImgLoader');
+    if (imgLoader) {
+        imgLoader.classList.remove('d-none');
+        imgLoader.classList.add('d-flex');
+    }
+    elImg.classList.add('d-none');
+    
+    elImg.onload = () => {
+        if (imgLoader) {
+            imgLoader.classList.add('d-none');
+            imgLoader.classList.remove('d-flex');
+        }
+        elImg.classList.remove('d-none');
+    };
+
+    elImg.onerror = () => {
+        if (!elImg.src.includes('placehold.co')) {
+            elImg.src = 'https://placehold.co/400x400/f8f9fa/adb5bd?text=Sin+Foto';
+        }
+    };
+    // --- FIN LÓGICA DE CARGA DE IMAGEN ---
+
     if (producto.imagenes && producto.imagenes.length > 0) elImg.src = producto.imagenes[0];
     else if (producto.isVariant && producto.imagenUrl) elImg.src = producto.imagenUrl;
     else elImg.src = 'https://placehold.co/400x400/f8f9fa/adb5bd?text=Sin+Foto';
     
-    if (producto.publicarEnWeb) elTnBadge.classList.remove('d-none');
-    else elTnBadge.classList.add('d-none');
+    if (producto.publicarEnWeb) {
+        elTnBadge.classList.remove('d-none');
+        const appConfig = getAppConfig();
+        const storeUrl = appConfig?.tiendanube?.storeUrl;
+        if (storeUrl) {
+            const fullProduct = getProductos().find(p => p.id === producto.parentId);
+            const nombreBase = fullProduct ? fullProduct.nombre : producto.nombre;
+            const slug = nombreBase.replace(/\//g, ' ').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9\s-]/g, "").trim().replace(/\s+/g, "-").replace(/-+/g, "-");
+            const productUrl = `${storeUrl.replace(/\/$/, '')}/productos/${slug}/`;
+            elTnBadge.innerHTML = `<a href="${productUrl}" target="_blank" class="text-decoration-none text-primary"><i class="fas fa-cloud"></i></a>`;
+            elTnBadge.title = "Ver publicación en Tiendanube";
+        } else {
+            elTnBadge.innerHTML = `<i class="fas fa-cloud"></i>`;
+            elTnBadge.title = "Sincronizado con Tiendanube";
+        }
+    } else {
+        elTnBadge.classList.add('d-none');
+    }
     
     elCostoActual.textContent = formatCurrency(producto.costo);
     elVentaActual.textContent = formatCurrency(producto.venta);
@@ -409,8 +448,8 @@ function cargarProductoEnTarjeta(producto) {
     inCosto.value = producto.costo || 0;
     inGanancia.value = gananciaActual;
     inVenta.value = producto.venta || 0;
-    inRubro.value = producto.rubro || '';
-    inMarca.value = producto.marca || '';
+    inRubro.value = capitalizeFirstLetter(producto.rubro) || '';
+    inMarca.value = capitalizeFirstLetter(producto.marca) || '';
     inStockSumar.value = 1;
     if (inStockCalculado) {
         inStockCalculado.value = (parseInt(producto.stock) || 0) + 1;

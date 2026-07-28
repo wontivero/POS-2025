@@ -786,15 +786,16 @@ form.duplicando::before {
     display: flex;
     align-items: center;
     justify-content: center;
-    min-height: 250px;
     border-right: 1px solid #f1f3f5;
+    padding: 2.5rem;
 }
 
 .recepcion-img-container img {
-    max-width: 100%;
-    max-height: 250px;
+    width: 100%;
+    aspect-ratio: 1 / 1;
     object-fit: contain;
-    padding: 1rem;
+    border-radius: 0.75rem;
+    filter: drop-shadow(0 8px 16px rgba(0,0,0,0.08));
 }
 
 .recepcion-input {
@@ -817,4 +818,25 @@ form.duplicando::before {
 .recepcion-historial-item:hover {
     transform: translateY(-2px);
     box-shadow: 0 6px 15px rgba(0,0,0,0.06);
+}
+
+/* --- Animación Icono Tiendanube (Recepción) --- */
+#recepcionProdTnBadge {
+    transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), filter 0.3s ease;
+}
+
+#recepcionProdTnBadge:hover {
+    transform: scale(1.2) translateY(-3px);
+    filter: drop-shadow(0 5px 8px rgba(13, 110, 253, 0.4));
+}
+
+/* --- Animación Cloud Loader --- */
+@keyframes bounceCloud {
+    0%, 100% { transform: translateY(0) scale(1); filter: drop-shadow(0 5px 5px rgba(13, 110, 253, 0.2)); }
+    50% { transform: translateY(-10px) scale(1.1); filter: drop-shadow(0 15px 15px rgba(13, 110, 253, 0.4)); }
+}
+
+.animate-bounce-cloud {
+    animation: bounceCloud 1.5s infinite ease-in-out;
+    color: #0d6efd;
 }

@@ -28,8 +28,13 @@
             <div id="recepcionCardActive" class="recepcion-card bg-white h-100 d-none">
                 <div class="row g-0 h-100">
                     <div class="col-md-5 recepcion-img-container">
-                        <img id="recepcionProdImg" src="" alt="Producto">
-                        <span id="recepcionProdTnBadge" class="position-absolute top-0 end-0 m-3 fs-3 text-primary d-none" title="Sincronizado con Tiendanube"><i class="fas fa-cloud"></i></span>
+                        <!-- Animación de carga -->
+                        <div id="recepcionImgLoader" class="position-absolute d-none flex-column align-items-center justify-content-center text-primary w-100 h-100" style="background: #f8f9fa; z-index: 5;">
+                            <i class="fas fa-cloud fa-3x mb-2 animate-bounce-cloud"></i>
+                            <span class="small fw-bold" style="letter-spacing: 1px;">Cargando...</span>
+                        </div>
+                        <img id="recepcionProdImg" src="" alt="Producto" class="d-none">
+                        <span id="recepcionProdTnBadge" class="position-absolute top-0 end-0 m-3 fs-3 text-primary d-none" title="Sincronizado con Tiendanube" style="z-index: 10;"><i class="fas fa-cloud"></i></span>
                     </div>
                     <div class="col-md-7 p-4 d-flex flex-column justify-content-between">
                         <div>
@@ -40,12 +45,12 @@
                             <div class="row g-2 mb-3">
                                 <div class="col-6">
                                     <label class="form-label text-muted small fw-bold mb-1">Marca: <span id="recepcionMarcaActual" class="text-dark"></span></label>
-                                    <input type="text" class="form-control recepcion-input text-secondary fs-5 px-1" id="recepcionMarca" list="recepcionMarcasList">
+                                    <input type="text" class="form-control recepcion-input text-dark" id="recepcionMarca" list="recepcionMarcasList">
                                     <datalist id="recepcionMarcasList"></datalist>
                                 </div>
                                 <div class="col-6">
                                     <label class="form-label text-muted small fw-bold mb-1">Rubro: <span id="recepcionRubroActual" class="text-dark"></span></label>
-                                    <input type="text" class="form-control recepcion-input text-secondary fs-5 px-1" id="recepcionRubro" list="recepcionRubrosList">
+                                    <input type="text" class="form-control recepcion-input text-dark" id="recepcionRubro" list="recepcionRubrosList">
                                     <datalist id="recepcionRubrosList"></datalist>
                                 </div>
                             </div>
