@@ -218,10 +218,11 @@ function renderUserSwitcher() {
 
     allUsers.forEach(user => {
         if (user.uid !== activeUID) {
+            const avatarSrc = user.photoURL || `https://ui-avatars.com/api/?name=${user.displayName || user.email}&background=random&color=fff`;
             listHtml += `
                 <li>
                     <a class="dropdown-item d-flex align-items-center" href="#" data-uid-switch="${user.uid}">
-                        <img src="${user.photoURL}" width="24" height="24" class="rounded-circle me-2">
+                        <img src="${avatarSrc}" width="24" height="24" class="rounded-circle me-2">
                         ${user.displayName}
                     </a>
                 </li>
@@ -259,7 +260,11 @@ function updateUserUI(user) {
     const userEmailDropdown = document.getElementById('user-email-dropdown');
     const btnLogout = document.getElementById('btn-logout-dropdown');
 
-    if (userAvatar && user.photoURL) userAvatar.src = user.photoURL;
+    if (userAvatar) {
+        // Si el usuario no tiene foto, genera una con sus iniciales
+        const avatarSrc = user.photoURL || `https://ui-avatars.com/api/?name=${user.displayName || user.email}&background=random&color=fff`;
+        userAvatar.src = avatarSrc;
+    }
     if (userDisplayName && user.displayName) userDisplayName.textContent = user.displayName.split(' ')[0];
     if (userEmailDropdown) userEmailDropdown.textContent = user.email;
 

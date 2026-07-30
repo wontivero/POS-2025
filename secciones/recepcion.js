@@ -24,6 +24,7 @@ let datalistRubros, datalistMarcas;
 let btnGuardar, btnAvanzado, btnCancelar;
 let historialList;
 let selectLimiteHistorial;
+let inputHistorialSearch;
 
 function aplanarProductos(lista) {
     let planos = [];
@@ -85,6 +86,7 @@ export async function init() {
     
     historialList = document.getElementById('recepcionHistorialList');
     selectLimiteHistorial = document.getElementById('historial-limite');
+    inputHistorialSearch = document.getElementById('recepcionHistorialSearch');
     btnCrearDirecto = document.getElementById('btnRecepcionCrearDirecto');
 
     // Carga de datos inicial
@@ -137,6 +139,10 @@ export async function init() {
         });
     }
 
+
+    if (inputHistorialSearch) {
+        inputHistorialSearch.addEventListener('input', renderHistorial);
+    }
 
     // --- LISTENERS ---
     searchInput.addEventListener('input', handleSearchInput);
@@ -254,10 +260,12 @@ function handleSearchInput(e) {
             if (producto.color) detalles.push(producto.color);
             const detallesTexto = detalles.join(' - ');
 
+            const cloudIcon = producto.publicarEnWeb ? '<i class="fas fa-cloud text-primary ms-2" title="Sincronizado con Tiendanube"></i>' : '';
+
             item.innerHTML = `
                 <div class="d-flex justify-content-between align-items-center">
                     <div>
-                        <span class="fw-bold">${producto.nombre}</span> <br>
+                        <span class="fw-bold">${producto.nombre}</span>${cloudIcon} <br>
                         <small class="text-muted">${producto.codigo || 'S/C'} ${detallesTexto ? '[' + detallesTexto + ']' : ''}</small>
                     </div>
                     <div class="text-end">
@@ -450,9 +458,9 @@ function cargarProductoEnTarjeta(producto) {
     inVenta.value = producto.venta || 0;
     inRubro.value = capitalizeFirstLetter(producto.rubro) || '';
     inMarca.value = capitalizeFirstLetter(producto.marca) || '';
-    inStockSumar.value = 1;
+    inStockSumar.value = 0;
     if (inStockCalculado) {
-        inStockCalculado.value = (parseInt(producto.stock) || 0) + 1;
+        inStockCalculado.value = (parseInt(producto.stock) || 0);
     }
     
     inCosto.focus();
@@ -540,6 +548,29 @@ function renderHistorial() {
         logsToRender = logsToRender.filter(log => log.usuario === currentUserEmail);
     }
     
+    if (inputHistorialSearch && inputHistorialSearch.value.trim() !== '') {
+        const term = inputHistorialSearch.value.trim().toLowerCase();
+        logsToRender = logsToRender.filter(log => {
+            // Obtenemos el producto original para incluir sus SKUs en la búsqueda invisible
+            const fullProduct = getProductos().find(p => p.id === log.productoId);
+            const skuBase = fullProduct ? (fullProduct.codigo || '') : '';
+            const skusVariantes = (fullProduct && fullProduct.tieneVariantes && fullProduct.variantes) 
+                ? fullProduct.variantes.map(v => v.codigo || '').join(' ') 
+                : '';
+
+            const searchable = [
+                log.productoNombre || '',
+                skuBase,
+                skusVariantes,
+                log.detalles || '',
+                log.userName || '',
+                log.usuario || '',
+                log.accion || ''
+            ].join(' ').toLowerCase();
+            return searchable.includes(term);
+        });
+    }
+
     if (logsToRender.length === 0) {
         historialList.innerHTML = `
             <div class="text-center text-muted mt-5 opacity-50" id="recepcionHistorialVacio">
@@ -574,8 +605,15 @@ function renderHistorial() {
         const dateObj = log.fecha && log.fecha.toDate ? log.fecha.toDate() : new Date(log.fecha);
         const timeStr = dateObj.toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
         
-        const userName = log.userName || (log.usuario ? log.usuario.split('@')[0] : 'Sistema');
-        const avatarUrl = log.userAvatar || `https://ui-avatars.com/api/?name=${userName}&background=random`;
+        let displayFirstName = 'Sistema';
+        if (log.usuario === currentUserEmail && currentUser && currentUser.displayName) {
+            displayFirstName = currentUser.displayName.split(' ')[0];
+        } else {
+            const rawName = log.userName || (log.usuario ? log.usuario.split('@')[0] : 'Sistema');
+            displayFirstName = rawName.split(' ')[0];
+        }
+        
+        const avatarUrl = log.userAvatar || `https://ui-avatars.com/api/?name=${displayFirstName}&background=random`;
         
         const div = document.createElement('div');
         div.className = `recepcion-historial-item p-3 animate-fade-in border-start border-4 ${borderClass}`;
@@ -588,7 +626,7 @@ function renderHistorial() {
                     </div>
                     <strong class="text-dark text-truncate" title="${log.productoNombre}">${log.productoNombre}</strong>
                 </div>
-                <div class="position-relative ms-2 flex-shrink-0" title="Actualizado por: ${userName}">
+                <div class="position-relative ms-2 flex-shrink-0" title="Actualizado por: ${displayFirstName}">
                     <img src="${avatarUrl}" class="rounded-circle shadow-sm" width="28" height="28" style="object-fit: cover; border: 2px solid #fff;">
                 </div>
             </div>

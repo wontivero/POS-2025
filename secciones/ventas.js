@@ -560,7 +560,9 @@ function handleSearch(e) {
             }
             // --- FIN: Indicador visual de stock ---
 
-            resultItem.innerHTML = `<span class="fw-bold">${producto.nombre}</span> (${producto.codigo || 'S/C'}) [${detallesTexto}] - <span class="fw-bold text-primary">${formatCurrency(producto.venta)}</span> - Stock: ${producto.stock || 0}${stockIndicator}`;
+            const cloudIcon = producto.publicarEnWeb ? '<i class="fas fa-cloud text-primary ms-1 me-1" title="Sincronizado con Tiendanube"></i>' : '';
+
+            resultItem.innerHTML = `<span class="fw-bold">${producto.nombre}</span>${cloudIcon}(${producto.codigo || 'S/C'}) [${detallesTexto}] - <span class="fw-bold text-primary">${formatCurrency(producto.venta)}</span> - Stock: ${producto.stock || 0}${stockIndicator}`;
             resultItem.dataset.id = producto.id;
             searchResults.appendChild(resultItem);
         });
