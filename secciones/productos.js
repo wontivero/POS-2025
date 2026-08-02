@@ -1082,6 +1082,8 @@ function updatePorcentajeField() {
         porcentaje = ((venta - costo) / costo * 100).toFixed(2);
     } else if (costo === 0 && venta > 0) {
         porcentaje = "100+";
+    } else if (costo === 0 && venta === 0) {
+        porcentaje = productoPorcentaje.value.replace('%', '') || '75';
     }
     calcularPrecioWeb(); // <-- CORRECCIÓN: Llamamos al recálculo web aquí.
     productoPorcentaje.value = `${porcentaje}%`;

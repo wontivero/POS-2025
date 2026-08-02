@@ -85,15 +85,16 @@
                                 <div class="col-6">
                                     <label class="form-label text-muted small fw-bold mb-1">Sumar Stock (Act: <span id="recepcionStockActual" class="text-dark"></span>)</label>
                                     <div class="input-group">
-                                        <span class="input-group-text bg-light border-end-0 text-muted"><i class="fas fa-plus"></i></span>
-                                    <input type="number" class="form-control recepcion-input bg-light border-start-0 ps-0" id="recepcionStockSumar" value="0" step="1">
+                                        <button class="btn bg-white border text-secondary px-3" type="button" onclick="document.getElementById('recepcionStockSumar').stepDown(); document.getElementById('recepcionStockSumar').dispatchEvent(new Event('input'))" title="Restar 1"><i class="fas fa-minus fa-lg"></i></button>
+                                        <input type="number" class="form-control recepcion-input bg-white text-dark fw-bold border-start-0 border-end-0 text-center px-0 no-spinners" id="recepcionStockSumar" value="0" step="1">
+                                        <button class="btn bg-white border text-primary px-3" type="button" onclick="document.getElementById('recepcionStockSumar').stepUp(); document.getElementById('recepcionStockSumar').dispatchEvent(new Event('input'))" title="Sumar 1"><i class="fas fa-plus fa-lg"></i></button>
                                     </div>
                                 </div>
                                 <div class="col-6">
                                     <label class="form-label text-muted small fw-bold mb-1">Stock Final (Calculado)</label>
                                     <div class="input-group">
-                                        <span class="input-group-text bg-white border-end-0 text-dark"><i class="fas fa-boxes"></i></span>
-                                        <input type="number" class="form-control recepcion-input fw-bold bg-white border-start-0 ps-0 text-dark" id="recepcionStockCalculado" readonly disabled>
+                                        <span class="input-group-text bg-light border-end-0 text-muted"><i class="fas fa-boxes"></i></span>
+                                        <input type="number" class="form-control recepcion-input fw-bold bg-light border-start-0 ps-0 text-secondary" id="recepcionStockCalculado" readonly disabled>
                                     </div>
                                 </div>
                             </div>
@@ -101,7 +102,7 @@
 
                         <div class="d-flex gap-2">
                             <button class="btn btn-success flex-grow-1 fw-bold fs-5 rounded-pill py-2 shadow-sm" id="btnRecepcionGuardar">ACTUALIZAR <small>(Enter)</small></button>
-                            <button class="btn btn-warning rounded-pill px-4 shadow-sm text-dark" id="btnRecepcionAvanzado" title="Edición Avanzada (Abre el Modal Completo)"><i class="fas fa-cog"></i></button>
+                            <button class="btn btn-warning rounded-pill px-4 shadow-sm text-dark fw-bold" id="btnRecepcionAvanzado" title="Abre la ventana de edición completa del producto"><i class="fas fa-edit me-2"></i>Edición Completa</button>
                             <button class="btn btn-light rounded-pill px-3 text-secondary border" id="btnRecepcionCancelar" title="Cancelar / Limpiar"><i class="fas fa-times"></i></button>
                         </div>
                     </div>
