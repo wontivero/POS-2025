@@ -1159,7 +1159,7 @@ export async function facturarEnArca(venta) {
 
     const url = `${arcaConfig.baseUrl}/invoices/authorize?cuit=${arcaConfig.cuit}&prod=${arcaConfig.isProd}`;
     const payload = {
-        // PtoVta: 2,
+        PtoVta: arcaConfig.ptoVta || 6,
         Concepto: 1,
         ImpTotal: parseFloat(venta.total.toFixed(2)),
         ImpNeto: parseFloat(venta.total.toFixed(2)),
@@ -1242,7 +1242,8 @@ export async function anularFacturaEnArca(cbteNro) {
     
     // Quitamos la barra final de la URL si existe y agregamos el parámetro &prod=
     const baseUrl = arcaConfig.baseUrl.replace(/\/+$/, '');
-    const url = `${baseUrl}/invoices/cancel?cuit=${cleanCuitEmisor}&prod=${arcaConfig.isProd}&pto_vta=2&cbte_tipo=11&cbte_nro=${cbteNro}`;
+    const ptoVta = arcaConfig.ptoVta || 6;
+    const url = `${baseUrl}/invoices/cancel?cuit=${cleanCuitEmisor}&prod=${arcaConfig.isProd}&pto_vta=${ptoVta}&cbte_tipo=11&cbte_nro=${cbteNro}`;
 
     try {
         const response = await fetch(url, {

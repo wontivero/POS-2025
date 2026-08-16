@@ -18,7 +18,7 @@ let saveCompanyButton;
 let autoPrintTicketCheck, savePrintingButton;
 let loyaltyPercentageInput, loyaltyPrintCheck, loyaltyExpirationCheck, loyaltyExpirationDaysInput, btnSaveLoyalty;
 let arcaAutoContado, arcaAutoTransferencia, arcaAutoDebito, arcaAutoCredito, btnSaveArca; // <-- NUEVO ARCA
-let arcaBaseUrl, arcaCuit, arcaApiKey, arcaIsProd; // <-- NUEVO ARCA CREDENCIALES
+let arcaBaseUrl, arcaCuit, arcaPtoVta, arcaApiKey, arcaIsProd; // <-- NUEVO ARCA CREDENCIALES
 let webCategoriaNombreInput, webCategoriaPadreSelect, btnAddWebCategoria, btnCancelEditCategoria, webCategoriasTableBody; // <-- NUEVO CATEGORÍAS WEB
 let editingCategoriaId = null;
 let editingCategoriaOldRuta = null;
@@ -72,6 +72,7 @@ async function loadConfiguration() {
                 // Cargar credenciales
                 if (arcaBaseUrl) arcaBaseUrl.value = configData.arca?.baseUrl || 'http://localhost:8000';
                 if (arcaCuit) arcaCuit.value = configData.arca?.cuit || '';
+                if (arcaPtoVta) arcaPtoVta.value = configData.arca?.ptoVta || '6';
                 if (arcaApiKey) arcaApiKey.value = configData.arca?.apiKey || '';
                 if (arcaIsProd) arcaIsProd.checked = configData.arca?.isProd || false;
 
@@ -174,6 +175,7 @@ async function saveArcaConfig() {
             arca: {
                 baseUrl: arcaBaseUrl.value.trim(),
                 cuit: arcaCuit.value.trim(),
+                ptoVta: parseInt(arcaPtoVta.value) || 6,
                 apiKey: arcaApiKey.value.trim(),
                 isProd: arcaIsProd.checked,
                 autoFacturar: {
@@ -617,6 +619,7 @@ export async function init() {
     
     arcaBaseUrl = document.getElementById('config-arca-baseurl');
     arcaCuit = document.getElementById('config-arca-cuit');
+    arcaPtoVta = document.getElementById('config-arca-ptovta');
     arcaApiKey = document.getElementById('config-arca-apikey');
     arcaIsProd = document.getElementById('config-arca-isprod');
 
