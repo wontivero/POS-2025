@@ -1424,3 +1424,13 @@ export function showProgressModal(title) {
         hide: () => progressModal.hide()
     };
 }
+
+/**
+ * Formatea un número como moneda (ej: $1.250,50).
+ * @param {number|string} amount - El monto a formatear.
+ * @returns {string} - El monto formateado con signo pesos.
+ */
+export function formatMoney(amount) {
+    const num = Number(amount) || 0;
+    return `$ ${num.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}

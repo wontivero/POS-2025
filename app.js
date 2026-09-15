@@ -9,7 +9,8 @@ import {
     initColoresListener, 
     initRubrosListener,
     initConfigListener,
-    initClientesListener // <-- IMPORTAMOS EL OYENTE DE CLIENTES
+    initClientesListener,
+    getProductos
 } from './secciones/dataManager.js';
 import { sessionManager, setActiveUserProfile } from './userSession.js';
 import { showAlertModal, showConfirmationModal, showToast } from './utils.js';
@@ -329,7 +330,20 @@ async function initializeApp() {
     });
 
     initPedidosWebGlobalListener();
+    initComprasGlobalListener();
     loadSection(currentSection);
+}
+
+function initComprasGlobalListener() {
+    document.addEventListener('productos-updated', () => {
+        const productos = getProductos();
+        const faltantes = productos.filter(p => (Number(p.stock) || 0) <= (Number(p.stockMinimo) || 5));
+        const badge = document.getElementById('badge-compras-alert');
+        if (badge) {
+            badge.textContent = faltantes.length;
+            badge.style.display = faltantes.length > 0 ? 'inline-block' : 'none';
+        }
+    });
 }
 
 function initPedidosWebGlobalListener() {
