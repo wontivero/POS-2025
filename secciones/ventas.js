@@ -1,6 +1,6 @@
 // secciones/ventas.js
 import { haySesionActiva, getSesionActivaId, verificarEstadoCaja } from './caja.js';
-import { getFirestore, collection, onSnapshot, query, orderBy, runTransaction, doc, updateDoc, serverTimestamp, getDoc, increment } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
+import { getFirestore, collection, onSnapshot, query, orderBy, runTransaction, doc, updateDoc, serverTimestamp, getDoc, increment, addDoc, Timestamp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
 import { getCollection, saveDocument, formatCurrency, getTodayDate, updateDocument, deleteDocument, getFormattedDateTime, generatePDF, printThermalTicket, showAlertModal, showConfirmationModal, facturarEnArca, marcarVentaFacturada, showToast } from '../utils.js';
 import { getProductos, getAppConfig, getClientes } from './dataManager.js'; // <-- Importamos getClientes
 import { getActiveUserProfile } from '../userSession.js';
@@ -15,11 +15,13 @@ let ticket = [];
 let totalVentaBase = 0;
 let productoSearch, searchResults, ticketItems, totalVentaSpan, btnFinalizarVenta, camposPago, btnsPagoRapido;
 let btnCrearProductoVentas, productoModalEl, productoModal;
-let txtContado, txtCredito, txtRecargoCredito;
-let montoContadoRapidoSpan, montoTransferenciaRapidoSpan, montoDebitoRapidoSpan, montoCreditoRapidoSpan;
+let txtContado, txtCredito, txtRecargoCredito, txtCuentaCorriente;
+let montoContadoRapidoSpan, montoTransferenciaRapidoSpan, montoDebitoRapidoSpan, montoCreditoRapidoSpan, montoCuentaCorrienteRapidoSpan;
+let btnPagoRapidoCuentaCorriente;
 
 // Elementos del cliente
 let clienteSearch, clientesList, btnAgregarCliente, btnEditarCliente;
+let clienteSearchResults, selectedClienteCard, selectedClienteAvatar, selectedClienteNombre, selectedClienteDetalle, selectedClienteSaldoBadge, btnCobrarDeudaVentas, btnQuitarCliente, btnEditarClienteCard;
 let clienteModal, clienteModalLabel, clienteId, clienteNombre, clienteCuit, clienteDomicilio, clienteEmail, clienteTelefono, btnGuardarCliente;
 let clienteSeleccionado = null;
 let selectedIndex = -1;
@@ -157,16 +159,60 @@ function setDefaultCliente() {
     const defaultClient = clientes.find(c => c.nombre === 'Consumidor Final');
     if (defaultClient) {
         clienteSeleccionado = defaultClient;
-        clienteSearch.value = defaultClient.nombre;
-        btnAgregarCliente.style.display = 'none';
-        btnEditarCliente.style.display = 'block';
+        if (clienteSearch) clienteSearch.value = defaultClient.nombre;
+        if (btnAgregarCliente) btnAgregarCliente.style.display = 'none';
+        if (btnEditarCliente) btnEditarCliente.style.display = 'block';
     } else {
         // Si no existe (caso improbable ahora), dejamos los campos listos para un cliente nuevo
-        clienteSearch.value = '';
+        if (clienteSearch) clienteSearch.value = '';
         clienteSeleccionado = null;
-        btnAgregarCliente.style.display = 'block';
-        btnEditarCliente.style.display = 'none';
+        if (btnAgregarCliente) btnAgregarCliente.style.display = 'block';
+        if (btnEditarCliente) btnEditarCliente.style.display = 'none';
     }
+    actualizarVistaClienteSeleccionado();
+}
+
+function actualizarVistaClienteSeleccionado() {
+    if (!selectedClienteCard) return;
+    const esConsumidorFinal = !clienteSeleccionado || !clienteSeleccionado.id || (clienteSeleccionado.nombre || '').toLowerCase() === 'consumidor final';
+
+    if (esConsumidorFinal) {
+        selectedClienteCard.style.display = 'none';
+        if (btnAgregarCliente) btnAgregarCliente.style.display = 'block';
+        if (btnEditarCliente) btnEditarCliente.style.display = 'none';
+    } else {
+        selectedClienteCard.style.display = 'block';
+        if (selectedClienteAvatar) {
+            selectedClienteAvatar.textContent = (clienteSeleccionado.nombre || 'C').charAt(0).toUpperCase();
+        }
+        if (selectedClienteNombre) {
+            selectedClienteNombre.textContent = clienteSeleccionado.nombre;
+        }
+        if (selectedClienteDetalle) {
+            const docInfo = clienteSeleccionado.cuit ? `DNI/CUIT: ${clienteSeleccionado.cuit}` : '';
+            const telInfo = clienteSeleccionado.telefono ? `Tel: ${clienteSeleccionado.telefono}` : '';
+            selectedClienteDetalle.textContent = [docInfo, telInfo].filter(Boolean).join(' | ') || 'Sin datos adicionales';
+        }
+        const saldo = parseFloat(clienteSeleccionado.saldo) || 0;
+        if (selectedClienteSaldoBadge) {
+            if (saldo > 0) {
+                selectedClienteSaldoBadge.className = 'badge bg-danger text-white px-2 py-1 fw-bold';
+                selectedClienteSaldoBadge.innerHTML = `<i class="fas fa-exclamation-circle me-1"></i>Debe ${formatCurrency(saldo)}`;
+            } else if (saldo < 0) {
+                selectedClienteSaldoBadge.className = 'badge bg-success-subtle text-success border border-success-subtle px-2 py-1 fw-bold';
+                selectedClienteSaldoBadge.innerHTML = `<i class="fas fa-check-circle me-1"></i>A favor ${formatCurrency(Math.abs(saldo))}`;
+            } else {
+                selectedClienteSaldoBadge.className = 'badge bg-success-subtle text-success border border-success-subtle px-2 py-1';
+                selectedClienteSaldoBadge.innerHTML = `<i class="fas fa-check-circle me-1"></i>Al día ($0)`;
+            }
+        }
+        if (btnCobrarDeudaVentas) {
+            btnCobrarDeudaVentas.style.display = saldo > 0 ? 'inline-block' : 'none';
+        }
+        if (btnAgregarCliente) btnAgregarCliente.style.display = 'none';
+        if (btnEditarCliente) btnEditarCliente.style.display = 'block';
+    }
+    checkFinalizarVenta();
 }
 
 function checkStockIssuesGlobally() {
@@ -463,20 +509,23 @@ function updateQuickPayButtons() {
     const recargo = (parseFloat(txtRecargoCredito.value) || 0) / 100;
     const montoConRecargo = Math.round(totalVentaBase * (1 + recargo));
 
-    montoContadoRapidoSpan.textContent = formatCurrency(totalVentaBase);
-    montoTransferenciaRapidoSpan.textContent = formatCurrency(totalVentaBase);
-    montoDebitoRapidoSpan.textContent = formatCurrency(totalVentaBase);
-    montoCreditoRapidoSpan.textContent = formatCurrency(montoConRecargo);
+    if (montoContadoRapidoSpan) montoContadoRapidoSpan.textContent = formatCurrency(totalVentaBase);
+    if (montoTransferenciaRapidoSpan) montoTransferenciaRapidoSpan.textContent = formatCurrency(totalVentaBase);
+    if (montoDebitoRapidoSpan) montoDebitoRapidoSpan.textContent = formatCurrency(totalVentaBase);
+    if (montoCreditoRapidoSpan) montoCreditoRapidoSpan.textContent = formatCurrency(montoConRecargo);
+    if (montoCuentaCorrienteRapidoSpan) montoCuentaCorrienteRapidoSpan.textContent = formatCurrency(totalVentaBase);
 }
 
 function updateContadoValue() {
     const montoCredito = parseFloat(txtCredito.value) || 0;
-    const otrosPagos = (parseFloat(document.getElementById('txtTransferencia').value) || 0) +
-        (parseFloat(document.getElementById('txtDebito').value) || 0) +
-        montoCredito;
+    const montoCuentaCorriente = parseFloat(document.getElementById('txtCuentaCorriente')?.value) || 0;
+    const otrosPagos = (parseFloat(document.getElementById('txtTransferencia')?.value) || 0) +
+        (parseFloat(document.getElementById('txtDebito')?.value) || 0) +
+        montoCredito +
+        montoCuentaCorriente;
 
     const restante = totalVentaBase - otrosPagos;
-    txtContado.value = Math.max(0, restante);
+    if (txtContado) txtContado.value = Math.max(0, restante);
 }
 
 function checkFinalizarVenta() {
@@ -485,21 +534,26 @@ function checkFinalizarVenta() {
         return p && p.publicarEnWeb && item.cantidad > p.stock;
     });
 
-    const montoContado = parseFloat(txtContado.value) || 0;
-    const montoTransferencia = parseFloat(document.getElementById('txtTransferencia').value) || 0;
-    const montoDebito = parseFloat(document.getElementById('txtDebito').value) || 0;
-    const montoCredito = parseFloat(txtCredito.value) || 0;
+    const montoContado = parseFloat(txtContado?.value) || 0;
+    const montoTransferencia = parseFloat(document.getElementById('txtTransferencia')?.value) || 0;
+    const montoDebito = parseFloat(document.getElementById('txtDebito')?.value) || 0;
+    const montoCredito = parseFloat(txtCredito?.value) || 0;
+    const montoCuentaCorriente = parseFloat(document.getElementById('txtCuentaCorriente')?.value) || 0;
 
-    const recargo = (parseFloat(txtRecargoCredito.value) || 0) / 100;
+    const recargo = (parseFloat(txtRecargoCredito?.value) || 0) / 100;
     const montoCreditoConRecargo = Math.round(montoCredito * (1 + recargo));
 
-    const totalPagado = montoContado + montoTransferencia + montoDebito + montoCreditoConRecargo;
+    const totalPagado = montoContado + montoTransferencia + montoDebito + montoCreditoConRecargo + montoCuentaCorriente;
     const totalConRecargo = totalVentaBase + Math.round(montoCredito * recargo);
 
-    if (totalPagado >= totalConRecargo && totalConRecargo > 0 && !hasStockIssues) {
-        btnFinalizarVenta.disabled = false;
+    // Validación para A Cuenta (Fiado): Debe haber un cliente real seleccionado (no Consumidor Final)
+    const esConsumidorFinal = !clienteSeleccionado || !clienteSeleccionado.id || (clienteSeleccionado.nombre || '').toLowerCase() === 'consumidor final';
+    const cuentaCorrienteInvalida = montoCuentaCorriente > 0 && esConsumidorFinal;
+
+    if (totalPagado >= totalConRecargo && totalConRecargo > 0 && !hasStockIssues && !cuentaCorrienteInvalida) {
+        if (btnFinalizarVenta) btnFinalizarVenta.disabled = false;
     } else {
-        btnFinalizarVenta.disabled = true;
+        if (btnFinalizarVenta) btnFinalizarVenta.disabled = true;
     }
 }
 
@@ -763,13 +817,29 @@ async function handleQuickPayment(e) {
 
     const metodo = e.target.closest('.btn-pago-rapido').dataset.metodo;
 
+    if (metodo === 'cuentaCorriente') {
+        const esConsumidorFinal = !clienteSeleccionado || !clienteSeleccionado.id || (clienteSeleccionado.nombre || '').toLowerCase() === 'consumidor final';
+        if (esConsumidorFinal) {
+            await showAlertModal("Para dejar la venta en cuenta (A Cuenta / Fiado), debe seleccionar o registrar un cliente específico. No está permitido con Consumidor Final.");
+            if (clienteSearch) clienteSearch.focus();
+            return;
+        }
+    }
+
     camposPago.forEach(input => input.value = '0');
+    const txtCC = document.getElementById('txtCuentaCorriente');
+    if (txtCC) txtCC.value = '0';
 
     if (metodo === 'credito') {
         txtCredito.value = totalVentaBase;
         handlePaymentChange();
+    } else if (metodo === 'cuentaCorriente') {
+        if (txtCC) txtCC.value = totalVentaBase;
+        handlePaymentChange();
     } else {
-        document.getElementById(`txt${metodo.charAt(0).toUpperCase() + metodo.slice(1)}`).value = totalVentaBase;
+        const inputMetodo = document.getElementById(`txt${metodo.charAt(0).toUpperCase() + metodo.slice(1)}`);
+        if (inputMetodo) inputMetodo.value = totalVentaBase;
+        handlePaymentChange();
     }
 
     await finalizarVenta();
@@ -994,6 +1064,13 @@ async function finalizarVenta() {
     const montoCreditoConRecargo = Math.round(montoCredito * (1 + recargo));
     const totalConRecargo = totalVentaBase + Math.round(montoCredito * recargo);
 
+    const montoCuentaCorriente = parseFloat(document.getElementById('txtCuentaCorriente')?.value) || 0;
+    const esConsumidorFinal = !clienteSeleccionado || !clienteSeleccionado.id || (clienteSeleccionado.nombre || '').toLowerCase() === 'consumidor final';
+    if (montoCuentaCorriente > 0 && esConsumidorFinal) {
+        showToast('Debe seleccionar un cliente registrado para dejar la venta a cuenta.', 'fa-exclamation-triangle', '#dc3545');
+        return;
+    }
+
     const autoFacturar = (
         (montoContado > 0 && arcaConfig.contado) ||
         (montoTransferencia > 0 && arcaConfig.transferencia) ||
@@ -1133,12 +1210,13 @@ async function finalizarVenta() {
                     debito: parseFloat(document.getElementById('txtDebito').value) || 0,
                     credito: montoCreditoConRecargo,
                     recargoCredito: parseFloat(txtRecargoCredito.value) || 0,
+                    cuentaCorriente: montoCuentaCorriente
                 },
                 total: totalConRecargo,
                 ganancia: gananciaTotal
             };
             
-            // Lógica de Loyalty: Sumar puntos al cliente
+            // Lógica de Loyalty y Cuenta Corriente
             if (clienteRef && clienteDoc && clienteDoc.exists()) {
                 puntosGanados = Math.floor(totalConRecargo * (loyaltyPercentage / 100));
                 
@@ -1159,10 +1237,18 @@ async function finalizarVenta() {
 
                 puntosTotalSnapshot = currentPuntos + puntosGanados;
 
-                transaction.update(clienteRef, { 
+                const clientUpdates = { 
                     puntos: puntosTotalSnapshot,
                     lastLoyaltyActivity: serverTimestamp()
-                });
+                };
+
+                // Si se dejó saldo a cuenta corriente, aumentamos la deuda
+                if (montoCuentaCorriente > 0) {
+                    clientUpdates.saldo = increment(montoCuentaCorriente);
+                    clienteSeleccionado.saldo = (parseFloat(clienteSeleccionado.saldo) || 0) + montoCuentaCorriente;
+                }
+
+                transaction.update(clienteRef, clientUpdates);
                 
                 // Guardamos info de loyalty en la venta para el ticket
                 nuevaVenta.loyalty = {
@@ -1244,46 +1330,243 @@ function resetVentas() {
 
 // --- Lógica para el manejo de clientes ---
 
-function handleClienteSearchInput(e) {
-    const value = e.target.value.trim();
-    clienteSeleccionado = clientes.find(c => 
-        c.nombre.toLowerCase() === value.toLowerCase() || 
-        (c.cuit && c.cuit === value)
-    );
-    if (clienteSeleccionado) {
-        btnAgregarCliente.style.display = 'none';
-        btnEditarCliente.style.display = 'block';
-    } else {
-        btnAgregarCliente.style.display = 'block';
-        btnEditarCliente.style.display = 'none';
+function seleccionarCliente(cliente) {
+    clienteSeleccionado = cliente;
+    if (clienteSearch) clienteSearch.value = cliente.nombre;
+    if (clienteSearchResults) {
+        clienteSearchResults.innerHTML = '';
+        clienteSearchResults.style.display = 'none';
+    }
+    actualizarVistaClienteSeleccionado();
+}
+
+function deseleccionarCliente() {
+    setDefaultCliente();
+    if (clienteSearch) {
+        clienteSearch.value = '';
+        clienteSearch.focus();
+    }
+    if (clienteSearchResults) {
+        clienteSearchResults.innerHTML = '';
+        clienteSearchResults.style.display = 'none';
     }
 }
 
+function renderClienteSearchResults(queryText) {
+    if (!clienteSearchResults) return;
+    const term = queryText.trim().toLowerCase();
+    if (!term) {
+        clienteSearchResults.innerHTML = '';
+        clienteSearchResults.style.display = 'none';
+        return;
+    }
+
+    const matches = clientes.filter(c => 
+        (c.nombre || '').toLowerCase().includes(term) ||
+        (c.cuit || '').toLowerCase().includes(term) ||
+        (c.telefono || '').toLowerCase().includes(term)
+    ).slice(0, 8); // Máximo 8 sugerencias rápidas
+
+    if (matches.length === 0) {
+        clienteSearchResults.innerHTML = `
+            <div class="list-group-item text-muted small p-3 text-center">
+                <i class="fas fa-user-slash me-1"></i> No se encontraron clientes. 
+                <button type="button" class="btn btn-sm btn-link text-primary p-0 ms-1 fw-bold" id="btnSugerirCrearCliente">Crear "${queryText}"</button>
+            </div>
+        `;
+        clienteSearchResults.style.display = 'block';
+        const btnCrear = document.getElementById('btnSugerirCrearCliente');
+        if (btnCrear) {
+            btnCrear.onclick = () => {
+                clienteSearchResults.style.display = 'none';
+                handleAgregarCliente();
+            };
+        }
+        return;
+    }
+
+    clienteSearchResults.innerHTML = '';
+    matches.forEach(c => {
+        const item = document.createElement('a');
+        item.href = '#';
+        item.className = 'list-group-item list-group-item-action d-flex justify-content-between align-items-center py-2 px-3 cliente-search-item';
+        
+        const saldo = parseFloat(c.saldo) || 0;
+        let saldoBadge = '';
+        if (saldo > 0) {
+            saldoBadge = `<span class="badge bg-danger text-white rounded-pill ms-2">Debe ${formatCurrency(saldo)}</span>`;
+        } else {
+            saldoBadge = `<span class="badge bg-success-subtle text-success rounded-pill ms-2">Al día</span>`;
+        }
+
+        item.innerHTML = `
+            <div class="d-flex align-items-center">
+                <div class="rounded-circle bg-light d-flex align-items-center justify-content-center me-2 fw-bold text-primary" style="width: 32px; height: 32px; font-size: 0.85rem;">
+                    ${(c.nombre || 'C').charAt(0).toUpperCase()}
+                </div>
+                <div>
+                    <div class="fw-bold text-dark small">${c.nombre}</div>
+                    <div class="text-muted" style="font-size: 0.75rem;">${c.cuit ? 'Doc: ' + c.cuit : (c.telefono ? 'Tel: ' + c.telefono : 'Sin doc')}</div>
+                </div>
+            </div>
+            ${saldoBadge}
+        `;
+
+        item.onclick = (e) => {
+            e.preventDefault();
+            seleccionarCliente(c);
+        };
+
+        clienteSearchResults.appendChild(item);
+    });
+
+    clienteSearchResults.style.display = 'block';
+}
+
+function handleClienteSearchInput(e) {
+    const value = e.target.value.trim();
+    if (!value) {
+        if (clienteSearchResults) clienteSearchResults.style.display = 'none';
+        return;
+    }
+    renderClienteSearchResults(value);
+}
+
 function handleClienteSearchKeydown(e) {
+    if (e.key === 'Escape') {
+        if (clienteSearchResults) clienteSearchResults.style.display = 'none';
+        return;
+    }
     if (e.key === 'Enter') {
+        e.preventDefault();
         const value = e.target.value.trim().toLowerCase();
         if (!value) return;
 
-        // Filtramos buscando coincidencias parciales (nombre o CUIT)
         const matches = clientes.filter(c => 
-            c.nombre.toLowerCase().includes(value) || 
-            (c.cuit && c.cuit.includes(value))
+            (c.nombre || '').toLowerCase().includes(value) || 
+            (c.cuit && c.cuit.includes(value)) ||
+            (c.telefono && c.telefono.includes(value))
         );
 
-        // Si queda un solo resultado, lo seleccionamos automáticamente
         if (matches.length === 1) {
-            e.preventDefault();
-            const cliente = matches[0];
-            
-            clienteSeleccionado = cliente;
-            e.target.value = cliente.nombre; // Autocompletar visualmente
-            
-            btnAgregarCliente.style.display = 'none';
-            btnEditarCliente.style.display = 'block';
-            
-            e.target.blur(); // Cerrar el datalist/quitar foco
+            seleccionarCliente(matches[0]);
+        } else if (matches.length > 1) {
+            renderClienteSearchResults(value);
+        } else {
+            handleAgregarCliente();
         }
     }
+}
+
+function abrirModalCobroDeudaVentas() {
+    if (!clienteSeleccionado || !clienteSeleccionado.id) return;
+    const cliente = clienteSeleccionado;
+    const modalEl = document.getElementById('modalCobroDeuda');
+    if (!modalEl) return;
+    const modalCobro = bootstrap.Modal.getOrCreateInstance(modalEl);
+
+    const txtNombre = document.getElementById('cobroDeudaClienteNombre');
+    const txtDoc = document.getElementById('cobroDeudaClienteDoc');
+    const txtMontoActual = document.getElementById('cobroDeudaMontoActual');
+    const inpMontoAbonar = document.getElementById('cobroDeudaMontoAbonar');
+    const btnAbonarTotal = document.getElementById('btnCobroDeudaTotal');
+    const lblSaldoRestante = document.getElementById('cobroDeudaSaldoRestante');
+    const selectMetodo = document.getElementById('cobroDeudaMetodoPago');
+    const txtNota = document.getElementById('cobroDeudaNota');
+    const btnConfirmar = document.getElementById('btnConfirmarCobroDeuda');
+
+    const saldo = parseFloat(cliente.saldo) || 0;
+    if (txtNombre) txtNombre.textContent = cliente.nombre || 'Cliente';
+    if (txtDoc) txtDoc.textContent = `DNI/CUIT: ${cliente.cuit || 'Sin documento'}`;
+    if (txtMontoActual) txtMontoActual.textContent = formatCurrency(saldo);
+    if (inpMontoAbonar) {
+        inpMontoAbonar.value = saldo > 0 ? saldo : '';
+        inpMontoAbonar.max = saldo;
+    }
+    if (lblSaldoRestante) lblSaldoRestante.textContent = 'Saldo restante: $0,00';
+    if (selectMetodo) selectMetodo.value = 'Efectivo';
+    if (txtNota) txtNota.value = '';
+
+    const actualizarRestante = () => {
+        const monto = parseFloat(inpMontoAbonar?.value) || 0;
+        const restante = Math.max(0, saldo - monto);
+        if (lblSaldoRestante) lblSaldoRestante.textContent = `Saldo restante: ${formatCurrency(restante)}`;
+    };
+
+    if (inpMontoAbonar) {
+        inpMontoAbonar.oninput = actualizarRestante;
+    }
+    if (btnAbonarTotal) {
+        btnAbonarTotal.onclick = () => {
+            if (inpMontoAbonar) inpMontoAbonar.value = saldo;
+            actualizarRestante();
+        };
+    }
+
+    if (btnConfirmar) {
+        btnConfirmar.onclick = async () => {
+            const montoAbonar = parseFloat(inpMontoAbonar?.value) || 0;
+            if (montoAbonar <= 0) {
+                await showAlertModal("Por favor ingrese un monto válido a abonar.");
+                return;
+            }
+            if (montoAbonar > saldo) {
+                await showAlertModal("El monto a abonar no puede ser mayor que la deuda total actual.");
+                return;
+            }
+
+            btnConfirmar.disabled = true;
+            btnConfirmar.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Registrando...';
+
+            try {
+                // 1. Descontar saldo del cliente en Firestore
+                const clienteRef = doc(db, 'clientes', cliente.id);
+                await updateDoc(clienteRef, {
+                    saldo: increment(-montoAbonar)
+                });
+
+                const sesionId = getSesionActivaId();
+                const metodo = selectMetodo ? selectMetodo.value : 'Efectivo';
+                const nota = txtNota ? txtNota.value.trim() : '';
+                const ahora = new Date();
+                const year = ahora.getFullYear();
+                const month = String(ahora.getMonth() + 1).padStart(2, '0');
+                const day = String(ahora.getDate()).padStart(2, '0');
+                const fechaCorta = `${year}-${month}-${day}`;
+
+                await addDoc(collection(db, 'caja_movimientos'), {
+                    tipo: 'ingreso',
+                    subtipo: 'cobro_deuda',
+                    monto: montoAbonar,
+                    metodo: metodo,
+                    metodoNormalizado: metodo.toLowerCase(),
+                    motivo: `Cobro deuda cliente: ${cliente.nombre}${nota ? ' - ' + nota : ''}`,
+                    clienteId: cliente.id,
+                    clienteNombre: cliente.nombre,
+                    fecha: fechaCorta,
+                    fechaHora: ahora.toISOString(),
+                    timestamp: Timestamp.now(),
+                    sesionCajaId: sesionId
+                });
+
+                // 3. Actualizar estado local
+                cliente.saldo = saldo - montoAbonar;
+                showToast(`Cobro de ${formatCurrency(montoAbonar)} registrado con éxito.`);
+                modalCobro.hide();
+
+                // 4. Actualizar vista de cliente seleccionado
+                actualizarVistaClienteSeleccionado();
+            } catch (err) {
+                console.error("Error registrando cobro de deuda:", err);
+                await showAlertModal("Error al registrar el cobro: " + err.message);
+            } finally {
+                btnConfirmar.disabled = false;
+                btnConfirmar.innerHTML = '<i class="fas fa-check me-2"></i>Confirmar Cobro';
+            }
+        };
+    }
+
+    modalCobro.show();
 }
 
 function handleAgregarCliente() {
@@ -1323,11 +1606,13 @@ async function handleGuardarCliente() {
 
     showLoading();
 
+    let savedId = id;
     try {
         if (id) {
             await updateDocument('clientes', id, clienteData);
         } else {
-            await saveDocument('clientes', clienteData);
+            const docRef = await saveDocument('clientes', clienteData);
+            if (docRef && docRef.id) savedId = docRef.id;
         }
     } catch (e) {
         console.error('Error al guardar el cliente:', e);
@@ -1340,8 +1625,13 @@ async function handleGuardarCliente() {
     modal.hide();
 
     await loadClientes();
-    clienteSearch.value = clienteData.nombre;
-    handleClienteSearchInput({ target: { value: clienteData.nombre } });
+    const clienteRecienGuardado = clientes.find(c => c.id === savedId || c.nombre === clienteData.nombre);
+    if (clienteRecienGuardado) {
+        seleccionarCliente(clienteRecienGuardado);
+    } else {
+        clienteSearch.value = clienteData.nombre;
+        handleClienteSearchInput({ target: { value: clienteData.nombre } });
+    }
 }
 
 
@@ -1440,11 +1730,14 @@ async function init() {
     txtContado = document.getElementById('txtContado');
     txtCredito = document.getElementById('txtCredito');
     txtRecargoCredito = document.getElementById('txtRecargoCredito');
+    txtCuentaCorriente = document.getElementById('txtCuentaCorriente');
     btnsPagoRapido = document.querySelectorAll('.btn-pago-rapido');
     montoContadoRapidoSpan = document.getElementById('montoContadoRapido');
     montoTransferenciaRapidoSpan = document.getElementById('montoTransferenciaRapido');
     montoDebitoRapidoSpan = document.getElementById('montoDebitoRapido');
     montoCreditoRapidoSpan = document.getElementById('montoCreditoRapido');
+    montoCuentaCorrienteRapidoSpan = document.getElementById('montoCuentaCorrienteRapido');
+    btnPagoRapidoCuentaCorriente = document.getElementById('btnPagoRapidoCuentaCorriente');
     confirmacionVentaModal = document.getElementById('confirmacionVentaModal');
     btnImprimirTicketModal = document.getElementById('btnImprimirTicketModal');
     btnGenerarTicketModal = document.getElementById('btnGenerarTicketModal');
@@ -1453,6 +1746,15 @@ async function init() {
     clientesList = document.getElementById('clientesList');
     btnAgregarCliente = document.getElementById('btnAgregarCliente');
     btnEditarCliente = document.getElementById('btnEditarCliente');
+    clienteSearchResults = document.getElementById('clienteSearchResults');
+    selectedClienteCard = document.getElementById('selectedClienteCard');
+    selectedClienteAvatar = document.getElementById('selectedClienteAvatar');
+    selectedClienteNombre = document.getElementById('selectedClienteNombre');
+    selectedClienteDetalle = document.getElementById('selectedClienteDetalle');
+    selectedClienteSaldoBadge = document.getElementById('selectedClienteSaldoBadge');
+    btnCobrarDeudaVentas = document.getElementById('btnCobrarDeudaVentas');
+    btnQuitarCliente = document.getElementById('btnQuitarCliente');
+    btnEditarClienteCard = document.getElementById('btnEditarClienteCard');
     clienteModal = document.getElementById('clienteModal');
     clienteModalLabel = document.getElementById('clienteModalLabel');
     clienteId = document.getElementById('clienteId');
@@ -1552,6 +1854,21 @@ async function init() {
     btnGuardarCliente.removeEventListener('click', handleGuardarCliente);
     btnGuardarCliente.addEventListener('click', handleGuardarCliente);
 
+    if (txtCuentaCorriente) {
+        txtCuentaCorriente.removeEventListener('input', handlePaymentChange);
+        txtCuentaCorriente.addEventListener('input', handlePaymentChange);
+        txtCuentaCorriente.onfocus = (e) => e.target.select();
+    }
+    if (btnQuitarCliente) {
+        btnQuitarCliente.onclick = deseleccionarCliente;
+    }
+    if (btnEditarClienteCard) {
+        btnEditarClienteCard.onclick = handleEditarCliente;
+    }
+    if (btnCobrarDeudaVentas) {
+        btnCobrarDeudaVentas.onclick = abrirModalCobroDeudaVentas;
+    }
+
     if (btnConfirmGenericPrice) {
         btnConfirmGenericPrice.removeEventListener('click', handleConfirmGenericPrice);
         btnConfirmGenericPrice.addEventListener('click', handleConfirmGenericPrice);
@@ -1601,6 +1918,11 @@ async function init() {
         document.addEventListener('click', (e) => {
             const seccionVentas = document.getElementById('seccion-ventas');
             if (!seccionVentas || !seccionVentas.contains(e.target)) return;
+
+            // Cerrar menú flotante de clientes si se hace clic fuera del buscador
+            if (clienteSearchResults && !e.target.closest('#clienteSearchContainer')) {
+                clienteSearchResults.style.display = 'none';
+            }
 
             const quickAccessCard = e.target.closest('.product-card-mini');
             if (quickAccessCard) {
@@ -1675,6 +1997,8 @@ async function init() {
                 case 'F2': e.preventDefault(); { const b = document.getElementById('btnPagoRapidoTransferencia'); if(b && !b.disabled) b.click(); } break;
                 case 'F3': e.preventDefault(); { const b = document.getElementById('btnPagoRapidoDebito'); if(b && !b.disabled) b.click(); } break;
                 case 'F4': e.preventDefault(); { const b = document.getElementById('btnPagoRapidoCredito'); if(b && !b.disabled) b.click(); } break;
+                case 'F6':
+                case 'F7': e.preventDefault(); { const b = document.getElementById('btnPagoRapidoCuentaCorriente'); if(b && !b.disabled) b.click(); } break;
                 case 'Escape':
                     e.preventDefault();
                     if (isSearchInput) {

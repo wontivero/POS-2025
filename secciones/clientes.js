@@ -3,6 +3,7 @@ import { getAuth } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-auth.
 import { showAlertModal, showConfirmationModal, formatCurrency, deleteDocument, showToast } from '../utils.js';
 import { db } from '../firebase.js';
 import { getClientes } from './dataManager.js';
+import { getSesionActivaId } from './caja.js';
 
 let clientes = [];
 let tablaClientesBody, filtroInput, totalClientesCount, totalPuntosCirculantes;
@@ -106,6 +107,14 @@ function renderTabla() {
         if (puntos > 1000) { badgeClass = 'bg-warning text-dark'; nivel = 'Gold'; }
         else if (puntos > 500) { badgeClass = 'bg-info text-white'; nivel = 'Silver'; }
 
+        const saldo = parseFloat(c.saldo) || 0;
+        let saldoBadge = '<span class="badge bg-secondary-subtle text-secondary border">Al día ($0)</span>';
+        if (saldo > 0) {
+            saldoBadge = `<span class="badge bg-danger-subtle text-danger border border-danger-subtle fw-bold">Debe ${formatCurrency(saldo)}</span>`;
+        } else if (saldo < 0) {
+            saldoBadge = `<span class="badge bg-success-subtle text-success border border-success-subtle fw-bold">A favor ${formatCurrency(Math.abs(saldo))}</span>`;
+        }
+
         const row = document.createElement('tr');
         row.innerHTML = `
             <td class="ps-4">
@@ -124,6 +133,9 @@ function renderTabla() {
                 <div class="small"><i class="fas fa-phone me-1 text-muted"></i> ${c.telefono || '-'}</div>
             </td>
             <td>
+                ${saldoBadge}
+            </td>
+            <td>
                 <span class="badge ${badgeClass} rounded-pill">${puntos} pts</span>
                 <div class="small text-muted mt-1">${nivel}</div>
             </td>
@@ -134,13 +146,19 @@ function renderTabla() {
             </td>
         `;
         
-        row.querySelector('.btn-ver-perfil').addEventListener('click', () => abrirPerfil(c));
+        const btnVer = row.querySelector('.btn-ver-perfil');
+        btnVer.addEventListener('click', () => abrirPerfil(c, btnVer));
         row.querySelector('.btn-eliminar-cliente').addEventListener('click', () => handleDeleteCliente(c.id, c.nombre));
         tablaClientesBody.appendChild(row);
     });
 }
 
-async function abrirPerfil(cliente) {
+async function abrirPerfil(cliente, btnTrigger = null) {
+    if (btnTrigger) {
+        btnTrigger.disabled = true;
+        btnTrigger.innerHTML = '<span class="spinner-border spinner-border-sm text-primary"></span>';
+    }
+
     loyaltyId.value = cliente.id;
     loyaltyNombre.textContent = cliente.nombre;
     loyaltyCuit.textContent = cliente.cuit || 'Sin CUIT';
@@ -152,15 +170,154 @@ async function abrirPerfil(cliente) {
     
     loyaltyPuntosDisplay.textContent = (cliente.puntos || 0).toLocaleString();
 
-    await cargarHistorialUnificado(cliente);
+    const saldo = parseFloat(cliente.saldo) || 0;
+    const loyaltySaldoDisplay = document.getElementById('loyalty-saldo-display');
+    const btnCobrarDeudaClientes = document.getElementById('btn-cobrar-deuda-clientes');
+    if (loyaltySaldoDisplay) {
+        if (saldo > 0) {
+            loyaltySaldoDisplay.textContent = formatCurrency(saldo);
+            loyaltySaldoDisplay.className = 'mb-0 fw-bold text-danger';
+        } else if (saldo < 0) {
+            loyaltySaldoDisplay.textContent = `A favor: ${formatCurrency(Math.abs(saldo))}`;
+            loyaltySaldoDisplay.className = 'mb-0 fw-bold text-success';
+        } else {
+            loyaltySaldoDisplay.textContent = '$0,00';
+            loyaltySaldoDisplay.className = 'mb-0 fw-bold text-muted';
+        }
+    }
+    if (btnCobrarDeudaClientes) {
+        btnCobrarDeudaClientes.disabled = (saldo <= 0);
+        btnCobrarDeudaClientes.onclick = () => {
+            abrirModalCobroDeudaCliente(cliente);
+        };
+    }
 
-    // --- INICIO: Listener para el botón de eliminar en el modal ---
+    // Listener para el botón de eliminar en el modal
     const btnEliminarModal = document.querySelector('#clienteLoyaltyModal .btn-eliminar-cliente-modal');
     if (btnEliminarModal) {
         btnEliminarModal.onclick = () => handleDeleteCliente(cliente.id, cliente.nombre, modalLoyalty);
     }
 
+    // Mostramos el modal de INMEDIATO para eliminar la sensación de demora
     modalLoyalty.show();
+
+    if (btnTrigger) {
+        btnTrigger.disabled = false;
+        btnTrigger.innerHTML = '<i class="fas fa-eye"></i>';
+    }
+
+    // Carga de historial en segundo plano (el contenedor ya muestra un spinner interno)
+    await cargarHistorialUnificado(cliente);
+}
+
+function abrirModalCobroDeudaCliente(cliente) {
+    const modalEl = document.getElementById('modalCobroDeuda');
+    if (!modalEl) return;
+    const modalCobro = bootstrap.Modal.getOrCreateInstance(modalEl);
+
+    const txtNombre = document.getElementById('cobroDeudaClienteNombre');
+    const txtDoc = document.getElementById('cobroDeudaClienteDoc');
+    const txtMontoActual = document.getElementById('cobroDeudaMontoActual');
+    const inpMontoAbonar = document.getElementById('cobroDeudaMontoAbonar');
+    const btnAbonarTotal = document.getElementById('btnCobroDeudaTotal');
+    const lblSaldoRestante = document.getElementById('cobroDeudaSaldoRestante');
+    const selectMetodo = document.getElementById('cobroDeudaMetodoPago');
+    const txtNota = document.getElementById('cobroDeudaNota');
+    const btnConfirmar = document.getElementById('btnConfirmarCobroDeuda');
+
+    const saldo = parseFloat(cliente.saldo) || 0;
+    if (txtNombre) txtNombre.textContent = cliente.nombre || 'Cliente';
+    if (txtDoc) txtDoc.textContent = `DNI/CUIT: ${cliente.cuit || 'Sin documento'}`;
+    if (txtMontoActual) txtMontoActual.textContent = formatCurrency(saldo);
+    if (inpMontoAbonar) {
+        inpMontoAbonar.value = saldo > 0 ? saldo : '';
+        inpMontoAbonar.max = saldo;
+    }
+    if (lblSaldoRestante) lblSaldoRestante.textContent = 'Saldo restante: $0,00';
+    if (selectMetodo) selectMetodo.value = 'Efectivo';
+    if (txtNota) txtNota.value = '';
+
+    const actualizarRestante = () => {
+        const monto = parseFloat(inpMontoAbonar?.value) || 0;
+        const restante = Math.max(0, saldo - monto);
+        if (lblSaldoRestante) lblSaldoRestante.textContent = `Saldo restante: ${formatCurrency(restante)}`;
+    };
+
+    if (inpMontoAbonar) {
+        inpMontoAbonar.oninput = actualizarRestante;
+    }
+    if (btnAbonarTotal) {
+        btnAbonarTotal.onclick = () => {
+            if (inpMontoAbonar) inpMontoAbonar.value = saldo;
+            actualizarRestante();
+        };
+    }
+
+    if (btnConfirmar) {
+        btnConfirmar.onclick = async () => {
+            const montoAbonar = parseFloat(inpMontoAbonar?.value) || 0;
+            if (montoAbonar <= 0) {
+                await showAlertModal("Por favor ingrese un monto válido a abonar.");
+                return;
+            }
+            if (montoAbonar > saldo) {
+                await showAlertModal("El monto a abonar no puede ser mayor que la deuda total actual.");
+                return;
+            }
+
+            btnConfirmar.disabled = true;
+            btnConfirmar.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Registrando...';
+
+            try {
+                // 1. Descontar saldo del cliente
+                const clienteRef = doc(db, 'clientes', cliente.id);
+                await updateDoc(clienteRef, {
+                    saldo: increment(-montoAbonar)
+                });
+
+                const sesionId = getSesionActivaId();
+                const metodo = selectMetodo ? selectMetodo.value : 'Efectivo';
+                const nota = txtNota ? txtNota.value.trim() : '';
+                const ahora = new Date();
+                const year = ahora.getFullYear();
+                const month = String(ahora.getMonth() + 1).padStart(2, '0');
+                const day = String(ahora.getDate()).padStart(2, '0');
+                const fechaCorta = `${year}-${month}-${day}`;
+
+                await addDoc(collection(db, 'caja_movimientos'), {
+                    tipo: 'ingreso',
+                    subtipo: 'cobro_deuda',
+                    monto: montoAbonar,
+                    metodo: metodo,
+                    metodoNormalizado: metodo.toLowerCase(),
+                    motivo: `Cobro deuda cliente: ${cliente.nombre}${nota ? ' - ' + nota : ''}`,
+                    clienteId: cliente.id,
+                    clienteNombre: cliente.nombre,
+                    fecha: fechaCorta,
+                    fechaHora: ahora.toISOString(),
+                    timestamp: Timestamp.now(),
+                    sesionCajaId: sesionId
+                });
+
+                // 3. Actualizar estado local
+                cliente.saldo = saldo - montoAbonar;
+                showToast(`Cobro de ${formatCurrency(montoAbonar)} registrado con éxito.`);
+                modalCobro.hide();
+
+                // 4. Actualizar vistas
+                abrirPerfil(cliente);
+                renderTabla();
+            } catch (err) {
+                console.error("Error registrando cobro de deuda:", err);
+                await showAlertModal("Error al registrar el cobro: " + err.message);
+            } finally {
+                btnConfirmar.disabled = false;
+                btnConfirmar.innerHTML = '<i class="fas fa-check me-2"></i>Confirmar Cobro';
+            }
+        };
+    }
+
+    modalCobro.show();
 }
 
 async function cargarHistorialUnificado(cliente) {

@@ -8,9 +8,45 @@ import { getCurrentUserRole } from '../app.js';
 // --- Estado de la Sección de Reportes ---
 let ventas = [];
 let ventasFiltradasActivas = [];
+let cobrosDeuda = []; // Movimientos de cobro de cuentas corrientes en el período
 let commissionPercentage = 1; // Valor por defecto
 let rubrosSeleccionadosParaPagos = new Set();
 let datosReporteDiario = {};
+
+const METODOS_PAGO_LABELS = {
+    contado: 'Contado',
+    transferencia: 'Transferencia',
+    debito: 'Débito',
+    credito: 'Crédito',
+    cuentaCorriente: 'A Cuenta'
+};
+
+const PAGO_COLORS = { 
+    contado: '#1cc88a', 
+    transferencia: '#4e73df', 
+    debito: '#858796', 
+    credito: '#f6c23e', 
+    cuentaCorriente: '#fd7e14' 
+};
+
+function parseFechaISOaCorta(f) {
+    if (!f) return '';
+    if (typeof f === 'string') return f.substring(0, 10);
+    if (f.toDate && typeof f.toDate === 'function') {
+        const d = f.toDate();
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+    }
+    if (f instanceof Date) {
+        const y = f.getFullYear();
+        const m = String(f.getMonth() + 1).padStart(2, '0');
+        const day = String(f.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+    }
+    return '';
+}
 
 // --- Elementos del DOM (variables que se inicializarán en init) ---
 let reporteFechaDesde, reporteFechaHasta, btnGenerarReporte, btnQuitarFiltro, filtroReporteRubro, datalistRubrosReporte, filtroReporteVendedor, filtroReporteCliente, datalistClientesReporte;
@@ -54,6 +90,17 @@ async function renderReportes(ventasParaCalcular) {
     reporteTotalGanancia.textContent = formatCurrency(totalGanancia);
     reporteNumVentas.textContent = numVentas;
     reporteTicketPromedio.textContent = formatCurrency(ticketPromedio);
+
+    const subtextCobranzas = document.getElementById('reporte-cobranzas-subtext');
+    if (subtextCobranzas) {
+        const totalCobrado = cobrosDeuda.reduce((sum, c) => sum + (parseFloat(c.monto) || 0), 0);
+        if (totalCobrado > 0) {
+            subtextCobranzas.style.display = 'block';
+            subtextCobranzas.innerHTML = `<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 px-2 py-1"><i class="fas fa-hand-holding-usd me-1"></i>+ ${formatCurrency(totalCobrado)} cobrado de deudas</span>`;
+        } else {
+            subtextCobranzas.style.display = 'none';
+        }
+    }
 
     renderTopProductos(ventasParaCalcular);
     renderCharts(ventasParaCalcular);
@@ -123,7 +170,7 @@ function filtrarVentasPorRubrosSeleccionados() {
 }
 
 function actualizarGraficoPagos() {
-    const datosPagos = { contado: 0, transferencia: 0, debito: 0, credito: 0 };
+    const datosPagos = { contado: 0, transferencia: 0, debito: 0, credito: 0, cuentaCorriente: 0 };
 
     ventasFiltradasActivas.forEach(venta => {
         const totalVenta = venta.total;
@@ -139,20 +186,31 @@ function actualizarGraficoPagos() {
         }
     });
 
+    // Si no se filtra por un rubro específico, sumamos los cobros de deudas de clientes
+    if (!filtroReporteRubro?.value?.trim()) {
+        cobrosDeuda.forEach(c => {
+            const m = (c.metodo || c.metodoNormalizado || 'efectivo').toLowerCase();
+            const monto = parseFloat(c.monto) || 0;
+            if (m.includes('contado') || m.includes('efectivo')) datosPagos.contado += monto;
+            else if (m.includes('transf')) datosPagos.transferencia += monto;
+            else if (m.includes('debito')) datosPagos.debito += monto;
+            else if (m.includes('credito')) datosPagos.credito += monto;
+        });
+    }
+
     if (chartPagos) chartPagos.destroy();
     
-    const fixedOrder = ['contado', 'transferencia', 'debito', 'credito'];
+    const fixedOrder = ['contado', 'transferencia', 'debito', 'credito', 'cuentaCorriente'];
     const sortedPagos = Object.entries(datosPagos).sort(([a], [b]) => fixedOrder.indexOf(a) - fixedOrder.indexOf(b));
 
     const ctxPagos = document.getElementById('chartPagos');
-    const pagoColors = { contado: '#1cc88a', transferencia: '#4e73df', debito: '#858796', credito: '#f6c23e' };
 
     if (ctxPagos) {
-        const pagosChartColores = sortedPagos.map(([metodo]) => pagoColors[metodo] || '#cccccc');
+        const pagosChartColores = sortedPagos.map(([metodo]) => PAGO_COLORS[metodo] || '#cccccc');
         chartPagos = new Chart(ctxPagos, {
             type: 'doughnut',
             data: {
-                labels: sortedPagos.map(e => e[0].charAt(0).toUpperCase() + e[0].slice(1)),
+                labels: sortedPagos.map(e => METODOS_PAGO_LABELS[e[0]] || (e[0].charAt(0).toUpperCase() + e[0].slice(1))),
                 datasets: [{ data: sortedPagos.map(e => e[1]), backgroundColor: pagosChartColores }]
             },
             options: { maintainAspectRatio: false, plugins: { legend: { display: false } } }
@@ -626,14 +684,13 @@ function renderTablaDetalle(ventasParaMostrar) {
     });
 }
 
-function renderReporteDiario(ventasParaCalcular) {
+function renderReporteDiario(ventasParaCalcular, cobrosParaCalcular = cobrosDeuda) {
     if (!tablaReporteDiarioBody) return;
 
     datosReporteDiario = {}; // Reset data
 
-    // 1. Agrupar y sumar por día
+    // 1. Agrupar y sumar cobros de ventas por día
     ventasParaCalcular.forEach(venta => {
-        // Usamos el campo 'fecha' que es YYYY-MM-DD
         const fecha = venta.fecha;
         if (!fecha) return;
 
@@ -643,15 +700,48 @@ function renderReporteDiario(ventasParaCalcular) {
                 transferencia: 0,
                 debito: 0,
                 credito: 0,
+                cuentaCorriente: 0,
                 totalDia: 0
             };
         }
 
-        datosReporteDiario[fecha].contado += venta.pagos.contado || 0;
-        datosReporteDiario[fecha].transferencia += venta.pagos.transferencia || 0;
-        datosReporteDiario[fecha].debito += venta.pagos.debito || 0;
-        datosReporteDiario[fecha].credito += venta.pagos.credito || 0;
+        datosReporteDiario[fecha].contado += venta.pagos?.contado || 0;
+        datosReporteDiario[fecha].transferencia += venta.pagos?.transferencia || 0;
+        datosReporteDiario[fecha].debito += venta.pagos?.debito || 0;
+        datosReporteDiario[fecha].credito += venta.pagos?.credito || 0;
+        datosReporteDiario[fecha].cuentaCorriente += venta.pagos?.cuentaCorriente || 0;
         datosReporteDiario[fecha].totalDia += venta.total || 0;
+    });
+
+    // 2. Agrupar y sumar cobros de deudas de clientes por día
+    (cobrosParaCalcular || []).forEach(cobro => {
+        const fecha = cobro.fechaCorta;
+        if (!fecha) return;
+
+        if (!datosReporteDiario[fecha]) {
+            datosReporteDiario[fecha] = {
+                contado: 0,
+                transferencia: 0,
+                debito: 0,
+                credito: 0,
+                cuentaCorriente: 0,
+                totalDia: 0
+            };
+        }
+
+        const metodo = (cobro.metodo || cobro.metodoNormalizado || 'efectivo').toLowerCase();
+        const monto = parseFloat(cobro.monto) || 0;
+
+        if (metodo.includes('contado') || metodo.includes('efectivo')) {
+            datosReporteDiario[fecha].contado += monto;
+        } else if (metodo.includes('transf')) {
+            datosReporteDiario[fecha].transferencia += monto;
+        } else if (metodo.includes('debito')) {
+            datosReporteDiario[fecha].debito += monto;
+        } else if (metodo.includes('credito')) {
+            datosReporteDiario[fecha].credito += monto;
+        }
+        datosReporteDiario[fecha].totalDia += monto;
     });
 
     // 2. Renderizar la tabla
@@ -659,12 +749,12 @@ function renderReporteDiario(ventasParaCalcular) {
     const fechasOrdenadas = Object.keys(datosReporteDiario).sort();
 
     if (fechasOrdenadas.length === 0) {
-        tablaReporteDiarioBody.innerHTML = '<tr><td colspan="6" class="text-center">No hay datos para el período seleccionado.</td></tr>';
+        tablaReporteDiarioBody.innerHTML = '<tr><td colspan="7" class="text-center">No hay datos para el período seleccionado.</td></tr>';
         tablaReporteDiarioFoot.innerHTML = '';
         return;
     }
 
-    let grandTotals = { contado: 0, transferencia: 0, debito: 0, credito: 0, totalDia: 0 };
+    let grandTotals = { contado: 0, transferencia: 0, debito: 0, credito: 0, cuentaCorriente: 0, totalDia: 0 };
 
     fechasOrdenadas.forEach(fecha => {
         const datosDia = datosReporteDiario[fecha];
@@ -678,6 +768,7 @@ function renderReporteDiario(ventasParaCalcular) {
             <td class="text-end">${formatCurrency(datosDia.transferencia)}</td>
             <td class="text-end">${formatCurrency(datosDia.debito)}</td>
             <td class="text-end">${formatCurrency(datosDia.credito)}</td>
+            <td class="text-end text-warning fw-bold">${formatCurrency(datosDia.cuentaCorriente)}</td>
             <td class="text-end"><strong>${formatCurrency(datosDia.totalDia)}</strong></td>
         `;
         tablaReporteDiarioBody.appendChild(row);
@@ -687,6 +778,7 @@ function renderReporteDiario(ventasParaCalcular) {
         grandTotals.transferencia += datosDia.transferencia;
         grandTotals.debito += datosDia.debito;
         grandTotals.credito += datosDia.credito;
+        grandTotals.cuentaCorriente += datosDia.cuentaCorriente;
         grandTotals.totalDia += datosDia.totalDia;
     });
 
@@ -698,6 +790,7 @@ function renderReporteDiario(ventasParaCalcular) {
             <td class="text-end">${formatCurrency(grandTotals.transferencia)}</td>
             <td class="text-end">${formatCurrency(grandTotals.debito)}</td>
             <td class="text-end">${formatCurrency(grandTotals.credito)}</td>
+            <td class="text-end text-warning">${formatCurrency(grandTotals.cuentaCorriente)}</td>
             <td class="text-end">${formatCurrency(grandTotals.totalDia)}</td>
         </tr>
     `;
@@ -731,7 +824,7 @@ function renderLegend(containerId, sortedData, colors, title) {
     let legendHtml = `<h6 class="mb-3">${title}</h6><ul class="list-unstyled">`;
     sortedData.forEach(([label, value], index) => {
         const color = colors[index % colors.length];
-        const formattedLabel = label.charAt(0).toUpperCase() + label.slice(1);
+        const formattedLabel = METODOS_PAGO_LABELS[label] || (label.charAt(0).toUpperCase() + label.slice(1));
         legendHtml += `
             <li class="d-flex justify-content-between align-items-center mb-2">
                 <span class="d-flex align-items-center">
@@ -747,7 +840,7 @@ function renderLegend(containerId, sortedData, colors, title) {
 
 function renderCharts(ventasParaCalcular) {
     const datosRubros = {};
-    const datosPagos = { contado: 0, transferencia: 0, debito: 0, credito: 0 };
+    const datosPagos = { contado: 0, transferencia: 0, debito: 0, credito: 0, cuentaCorriente: 0 };
     const datosVentasTiempo = {};
     const datosVentasPorRubroMetodo = {};
 
@@ -775,7 +868,7 @@ function renderCharts(ventasParaCalcular) {
                 const rubro = normalizeString(p.rubro || 'Desconocido');
                 const proporcion = ((p.precio || 0) * (p.cantidad || 0)) / totalVenta;
                 if (!datosVentasPorRubroMetodo[rubro]) {
-                    datosVentasPorRubroMetodo[rubro] = { contado: 0, transferencia: 0, debito: 0, credito: 0 };
+                    datosVentasPorRubroMetodo[rubro] = { contado: 0, transferencia: 0, debito: 0, credito: 0, cuentaCorriente: 0 };
                 }
                 Object.keys(datosVentasPorRubroMetodo[rubro]).forEach(metodo => {
                     datosVentasPorRubroMetodo[rubro][metodo] += parseFloat(venta.pagos[metodo] || 0) * proporcion;
@@ -784,8 +877,20 @@ function renderCharts(ventasParaCalcular) {
         }
     });
 
+    // Sumar cobros de deudas de clientes a los métodos de pago utilizados
+    if (!filtroReporteRubro?.value?.trim()) {
+        cobrosDeuda.forEach(c => {
+            const m = (c.metodo || c.metodoNormalizado || 'efectivo').toLowerCase();
+            const monto = parseFloat(c.monto) || 0;
+            if (m.includes('contado') || m.includes('efectivo')) datosPagos.contado += monto;
+            else if (m.includes('transf')) datosPagos.transferencia += monto;
+            else if (m.includes('debito')) datosPagos.debito += monto;
+            else if (m.includes('credito')) datosPagos.credito += monto;
+        });
+    }
+
     const chartColors = ['#4e73df', '#1cc88a', '#36b9cc', '#f6c23e', '#e74a3b', '#858796'];
-    const pagoColors = { contado: '#1cc88a', transferencia: '#4e73df', debito: '#858796', credito: '#f6c23e' };
+    const pagoColors = PAGO_COLORS;
 
     if (chartRubros) chartRubros.destroy();
     const sortedRubros = Object.entries(datosRubros).sort(([, a], [, b]) => b - a);
@@ -803,7 +908,7 @@ function renderCharts(ventasParaCalcular) {
     }
 
     if (chartPagos) chartPagos.destroy();
-    const fixedOrder = ['contado', 'transferencia', 'debito', 'credito'];
+    const fixedOrder = ['contado', 'transferencia', 'debito', 'credito', 'cuentaCorriente'];
     const sortedPagos = Object.entries(datosPagos).sort(([a], [b]) => fixedOrder.indexOf(a) - fixedOrder.indexOf(b));
     const ctxPagos = document.getElementById('chartPagos');
     if (ctxPagos) {
@@ -811,7 +916,7 @@ function renderCharts(ventasParaCalcular) {
         chartPagos = new Chart(ctxPagos, {
             type: 'doughnut',
             data: {
-                labels: sortedPagos.map(e => e[0].charAt(0).toUpperCase() + e[0].slice(1)),
+                labels: sortedPagos.map(e => METODOS_PAGO_LABELS[e[0]] || (e[0].charAt(0).toUpperCase() + e[0].slice(1))),
                 datasets: [{
                     data: sortedPagos.map(e => e[1]),
                     backgroundColor: pagosChartColores
@@ -834,8 +939,8 @@ function renderCharts(ventasParaCalcular) {
     if (ctxStacked) {
         const rubrosLabels = Object.keys(datosVentasPorRubroMetodo).map(label => label.charAt(0).toUpperCase() + label.slice(1));
         const datasets = Object.keys(pagoColors).map(metodo => ({
-            label: metodo.charAt(0).toUpperCase() + metodo.slice(1),
-            data: Object.keys(datosVentasPorRubroMetodo).map(rubro => datosVentasPorRubroMetodo[rubro][metodo]),
+            label: METODOS_PAGO_LABELS[metodo] || (metodo.charAt(0).toUpperCase() + metodo.slice(1)),
+            data: Object.keys(datosVentasPorRubroMetodo).map(rubro => datosVentasPorRubroMetodo[rubro][metodo] || 0),
             backgroundColor: pagoColors[metodo],
         }));
         chartContadoPorRubro = new Chart(ctxStacked, { type: 'bar', data: { labels: rubrosLabels, datasets: datasets }, options: { maintainAspectRatio: false, scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, ticks: { callback: (value) => formatCurrency(value) } } }, plugins: { legend: { position: 'top' }, tooltip: { callbacks: { label: (context) => { const label = context.dataset.label || ''; const value = context.raw || 0; if (value > 0) { return `${label}: ${formatCurrency(value)}`; } return null; } } } } } });
@@ -881,11 +986,12 @@ async function filtrarReporte() {
                     const nuevaGanancia = productosFiltrados.reduce((sum, p) => sum + ((p.precio - p.costo) * p.cantidad), 0);
                     const ratio = totalOriginal > 0 ? nuevoTotal / totalOriginal : 0;
                     const nuevosPagos = {
-                        contado: (venta.pagos.contado || 0) * ratio,
-                        transferencia: (venta.pagos.transferencia || 0) * ratio,
-                        debito: (venta.pagos.debito || 0) * ratio,
-                        credito: (venta.pagos.credito || 0) * ratio,
-                        recargoCredito: venta.pagos.recargoCredito || 0
+                        contado: (venta.pagos?.contado || 0) * ratio,
+                        transferencia: (venta.pagos?.transferencia || 0) * ratio,
+                        debito: (venta.pagos?.debito || 0) * ratio,
+                        credito: (venta.pagos?.credito || 0) * ratio,
+                        cuentaCorriente: (venta.pagos?.cuentaCorriente || 0) * ratio,
+                        recargoCredito: venta.pagos?.recargoCredito || 0
                     };
                     ventasProcesadas.push({ ...venta, productos: productosFiltrados, total: nuevoTotal, ganancia: nuevaGanancia, pagos: nuevosPagos });
                 }
@@ -904,11 +1010,39 @@ async function filtrarReporte() {
 
         ventasFiltradasActivas = ventasProcesadas.filter(venta => venta.estado !== 'anulada');
 
+        // Consultar movimientos de cobro de cuentas corrientes en el rango de fechas
+        cobrosDeuda = [];
+        try {
+            const movRef = collection(db, 'caja_movimientos');
+            const qMov = query(movRef, where('tipo', '==', 'ingreso'));
+            const movSnapshot = await getDocs(qMov);
+            movSnapshot.forEach((doc) => {
+                const data = doc.data();
+                const fechaMov = parseFechaISOaCorta(data.fecha || data.timestamp);
+                if (fechaMov >= desde && fechaMov <= hasta) {
+                    const isCobroDeuda = data.subtipo === 'cobro_deuda' || 
+                        (data.motivo && data.motivo.toLowerCase().includes('cobro deuda')) ||
+                        (data.concepto && data.concepto.toLowerCase().includes('cobro deuda'));
+                    if (isCobroDeuda) {
+                        cobrosDeuda.push({ id: doc.id, fechaCorta: fechaMov, ...data });
+                    }
+                }
+            });
+        } catch (e) {
+            console.warn("No se pudieron cargar cobros de deuda para reportes:", e);
+        }
+
+        if (clienteFiltro) {
+            cobrosDeuda = cobrosDeuda.filter(c => 
+                (c.clienteNombre || '').toLowerCase().includes(clienteFiltro)
+            );
+        }
+
         renderFiltroVendedores(ventasFetched);
 
         renderTablaDetalle(ventasProcesadas);
         await renderReportes(ventasFiltradasActivas);
-        renderReporteDiario(ventasFiltradasActivas);
+        renderReporteDiario(ventasFiltradasActivas, cobrosDeuda);
 
         renderFiltroRubrosPagos(ventasFiltradasActivas);
 
@@ -955,7 +1089,7 @@ function exportarReporteDiarioAExcel() {
         return;
     }
 
-    const headers = ["Fecha", "Contado", "Transferencia", "Debito", "Credito", "Total Dia"];
+    const headers = ["Fecha", "Contado", "Transferencia", "Debito", "Credito", "A Cuenta", "Total Dia"];
     
     const data = fechasOrdenadas.map(fecha => {
         const datosDia = datosReporteDiario[fecha];
@@ -967,6 +1101,7 @@ function exportarReporteDiarioAExcel() {
             datosDia.transferencia.toFixed(2),
             datosDia.debito.toFixed(2),
             datosDia.credito.toFixed(2),
+            (datosDia.cuentaCorriente || 0).toFixed(2),
             datosDia.totalDia.toFixed(2)
         ];
     });
@@ -978,11 +1113,12 @@ function exportarReporteDiarioAExcel() {
         totals[2] += parseFloat(row[3]);
         totals[3] += parseFloat(row[4]);
         totals[4] += parseFloat(row[5]);
+        totals[5] += parseFloat(row[6]);
         return totals;
-    }, [0, 0, 0, 0, 0]);
+    }, [0, 0, 0, 0, 0, 0]);
 
     // Agregar fila de totales al final
-    data.push(["TOTAL", grandTotals[0].toFixed(2), grandTotals[1].toFixed(2), grandTotals[2].toFixed(2), grandTotals[3].toFixed(2), grandTotals[4].toFixed(2)]);
+    data.push(["TOTAL", grandTotals[0].toFixed(2), grandTotals[1].toFixed(2), grandTotals[2].toFixed(2), grandTotals[3].toFixed(2), grandTotals[4].toFixed(2), grandTotals[5].toFixed(2)]);
 
     const csvContent = [
         headers.join(';'),
@@ -1128,6 +1264,9 @@ export async function init() {
                         <div class="col-6 text-end fw-bold">${formatCurrency(venta.pagos.debito)}</div>
                         <div class="col-6">Crédito:</div>
                         <div class="col-6 text-end fw-bold">${formatCurrency(venta.pagos.credito)}</div>
+                        ${venta.pagos && venta.pagos.cuentaCorriente ? `
+                        <div class="col-6 text-warning fw-bold">A Cuenta (Fiado):</div>
+                        <div class="col-6 text-end fw-bold text-warning">${formatCurrency(venta.pagos.cuentaCorriente)}</div>` : ''}
                     </div>
                     ${afipHtml}
                     <hr class="my-3">

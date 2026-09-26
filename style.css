@@ -985,3 +985,45 @@ form.duplicando::before {
     font-weight: 700;
     border-radius: 0.5rem;
 }
+
+/* --- CLIENTE SEARCH DROPDOWN & SELECTED CARD --- */
+#clienteSearchResults {
+    border-radius: 0.75rem;
+    overflow: hidden;
+    background: #ffffff;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+    border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.cliente-search-item {
+    transition: background-color 0.15s ease-in-out;
+    border-left: 3px solid transparent;
+}
+
+.cliente-search-item:hover,
+.cliente-search-item:focus {
+    background-color: #f8f9fa;
+    border-left-color: #0d6efd;
+}
+
+#selectedClienteCard {
+    background: #fdfdfd;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 0.75rem;
+    transition: all 0.2s ease-in-out;
+}
+
+#selectedClienteCard:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+#btnPagoRapidoCuentaCorriente {
+    transition: all 0.2s ease-in-out;
+}
+
+#btnPagoRapidoCuentaCorriente:hover:not(:disabled) {
+    background-color: #000000 !important;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+

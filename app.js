@@ -453,8 +453,8 @@ async function loadSection(section) {
 
     try {
         // --- INICIO DE LA MODIFICACIÓN: Carga condicional de HTML ---
-        // Cargamos el HTML de la sección.
-        const response = await fetch(`secciones/${section}.html`);
+        // Cargamos el HTML de la sección (con cache-buster para evitar versiones viejas)
+        const response = await fetch(`secciones/${section}.html?v=${Date.now()}`, { cache: 'no-cache' });
         if (!response.ok) {
             // Si el HTML no existe, mostramos un error claro y no intentamos cargar el JS.
             throw new Error(`El archivo ${section}.html no se encontró o no se pudo cargar.`);
@@ -462,7 +462,7 @@ async function loadSection(section) {
         mainContent.innerHTML = await response.text();
         // --- FIN DE LA MODIFICACIÓN ---
 
-        const module = await import(`./secciones/${section}.js`);
+        const module = await import(`./secciones/${section}.js?v=${Date.now()}`);
         if (module && typeof module.init === 'function') {
             setTimeout(module.init, 0);
         }

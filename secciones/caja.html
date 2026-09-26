@@ -45,8 +45,8 @@
             <div class="card-body">
                 <div class="row">
                     <div class="col-md-6 mb-4 mb-md-0">
-                        <h6 class="text-muted">RESUMEN DEL SISTEMA</h6>
-                        <ul class="list-group">
+                        <h6 class="text-muted fw-bold"><i class="fas fa-coins me-1"></i>ARQUEO DE EFECTIVO (GAVETA FÍSICA)</h6>
+                        <ul class="list-group mb-4">
                             <li class="list-group-item d-flex justify-content-between align-items-center">
                                 <span>(+) Fondo Inicial</span>
                                 <strong id="cierre-fondo-inicial">$0.00</strong>
@@ -56,7 +56,7 @@
                                 <strong id="cierre-ventas-efectivo">$0.00</strong>
                             </li>
                             <li class="list-group-item d-flex justify-content-between align-items-center">
-                                <span>(+) Otros Ingresos</span>
+                                <span>(+) Otros Ingresos (Efectivo)</span>
                                 <strong id="cierre-ingresos">$0.00</strong>
                             </li>
                             <li class="list-group-item d-flex justify-content-between align-items-center">
@@ -64,8 +64,28 @@
                                 <strong id="cierre-egresos" class="text-danger">-$0.00</strong>
                             </li>
                             <li class="list-group-item d-flex justify-content-between align-items-center bg-light">
-                                <h5 class="mb-0">(=) Total Esperado</h5>
-                                <h5 class="mb-0" id="cierre-total-esperado">$0.00</h5>
+                                <h5 class="mb-0">(=) Efectivo Esperado</h5>
+                                <h5 class="mb-0 text-primary" id="cierre-total-esperado">$0.00</h5>
+                            </li>
+                        </ul>
+
+                        <h6 class="text-muted fw-bold"><i class="fas fa-credit-card me-1"></i>MEDIOS DIGITALES / BANCO (VENTAS + COBROS)</h6>
+                        <ul class="list-group">
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                <span><i class="fas fa-credit-card text-secondary me-2"></i>Débito</span>
+                                <strong id="cierre-total-debito">$0.00</strong>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                <span><i class="fas fa-exchange-alt text-primary me-2"></i>Transferencia / MP</span>
+                                <strong id="cierre-total-transferencia">$0.00</strong>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                <span><i class="far fa-credit-card text-warning me-2"></i>Crédito</span>
+                                <strong id="cierre-total-credito">$0.00</strong>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between align-items-center bg-light">
+                                <h6 class="mb-0">(=) Total Digital</h6>
+                                <h6 class="mb-0 text-success fw-bold" id="cierre-total-digital">$0.00</h6>
                             </li>
                         </ul>
                     </div>

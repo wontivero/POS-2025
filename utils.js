@@ -542,6 +542,7 @@ export async function generatePDF(ticketId, venta, isNotaCredito = false) {
     if (venta.pagos.transferencia > 0) { drawText(`- Transferencia:`, margin + 5, y, 10); drawText(formatCurrency(venta.pagos.transferencia), pageWidth - margin, y, 10, 'normal', 'right'); y += lineHeight; }
     if (venta.pagos.debito > 0) { drawText(`- Débito:`, margin + 5, y, 10); drawText(formatCurrency(venta.pagos.debito), pageWidth - margin, y, 10, 'normal', 'right'); y += lineHeight; }
     if (venta.pagos.credito > 0) { drawText(`- Crédito (${venta.pagos.recargoCredito}%):`, margin + 5, y, 10); drawText(formatCurrency(venta.pagos.credito), pageWidth - margin, y, 10, 'normal', 'right'); y += lineHeight; }
+    if (venta.pagos.cuentaCorriente > 0) { drawText(`- A Cuenta (Fiado):`, margin + 5, y, 10); drawText(formatCurrency(venta.pagos.cuentaCorriente), pageWidth - margin, y, 10, 'normal', 'right'); y += lineHeight; }
     y += lineHeight * 2;
     doc.line(margin, y, pageWidth - margin, y);
     y += lineHeight * 2;
@@ -794,7 +795,8 @@ export async function printThermalTicket(ticketId, venta, isNotaCredito = false)
     if (pagosConMonto.length > 0) {
         html += `<hr><p><strong>Forma de Pago:</strong></p>`;
         pagosConMonto.forEach(([metodo, monto]) => {
-            const nombreMetodo = metodo.charAt(0).toUpperCase() + metodo.slice(1);
+            let nombreMetodo = metodo.charAt(0).toUpperCase() + metodo.slice(1);
+            if (metodo === 'cuentaCorriente') nombreMetodo = 'A Cuenta (Fiado)';
             html += `<p>${nombreMetodo}: ${formatCurrency(monto)}</p>`;
         });
     }

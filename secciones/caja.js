@@ -102,23 +102,73 @@ async function calcularCierre() {
 
     const ventasQuery = query(collection(db, 'ventas'), where('sesionCajaId', '==', sesionActiva.id));
     const ventasSnapshot = await getDocs(ventasQuery);
-    const totalVentasEfectivo = ventasSnapshot.docs.reduce((sum, doc) => sum + (doc.data().pagos.contado || 0), 0);
+    const ventas = ventasSnapshot.docs.map(doc => doc.data());
+    const totalVentasEfectivo = ventas.reduce((sum, v) => sum + (v.pagos?.contado || 0), 0);
+    const totalVentasDebito = ventas.reduce((sum, v) => sum + (v.pagos?.debito || 0), 0);
+    const totalVentasTransferencia = ventas.reduce((sum, v) => sum + (v.pagos?.transferencia || 0), 0);
+    const totalVentasCredito = ventas.reduce((sum, v) => sum + (v.pagos?.credito || 0), 0);
 
     const movQuery = query(collection(db, 'caja_movimientos'), where('sesionCajaId', '==', sesionActiva.id));
     const movSnapshot = await getDocs(movQuery);
-    const totalIngresos = movSnapshot.docs.filter(doc => doc.data().tipo === 'ingreso').reduce((sum, doc) => sum + doc.data().monto, 0);
-    const totalEgresos = movSnapshot.docs.filter(doc => doc.data().tipo === 'egreso').reduce((sum, doc) => sum + doc.data().monto, 0);
+    const movimientos = movSnapshot.docs.map(doc => doc.data());
 
-    const fondoInicial = sesionActiva.fondoInicial;
-    const totalEsperado = fondoInicial + totalVentasEfectivo + totalIngresos - totalEgresos;
+    // Separamos ingresos según su método de pago
+    let ingresosEfectivo = 0;
+    let cobrosDebito = 0;
+    let cobrosTransferencia = 0;
+    let cobrosCredito = 0;
 
-    resumenCierre = { fondoInicial, totalVentasEfectivo, totalIngresos, totalEgresos, totalEsperado };
+    movimientos.forEach(m => {
+        if (m.tipo === 'ingreso') {
+            const metodo = (m.metodo || m.metodoNormalizado || 'efectivo').toLowerCase();
+            const monto = parseFloat(m.monto) || 0;
+            if (metodo.includes('debito')) {
+                cobrosDebito += monto;
+            } else if (metodo.includes('transf')) {
+                cobrosTransferencia += monto;
+            } else if (metodo.includes('credito')) {
+                cobrosCredito += monto;
+            } else {
+                ingresosEfectivo += monto;
+            }
+        }
+    });
+
+    const totalEgresos = movimientos.filter(m => m.tipo === 'egreso').reduce((sum, m) => sum + (parseFloat(m.monto) || 0), 0);
+
+    const fondoInicial = sesionActiva.fondoInicial || 0;
+    const totalEsperado = fondoInicial + totalVentasEfectivo + ingresosEfectivo - totalEgresos;
+
+    const totalDebitoGeneral = totalVentasDebito + cobrosDebito;
+    const totalTransferenciaGeneral = totalVentasTransferencia + cobrosTransferencia;
+    const totalCreditoGeneral = totalVentasCredito + cobrosCredito;
+    const totalDigitalGeneral = totalDebitoGeneral + totalTransferenciaGeneral + totalCreditoGeneral;
+
+    resumenCierre = { 
+        fondoInicial, 
+        totalVentasEfectivo, 
+        totalIngresos: ingresosEfectivo, 
+        totalEgresos, 
+        totalEsperado,
+        totalDebito: totalDebitoGeneral,
+        totalTransferencia: totalTransferenciaGeneral,
+        totalCredito: totalCreditoGeneral
+    };
 
     cierreFondoInicial.textContent = formatCurrency(fondoInicial);
     cierreVentasEfectivo.textContent = formatCurrency(totalVentasEfectivo);
-    cierreIngresos.textContent = formatCurrency(totalIngresos);
+    cierreIngresos.textContent = formatCurrency(ingresosEfectivo);
     cierreEgresos.textContent = `-${formatCurrency(totalEgresos)}`;
     cierreTotalEsperado.textContent = formatCurrency(totalEsperado);
+
+    const elDebito = document.getElementById('cierre-total-debito');
+    const elTransf = document.getElementById('cierre-total-transferencia');
+    const elCred = document.getElementById('cierre-total-credito');
+    const elDigital = document.getElementById('cierre-total-digital');
+    if (elDebito) elDebito.textContent = formatCurrency(totalDebitoGeneral);
+    if (elTransf) elTransf.textContent = formatCurrency(totalTransferenciaGeneral);
+    if (elCred) elCred.textContent = formatCurrency(totalCreditoGeneral);
+    if (elDigital) elDigital.textContent = formatCurrency(totalDigitalGeneral);
 }
 
 /**
@@ -304,21 +354,40 @@ async function generateCierrePDF(sesion) {
     const ventasSnapshot = await getDocs(ventasQuery);
     const ventas = ventasSnapshot.docs.map(doc => doc.data());
 
-    const totalTransferencia = ventas.reduce((sum, v) => sum + (v.pagos.transferencia || 0), 0);
-    const totalDebito = ventas.reduce((sum, v) => sum + (v.pagos.debito || 0), 0);
-    const totalCredito = ventas.reduce((sum, v) => sum + (v.pagos.credito || 0), 0);
-    const totalGeneral = sesion.totalVentasEfectivo + totalTransferencia + totalDebito + totalCredito;
+    // Y también los movimientos de cobranza de deuda o ingresos de la sesión
+    const movQuery = query(collection(db, 'caja_movimientos'), where('sesionCajaId', '==', sesion.id));
+    const movSnapshot = await getDocs(movQuery);
+    const movimientos = movSnapshot.docs.map(doc => doc.data());
+
+    let cobrosDebito = 0;
+    let cobrosTransferencia = 0;
+    let cobrosCredito = 0;
+
+    movimientos.forEach(m => {
+        if (m.tipo === 'ingreso') {
+            const metodo = (m.metodo || m.metodoNormalizado || 'efectivo').toLowerCase();
+            const monto = parseFloat(m.monto) || 0;
+            if (metodo.includes('debito')) cobrosDebito += monto;
+            else if (metodo.includes('transf')) cobrosTransferencia += monto;
+            else if (metodo.includes('credito')) cobrosCredito += monto;
+        }
+    });
+
+    const totalTransferencia = ventas.reduce((sum, v) => sum + (v.pagos?.transferencia || 0), 0) + cobrosTransferencia;
+    const totalDebito = ventas.reduce((sum, v) => sum + (v.pagos?.debito || 0), 0) + cobrosDebito;
+    const totalCredito = ventas.reduce((sum, v) => sum + (v.pagos?.credito || 0), 0) + cobrosCredito;
+    const totalGeneral = (sesion.totalVentasEfectivo || 0) + (sesion.totalOtrosIngresos || 0) + totalTransferencia + totalDebito + totalCredito;
 
     doc.setFontSize(12);
-    drawLineItem("Total Efectivo:", sesion.totalVentasEfectivo);
-    drawLineItem("Total Transferencia:", totalTransferencia);
+    drawLineItem("Total Efectivo (Ventas + Ingresos):", (sesion.totalVentasEfectivo || 0) + (sesion.totalOtrosIngresos || 0));
+    drawLineItem("Total Transferencia / MP:", totalTransferencia);
     drawLineItem("Total Débito:", totalDebito);
     drawLineItem("Total Crédito:", totalCredito);
     y += lineHeight * 0.5;
     doc.line(margin, y, pageWidth - margin, y);
     y += lineHeight;
-    doc.setFontSize(16);
-    drawLineItem("TOTAL VENTAS (Todos los medios):", totalGeneral, 'bold');
+    doc.setFontSize(15);
+    drawLineItem("TOTAL RECAUDADO (Todos los medios):", totalGeneral, 'bold');
 
     // --- Guardar el archivo ---
     doc.save(`reporte_caja_${fechaCierre.split(' ')[0].replace(/\//g, '-')}.pdf`);

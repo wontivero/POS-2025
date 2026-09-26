@@ -675,6 +675,68 @@
 
 
 
+    <!-- Modal Registrar Cobro de Deuda (Cuenta Corriente) -->
+    <div class="modal fade" id="modalCobroDeuda" tabindex="-1" aria-labelledby="modalCobroDeudaLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg" style="border-radius: 1rem; overflow: hidden;">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title fw-bold" id="modalCobroDeudaLabel">
+                        <i class="fas fa-hand-holding-usd me-2"></i>Registrar Cobro de Deuda
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="text-center mb-4">
+                        <h5 class="fw-bold mb-1" id="cobroDeudaClienteNombre">Cliente</h5>
+                        <p class="text-muted small mb-2" id="cobroDeudaClienteDoc">DNI/CUIT: -</p>
+                        <div class="d-inline-block bg-danger bg-opacity-10 border border-danger-subtle rounded-3 px-3 py-2">
+                            <span class="text-muted small d-block">Deuda Total Actual:</span>
+                            <span class="h4 fw-bold text-danger mb-0" id="cobroDeudaMontoActual">$0</span>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small text-muted">Monto a Abonar</label>
+                        <div class="input-group input-group-lg">
+                            <span class="input-group-text bg-light fw-bold">$</span>
+                            <input type="number" class="form-control fw-bold text-success fs-4 text-center" id="cobroDeudaMontoAbonar" step="1" min="1" placeholder="0">
+                        </div>
+                        <div class="d-flex justify-content-between mt-2">
+                            <button type="button" class="btn btn-sm btn-outline-primary" id="btnCobroDeudaTotal">
+                                <i class="fas fa-check-double me-1"></i>Abonar Deuda Total
+                            </button>
+                            <span class="small text-muted align-self-center" id="cobroDeudaSaldoRestante">Saldo restante: $0</span>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="cobroDeudaMetodoPago" class="form-label fw-bold small text-muted">Método de Cobro (Ingreso a Caja)</label>
+                        <select class="form-select" id="cobroDeudaMetodoPago">
+                            <option value="Efectivo" selected>Efectivo / Contado</option>
+                            <option value="Debito">Tarjeta de Débito</option>
+                            <option value="Transferencia">Transferencia Bancaria / MP</option>
+                            <option value="Credito">Tarjeta de Crédito</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="cobroDeudaNota" class="form-label small text-muted">Observaciones / Comprobante (Opcional)</label>
+                        <input type="text" class="form-control form-control-sm" id="cobroDeudaNota" placeholder="Ej: Pago parcial en efectivo...">
+                    </div>
+                </div>
+                <div class="modal-footer bg-light border-0">
+                    <button type="button" class="btn btn-secondary rounded-pill px-4" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-success fw-bold rounded-pill px-4 shadow-sm" id="btnConfirmarCobroDeuda">
+                        <i class="fas fa-check me-2"></i>Confirmar Cobro
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+
+
     <div class="modal fade" id="accesoDenegadoModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1"
         aria-labelledby="accesoDenegadoModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
