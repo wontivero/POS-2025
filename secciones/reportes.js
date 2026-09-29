@@ -1,6 +1,6 @@
 // secciones/reportes.js
 import { getFirestore, collection, query, where, getDocs, orderBy, runTransaction, doc, getDoc } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
-import { getCollection, getDocumentById, formatCurrency, getTodayDate, generatePDF, printThermalTicket, showConfirmationModal, showAlertModal, normalizeString, facturarEnArca, marcarVentaFacturada, saveDocument, anularFacturaEnArca, marcarVentaAnuladaConNC } from '../utils.js';
+import { getCollection, getDocumentById, formatCurrency, getTodayDate, generatePDF, printThermalTicket, showConfirmationModal, showAlertModal, normalizeString, facturarEnArca, marcarVentaFacturada, saveDocument, anularFacturaEnArca, marcarVentaAnuladaConNC, printReciboCobranzaThermal, generateReciboCobranzaPDF } from '../utils.js';
 import { getAuth } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-auth.js";
 import { haySesionActiva, getSesionActivaId } from './caja.js';
 import { getCurrentUserRole } from '../app.js';
@@ -8,6 +8,7 @@ import { getCurrentUserRole } from '../app.js';
 // --- Estado de la Sección de Reportes ---
 let ventas = [];
 let ventasFiltradasActivas = [];
+let cobranzas = [];
 let commissionPercentage = 1; // Valor por defecto
 let rubrosSeleccionadosParaPagos = new Set();
 let datosReporteDiario = {};
@@ -15,6 +16,8 @@ let datosReporteDiario = {};
 // --- Elementos del DOM (variables que se inicializarán en init) ---
 let reporteFechaDesde, reporteFechaHasta, btnGenerarReporte, btnQuitarFiltro, filtroReporteRubro, datalistRubrosReporte, filtroReporteVendedor, filtroReporteCliente, datalistClientesReporte;
 let reporteTotalVentas, reporteTotalGanancia, reporteNumVentas, reporteTicketPromedio, tablaVentasDetalleBody, tablaTopProductosBody, tablaVentasVendedorBody, commissionNote;
+let reporteFiadoOtorgado, reporteFiadoCantVentas, reporteCobranzasRecupero, reporteCobranzasCantMovimientos, reporteVariacionDeuda, reporteVariacionDeudaDesc;
+let badgeTotalCobranzasCc, tablaReporteCobranzasBody;
 let tablaReporteDiarioBody, tablaReporteDiarioFoot, btnExportarReporteDiario;
 let chartRubros, chartPagos, chartVentasTiempo, chartContadoPorRubro;
 
@@ -123,7 +126,7 @@ function filtrarVentasPorRubrosSeleccionados() {
 }
 
 function actualizarGraficoPagos() {
-    const datosPagos = { contado: 0, transferencia: 0, debito: 0, credito: 0 };
+    const datosPagos = { contado: 0, transferencia: 0, debito: 0, credito: 0, a_cuenta: 0 };
 
     ventasFiltradasActivas.forEach(venta => {
         const totalVenta = venta.total;
@@ -141,18 +144,18 @@ function actualizarGraficoPagos() {
 
     if (chartPagos) chartPagos.destroy();
     
-    const fixedOrder = ['contado', 'transferencia', 'debito', 'credito'];
+    const fixedOrder = ['contado', 'transferencia', 'debito', 'credito', 'a_cuenta'];
     const sortedPagos = Object.entries(datosPagos).sort(([a], [b]) => fixedOrder.indexOf(a) - fixedOrder.indexOf(b));
 
     const ctxPagos = document.getElementById('chartPagos');
-    const pagoColors = { contado: '#1cc88a', transferencia: '#4e73df', debito: '#858796', credito: '#f6c23e' };
+    const pagoColors = { contado: '#1cc88a', transferencia: '#4e73df', debito: '#858796', credito: '#f6c23e', a_cuenta: '#6f42c1' };
 
     if (ctxPagos) {
         const pagosChartColores = sortedPagos.map(([metodo]) => pagoColors[metodo] || '#cccccc');
         chartPagos = new Chart(ctxPagos, {
             type: 'doughnut',
             data: {
-                labels: sortedPagos.map(e => e[0].charAt(0).toUpperCase() + e[0].slice(1)),
+                labels: sortedPagos.map(e => e[0] === 'a_cuenta' ? 'A Cuenta' : (e[0].charAt(0).toUpperCase() + e[0].slice(1))),
                 datasets: [{ data: sortedPagos.map(e => e[1]), backgroundColor: pagosChartColores }]
             },
             options: { maintainAspectRatio: false, plugins: { legend: { display: false } } }
@@ -524,8 +527,42 @@ async function anularVenta(ventaId) {
                 for (const producto of productosParaActualizar) {
                     transaction.update(producto.ref, { stock: producto.stock });
                 }
+
+                // Si la venta tenía pago A Cuenta (Fiado), restamos la deuda al cliente
+                const montoACuentaVenta = ventaData.pagos?.a_cuenta || 0;
+                if (montoACuentaVenta > 0 && ventaData.cliente?.id && ventaData.cliente.id !== 'consumidor_final') {
+                    const clienteRef = doc(db, 'clientes', ventaData.cliente.id);
+                    const clienteDoc = await transaction.get(clienteRef);
+                    if (clienteDoc.exists()) {
+                        const saldoActual = clienteDoc.data().saldoDeudor || 0;
+                        const nuevoSaldo = Math.max(0, saldoActual - montoACuentaVenta);
+                        transaction.update(clienteRef, { saldoDeudor: nuevoSaldo });
+                    }
+                }
+
                 transaction.update(ventaRef, { estado: 'anulada' });
             });
+
+            // Registrar movimiento de anulación en cuenta corriente
+            const montoACuentaVenta = ventaAnulada.pagos?.a_cuenta || 0;
+            if (montoACuentaVenta > 0 && ventaAnulada.cliente?.id && ventaAnulada.cliente.id !== 'consumidor_final') {
+                try {
+                    await saveDocument('cuentas_corrientes_movimientos', {
+                        clienteId: ventaAnulada.cliente.id,
+                        clienteNombre: ventaAnulada.cliente.nombre || 'Cliente',
+                        tipo: 'anulacion',
+                        monto: -montoACuentaVenta,
+                        ticketId: ventaAnulada.ticketId || '',
+                        ventaDocId: ventaId,
+                        concepto: `Anulación de Venta #${ventaAnulada.ticketId || ''}`,
+                        vendedor: auth.currentUser?.email || 'Sistema',
+                        fecha: new Date(),
+                        timestamp: Date.now()
+                    });
+                } catch (eMov) {
+                    console.error("Error al registrar movimiento CC de anulación:", eMov);
+                }
+            }
 
             updateAnulacionStep('step-stock', 'success');
 
@@ -610,6 +647,7 @@ function renderTablaDetalle(ventasParaMostrar) {
             <td>${formatCurrency(venta.pagos.transferencia)}</td>
             <td>${formatCurrency(venta.pagos.debito)}</td>
             <td>${formatCurrency(venta.pagos.credito)}</td>
+            <td>${formatCurrency(venta.pagos?.a_cuenta || 0)}</td>
             <td><strong>${formatCurrency(venta.total)}</strong></td>
             <td>${formatCurrency(venta.ganancia)}</td>
             <td>
@@ -626,14 +664,13 @@ function renderTablaDetalle(ventasParaMostrar) {
     });
 }
 
-function renderReporteDiario(ventasParaCalcular) {
+function renderReporteDiario(ventasParaCalcular, cobranzasParaCalcular = []) {
     if (!tablaReporteDiarioBody) return;
 
     datosReporteDiario = {}; // Reset data
 
-    // 1. Agrupar y sumar por día
+    // 1. Agrupar y sumar ventas por día
     ventasParaCalcular.forEach(venta => {
-        // Usamos el campo 'fecha' que es YYYY-MM-DD
         const fecha = venta.fecha;
         if (!fecha) return;
 
@@ -643,28 +680,57 @@ function renderReporteDiario(ventasParaCalcular) {
                 transferencia: 0,
                 debito: 0,
                 credito: 0,
-                totalDia: 0
+                a_cuenta: 0,
+                cobranzas_cc: 0,
+                totalRecaudacion: 0
             };
         }
 
-        datosReporteDiario[fecha].contado += venta.pagos.contado || 0;
-        datosReporteDiario[fecha].transferencia += venta.pagos.transferencia || 0;
-        datosReporteDiario[fecha].debito += venta.pagos.debito || 0;
-        datosReporteDiario[fecha].credito += venta.pagos.credito || 0;
-        datosReporteDiario[fecha].totalDia += venta.total || 0;
+        datosReporteDiario[fecha].contado += venta.pagos?.contado || 0;
+        datosReporteDiario[fecha].transferencia += venta.pagos?.transferencia || 0;
+        datosReporteDiario[fecha].debito += venta.pagos?.debito || 0;
+        datosReporteDiario[fecha].credito += venta.pagos?.credito || 0;
+        datosReporteDiario[fecha].a_cuenta += venta.pagos?.a_cuenta || 0;
+        // Recaudación efectiva de caja por ventas inmediatas
+        datosReporteDiario[fecha].totalRecaudacion += (venta.pagos?.contado || 0) + (venta.pagos?.transferencia || 0) + (venta.pagos?.debito || 0) + (venta.pagos?.credito || 0);
     });
 
-    // 2. Renderizar la tabla
+    // 2. Sumar cobranzas de cuentas corrientes por día
+    cobranzasParaCalcular.forEach(cobro => {
+        let fecha = cobro.fecha;
+        if (typeof fecha === 'string' && fecha.length >= 10) {
+            fecha = fecha.substring(0, 10);
+        }
+        if (!fecha) return;
+
+        if (!datosReporteDiario[fecha]) {
+            datosReporteDiario[fecha] = {
+                contado: 0,
+                transferencia: 0,
+                debito: 0,
+                credito: 0,
+                a_cuenta: 0,
+                cobranzas_cc: 0,
+                totalRecaudacion: 0
+            };
+        }
+
+        const montoCobrado = Math.abs(cobro.monto || 0);
+        datosReporteDiario[fecha].cobranzas_cc += montoCobrado;
+        datosReporteDiario[fecha].totalRecaudacion += montoCobrado;
+    });
+
+    // 3. Renderizar la tabla
     tablaReporteDiarioBody.innerHTML = '';
     const fechasOrdenadas = Object.keys(datosReporteDiario).sort();
 
     if (fechasOrdenadas.length === 0) {
-        tablaReporteDiarioBody.innerHTML = '<tr><td colspan="6" class="text-center">No hay datos para el período seleccionado.</td></tr>';
+        tablaReporteDiarioBody.innerHTML = '<tr><td colspan="8" class="text-center">No hay datos para el período seleccionado.</td></tr>';
         tablaReporteDiarioFoot.innerHTML = '';
         return;
     }
 
-    let grandTotals = { contado: 0, transferencia: 0, debito: 0, credito: 0, totalDia: 0 };
+    let grandTotals = { contado: 0, transferencia: 0, debito: 0, credito: 0, a_cuenta: 0, cobranzas_cc: 0, totalRecaudacion: 0 };
 
     fechasOrdenadas.forEach(fecha => {
         const datosDia = datosReporteDiario[fecha];
@@ -678,7 +744,9 @@ function renderReporteDiario(ventasParaCalcular) {
             <td class="text-end">${formatCurrency(datosDia.transferencia)}</td>
             <td class="text-end">${formatCurrency(datosDia.debito)}</td>
             <td class="text-end">${formatCurrency(datosDia.credito)}</td>
-            <td class="text-end"><strong>${formatCurrency(datosDia.totalDia)}</strong></td>
+            <td class="text-end text-muted">${formatCurrency(datosDia.a_cuenta)}</td>
+            <td class="text-end text-success fw-semibold">${formatCurrency(datosDia.cobranzas_cc)}</td>
+            <td class="text-end fw-bold">${formatCurrency(datosDia.totalRecaudacion)}</td>
         `;
         tablaReporteDiarioBody.appendChild(row);
 
@@ -687,10 +755,12 @@ function renderReporteDiario(ventasParaCalcular) {
         grandTotals.transferencia += datosDia.transferencia;
         grandTotals.debito += datosDia.debito;
         grandTotals.credito += datosDia.credito;
-        grandTotals.totalDia += datosDia.totalDia;
+        grandTotals.a_cuenta += datosDia.a_cuenta;
+        grandTotals.cobranzas_cc += datosDia.cobranzas_cc;
+        grandTotals.totalRecaudacion += datosDia.totalRecaudacion;
     });
 
-    // 3. Renderizar el footer con los totales
+    // 4. Renderizar el footer con los totales
     tablaReporteDiarioFoot.innerHTML = `
         <tr class="table-dark fw-bold">
             <td>TOTAL GENERAL</td>
@@ -698,7 +768,9 @@ function renderReporteDiario(ventasParaCalcular) {
             <td class="text-end">${formatCurrency(grandTotals.transferencia)}</td>
             <td class="text-end">${formatCurrency(grandTotals.debito)}</td>
             <td class="text-end">${formatCurrency(grandTotals.credito)}</td>
-            <td class="text-end">${formatCurrency(grandTotals.totalDia)}</td>
+            <td class="text-end text-muted">${formatCurrency(grandTotals.a_cuenta)}</td>
+            <td class="text-end text-success">${formatCurrency(grandTotals.cobranzas_cc)}</td>
+            <td class="text-end">${formatCurrency(grandTotals.totalRecaudacion)}</td>
         </tr>
     `;
 }
@@ -747,7 +819,7 @@ function renderLegend(containerId, sortedData, colors, title) {
 
 function renderCharts(ventasParaCalcular) {
     const datosRubros = {};
-    const datosPagos = { contado: 0, transferencia: 0, debito: 0, credito: 0 };
+    const datosPagos = { contado: 0, transferencia: 0, debito: 0, credito: 0, a_cuenta: 0 };
     const datosVentasTiempo = {};
     const datosVentasPorRubroMetodo = {};
 
@@ -775,7 +847,7 @@ function renderCharts(ventasParaCalcular) {
                 const rubro = normalizeString(p.rubro || 'Desconocido');
                 const proporcion = ((p.precio || 0) * (p.cantidad || 0)) / totalVenta;
                 if (!datosVentasPorRubroMetodo[rubro]) {
-                    datosVentasPorRubroMetodo[rubro] = { contado: 0, transferencia: 0, debito: 0, credito: 0 };
+                    datosVentasPorRubroMetodo[rubro] = { contado: 0, transferencia: 0, debito: 0, credito: 0, a_cuenta: 0 };
                 }
                 Object.keys(datosVentasPorRubroMetodo[rubro]).forEach(metodo => {
                     datosVentasPorRubroMetodo[rubro][metodo] += parseFloat(venta.pagos[metodo] || 0) * proporcion;
@@ -785,7 +857,7 @@ function renderCharts(ventasParaCalcular) {
     });
 
     const chartColors = ['#4e73df', '#1cc88a', '#36b9cc', '#f6c23e', '#e74a3b', '#858796'];
-    const pagoColors = { contado: '#1cc88a', transferencia: '#4e73df', debito: '#858796', credito: '#f6c23e' };
+    const pagoColors = { contado: '#1cc88a', transferencia: '#4e73df', debito: '#858796', credito: '#f6c23e', a_cuenta: '#6f42c1' };
 
     if (chartRubros) chartRubros.destroy();
     const sortedRubros = Object.entries(datosRubros).sort(([, a], [, b]) => b - a);
@@ -803,7 +875,7 @@ function renderCharts(ventasParaCalcular) {
     }
 
     if (chartPagos) chartPagos.destroy();
-    const fixedOrder = ['contado', 'transferencia', 'debito', 'credito'];
+    const fixedOrder = ['contado', 'transferencia', 'debito', 'credito', 'a_cuenta'];
     const sortedPagos = Object.entries(datosPagos).sort(([a], [b]) => fixedOrder.indexOf(a) - fixedOrder.indexOf(b));
     const ctxPagos = document.getElementById('chartPagos');
     if (ctxPagos) {
@@ -811,7 +883,7 @@ function renderCharts(ventasParaCalcular) {
         chartPagos = new Chart(ctxPagos, {
             type: 'doughnut',
             data: {
-                labels: sortedPagos.map(e => e[0].charAt(0).toUpperCase() + e[0].slice(1)),
+                labels: sortedPagos.map(e => e[0] === 'a_cuenta' ? 'A Cuenta' : (e[0].charAt(0).toUpperCase() + e[0].slice(1))),
                 datasets: [{
                     data: sortedPagos.map(e => e[1]),
                     backgroundColor: pagosChartColores
@@ -904,11 +976,54 @@ async function filtrarReporte() {
 
         ventasFiltradasActivas = ventasProcesadas.filter(venta => venta.estado !== 'anulada');
 
+        // Consultar movimientos de Cuentas Corrientes del período
+        let cobranzasFetched = [];
+        try {
+            const ccRef = collection(db, 'cuentas_corrientes_movimientos');
+            const qCc = query(ccRef, where('fecha', '>=', desde), where('fecha', '<=', hasta));
+            const ccSnapshot = await getDocs(qCc);
+            ccSnapshot.forEach(docSnap => {
+                cobranzasFetched.push({ id: docSnap.id, ...docSnap.data() });
+            });
+        } catch (err) {
+            console.warn("Fallo consulta con rango en cuentas_corrientes_movimientos, consultando completo:", err);
+            const ccSnapshot = await getDocs(collection(db, 'cuentas_corrientes_movimientos'));
+            ccSnapshot.forEach(docSnap => {
+                const d = docSnap.data();
+                let f = d.fecha;
+                if (f && typeof f.toDate === 'function') f = f.toDate().toISOString().split('T')[0];
+                else if (f && typeof f === 'object' && f.seconds) f = new Date(f.seconds * 1000).toISOString().split('T')[0];
+                else if (typeof f === 'string' && f.includes('T')) f = f.split('T')[0];
+                if (f >= desde && f <= hasta) {
+                    cobranzasFetched.push({ id: docSnap.id, ...d, fecha: f });
+                }
+            });
+        }
+
+        // Filtrar únicamente los cobros / abonos
+        let cobranzasProcesadas = cobranzasFetched.filter(m => m.tipo === 'abono');
+
+        if (clienteFiltro) {
+            cobranzasProcesadas = cobranzasProcesadas.filter(m => 
+                (m.clienteNombre || '').toLowerCase().includes(clienteFiltro)
+            );
+        }
+
+        if (vendedorFiltro) {
+            cobranzasProcesadas = cobranzasProcesadas.filter(m => 
+                (m.vendedor || '').toLowerCase().includes(vendedorFiltro.toLowerCase())
+            );
+        }
+
+        cobranzas = cobranzasProcesadas;
+
         renderFiltroVendedores(ventasFetched);
 
         renderTablaDetalle(ventasProcesadas);
         await renderReportes(ventasFiltradasActivas);
-        renderReporteDiario(ventasFiltradasActivas);
+        renderKPIsCuentasCorrientes(ventasFiltradasActivas, cobranzas);
+        renderTablaCobranzas(cobranzas);
+        renderReporteDiario(ventasFiltradasActivas, cobranzas);
 
         renderFiltroRubrosPagos(ventasFiltradasActivas);
 
@@ -955,7 +1070,7 @@ function exportarReporteDiarioAExcel() {
         return;
     }
 
-    const headers = ["Fecha", "Contado", "Transferencia", "Debito", "Credito", "Total Dia"];
+    const headers = ["Fecha", "Contado", "Transferencia", "Debito", "Credito", "A Cuenta (Fiado)", "Cobranzas CC", "Total Recaudacion"];
     
     const data = fechasOrdenadas.map(fecha => {
         const datosDia = datosReporteDiario[fecha];
@@ -967,7 +1082,9 @@ function exportarReporteDiarioAExcel() {
             datosDia.transferencia.toFixed(2),
             datosDia.debito.toFixed(2),
             datosDia.credito.toFixed(2),
-            datosDia.totalDia.toFixed(2)
+            (datosDia.a_cuenta || 0).toFixed(2),
+            (datosDia.cobranzas_cc || 0).toFixed(2),
+            datosDia.totalRecaudacion.toFixed(2)
         ];
     });
 
@@ -978,11 +1095,13 @@ function exportarReporteDiarioAExcel() {
         totals[2] += parseFloat(row[3]);
         totals[3] += parseFloat(row[4]);
         totals[4] += parseFloat(row[5]);
+        totals[5] += parseFloat(row[6]);
+        totals[6] += parseFloat(row[7]);
         return totals;
-    }, [0, 0, 0, 0, 0]);
+    }, [0, 0, 0, 0, 0, 0, 0]);
 
     // Agregar fila de totales al final
-    data.push(["TOTAL", grandTotals[0].toFixed(2), grandTotals[1].toFixed(2), grandTotals[2].toFixed(2), grandTotals[3].toFixed(2), grandTotals[4].toFixed(2)]);
+    data.push(["TOTAL", grandTotals[0].toFixed(2), grandTotals[1].toFixed(2), grandTotals[2].toFixed(2), grandTotals[3].toFixed(2), grandTotals[4].toFixed(2), grandTotals[5].toFixed(2), grandTotals[6].toFixed(2)]);
 
     const csvContent = [
         headers.join(';'),
@@ -1000,6 +1119,122 @@ function exportarReporteDiarioAExcel() {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+}
+
+/**
+ * Renderiza los KPIs de Cuentas Corrientes y Fiados en el período
+ */
+function renderKPIsCuentasCorrientes(ventasParaCalcular, cobranzasParaCalcular) {
+    if (!reporteFiadoOtorgado) return;
+
+    // 1. Fiado Otorgado en ventas
+    const ventasFiadas = ventasParaCalcular.filter(v => (v.pagos?.a_cuenta || 0) > 0);
+    const totalFiado = ventasFiadas.reduce((sum, v) => sum + (v.pagos?.a_cuenta || 0), 0);
+    reporteFiadoOtorgado.textContent = formatCurrency(totalFiado);
+    if (reporteFiadoCantVentas) {
+        reporteFiadoCantVentas.textContent = `${ventasFiadas.length} venta${ventasFiadas.length === 1 ? '' : 's'} a cuenta`;
+    }
+
+    // 2. Cobranzas de Fiados (Recupero)
+    const totalCobrado = cobranzasParaCalcular.reduce((sum, m) => sum + Math.abs(m.monto || 0), 0);
+    reporteCobranzasRecupero.textContent = formatCurrency(totalCobrado);
+    if (reporteCobranzasCantMovimientos) {
+        reporteCobranzasCantMovimientos.textContent = `${cobranzasParaCalcular.length} cobro${cobranzasParaCalcular.length === 1 ? '' : 's'} registrado${cobranzasParaCalcular.length === 1 ? '' : 's'}`;
+    }
+    if (badgeTotalCobranzasCc) {
+        badgeTotalCobranzasCc.textContent = formatCurrency(totalCobrado);
+    }
+
+    // 3. Variación Neta de Deuda (Fiado - Cobranza)
+    const variacion = totalFiado - totalCobrado;
+    if (reporteVariacionDeuda) {
+        if (variacion > 0) {
+            reporteVariacionDeuda.textContent = `+${formatCurrency(variacion)}`;
+            reporteVariacionDeuda.className = "h5 mb-0 font-weight-bold text-danger";
+            if (reporteVariacionDeudaDesc) {
+                reporteVariacionDeudaDesc.innerHTML = `<span class="text-danger fw-semibold"><i class="fas fa-arrow-up me-1"></i>Aumentó la deuda en la calle</span>`;
+            }
+        } else if (variacion < 0) {
+            reporteVariacionDeuda.textContent = `-${formatCurrency(Math.abs(variacion))}`;
+            reporteVariacionDeuda.className = "h5 mb-0 font-weight-bold text-success";
+            if (reporteVariacionDeudaDesc) {
+                reporteVariacionDeudaDesc.innerHTML = `<span class="text-success fw-semibold"><i class="fas fa-arrow-down me-1"></i>Se recuperó más de lo fiado</span>`;
+            }
+        } else {
+            reporteVariacionDeuda.textContent = formatCurrency(0);
+            reporteVariacionDeuda.className = "h5 mb-0 font-weight-bold text-muted";
+            if (reporteVariacionDeudaDesc) {
+                reporteVariacionDeudaDesc.textContent = "Equilibrado (Fiado = Cobranza)";
+            }
+        }
+    }
+}
+
+/**
+ * Renderiza la tabla de cobranzas de cuentas corrientes del período
+ */
+function renderTablaCobranzas(cobranzasParaCalcular) {
+    if (!tablaReporteCobranzasBody) return;
+    tablaReporteCobranzasBody.innerHTML = '';
+
+    if (cobranzasParaCalcular.length === 0) {
+        tablaReporteCobranzasBody.innerHTML = `
+            <tr>
+                <td colspan="8" class="text-center py-4 text-muted">
+                    <i class="fas fa-check-circle text-gray-300 me-2"></i>No se registraron cobranzas de cuentas corrientes para el período y filtros seleccionados.
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    // Ordenar de más reciente a más antiguo
+    const ordenadas = [...cobranzasParaCalcular].sort((a, b) => {
+        const timeA = a.timestamp || a.fecha || '';
+        const timeB = b.timestamp || b.fecha || '';
+        return String(timeB).localeCompare(String(timeA));
+    });
+
+    ordenadas.forEach(cobro => {
+        const fechaStr = cobro.timestamp || (cobro.fecha ? cobro.fecha.split('-').reverse().join('/') : '-');
+        const monto = Math.abs(cobro.monto || 0);
+        const metodoStr = (cobro.metodoPago || 'Contado').toUpperCase();
+
+        const isFiscal = cobro.facturadoEnArca && cobro.arcaData?.CAE;
+        const comprobanteBadge = isFiscal
+            ? `<span class="badge bg-primary-subtle text-primary border border-primary-subtle" title="CAE: ${cobro.arcaData.CAE}"><i class="fas fa-file-invoice me-1"></i>Factura CAE ${cobro.arcaData.CAE}</span>`
+            : `<span class="badge bg-light text-secondary border"><i class="fas fa-receipt me-1"></i>Recibo X</span>`;
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td class="small">${fechaStr}</td>
+            <td class="fw-semibold text-dark">${cobro.clienteNombre || 'Cliente'}</td>
+            <td class="small text-muted">${cobro.concepto || 'Cobro cuenta corriente'}</td>
+            <td><span class="badge bg-secondary-subtle text-dark border">${metodoStr}</span></td>
+            <td class="text-end fw-bold text-success">${formatCurrency(monto)}</td>
+            <td class="small text-muted">${cobro.vendedor || 'Sistema'}</td>
+            <td class="text-center">${comprobanteBadge}</td>
+            <td class="text-center">
+                <div class="btn-group btn-group-sm">
+                    <button class="btn btn-outline-secondary btn-sm py-0 px-2 btn-print-recibo-thermal" title="Imprimir Ticket Térmico">
+                        <i class="fas fa-print fa-xs"></i>
+                    </button>
+                    <button class="btn btn-outline-danger btn-sm py-0 px-2 btn-print-recibo-pdf" title="Descargar / Ver PDF">
+                        <i class="fas fa-file-pdf fa-xs"></i>
+                    </button>
+                </div>
+            </td>
+        `;
+
+        tr.querySelector('.btn-print-recibo-thermal')?.addEventListener('click', () => {
+            printReciboCobranzaThermal(cobro);
+        });
+        tr.querySelector('.btn-print-recibo-pdf')?.addEventListener('click', () => {
+            generateReciboCobranzaPDF(cobro);
+        });
+
+        tablaReporteCobranzasBody.appendChild(tr);
+    });
 }
 
 export async function init() {
@@ -1021,6 +1256,14 @@ export async function init() {
     tablaTopProductosBody = document.getElementById('tablaTopProductos');
     tablaVentasVendedorBody = document.getElementById('tabla-ventas-vendedor-body');
     commissionNote = document.getElementById('commission-note');
+    reporteFiadoOtorgado = document.getElementById('reporte-fiado-otorgado');
+    reporteFiadoCantVentas = document.getElementById('reporte-fiado-cant-ventas');
+    reporteCobranzasRecupero = document.getElementById('reporte-cobranzas-recupero');
+    reporteCobranzasCantMovimientos = document.getElementById('reporte-cobranzas-cant-movimientos');
+    reporteVariacionDeuda = document.getElementById('reporte-variacion-deuda');
+    reporteVariacionDeudaDesc = document.getElementById('reporte-variacion-deuda-desc');
+    badgeTotalCobranzasCc = document.getElementById('badge-total-cobranzas-cc');
+    tablaReporteCobranzasBody = document.getElementById('tabla-reporte-cobranzas-body');
     tablaReporteDiarioBody = document.getElementById('tabla-reporte-diario-body');
     tablaReporteDiarioFoot = document.getElementById('tabla-reporte-diario-foot');
     btnExportarReporteDiario = document.getElementById('btn-exportar-reporte-diario');

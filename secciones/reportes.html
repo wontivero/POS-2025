@@ -105,6 +105,65 @@
             </div>
         </div>
 
+        <!-- INICIO KPIs Cuentas Corrientes y Fiados -->
+        <div class="row">
+            <div class="col-xl-4 col-md-6 mb-4">
+                <div class="card border-left-warning shadow h-100 py-2">
+                    <div class="card-body">
+                        <div class="row no-gutters align-items-center">
+                            <div class="col mr-2">
+                                <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
+                                    Fiado Otorgado (A Cuenta)
+                                </div>
+                                <div class="h5 mb-0 font-weight-bold text-gray-800" id="reporte-fiado-otorgado">$0.00</div>
+                                <small class="text-muted" id="reporte-fiado-cant-ventas">0 ventas a cuenta</small>
+                            </div>
+                            <div class="col-auto">
+                                <i class="fas fa-shopping-bag fa-2x text-gray-300"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-xl-4 col-md-6 mb-4">
+                <div class="card border-left-success shadow h-100 py-2">
+                    <div class="card-body">
+                        <div class="row no-gutters align-items-center">
+                            <div class="col mr-2">
+                                <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+                                    Cobranzas de Fiados (Recupero)
+                                </div>
+                                <div class="h5 mb-0 font-weight-bold text-gray-800" id="reporte-cobranzas-recupero">$0.00</div>
+                                <small class="text-muted" id="reporte-cobranzas-cant-movimientos">0 cobros realizados</small>
+                            </div>
+                            <div class="col-auto">
+                                <i class="fas fa-hand-holding-usd fa-2x text-gray-300"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-xl-4 col-md-6 mb-4">
+                <div class="card border-left-info shadow h-100 py-2">
+                    <div class="card-body">
+                        <div class="row no-gutters align-items-center">
+                            <div class="col mr-2">
+                                <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
+                                    Variación Neta de Deuda
+                                </div>
+                                <div class="h5 mb-0 font-weight-bold" id="reporte-variacion-deuda">$0.00</div>
+                                <small class="text-muted" id="reporte-variacion-deuda-desc">Fiado vs Cobranza</small>
+                            </div>
+                            <div class="col-auto">
+                                <i class="fas fa-balance-scale fa-2x text-gray-300"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- FIN KPIs Cuentas Corrientes y Fiados -->
+
         <div class="row mb-4">
             <div class="col-lg-4 mb-4">
                 <div class="card shadow mb-4 h-100">
@@ -256,12 +315,42 @@
                             <th>Transferencia</th>
                             <th>Débito</th>
                             <th>Crédito</th>
+                            <th>A Cuenta</th>
                             <th>Total Venta</th>
                             <th>Ganancia Venta</th>
                             <th>Acciones</th>
                         </tr>
                     </thead>
                     <tbody id="tabla-ventas-detalle">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Card Reporte de Cobranzas de Cuentas Corrientes -->
+    <div class="card shadow mb-4" id="card-reporte-cobranzas-cc">
+        <div class="card-header py-3 bg-success text-white d-flex justify-content-between align-items-center">
+            <h6 class="m-0 font-weight-bold"><i class="fas fa-hand-holding-usd me-2"></i>Cobranzas de Cuentas Corrientes del Período</h6>
+            <span class="badge bg-light text-success fw-bold fs-6" id="badge-total-cobranzas-cc">$0.00</span>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-striped table-hover table-sm align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Fecha y Hora</th>
+                            <th>Cliente</th>
+                            <th>Concepto</th>
+                            <th>Medio de Pago</th>
+                            <th class="text-end">Monto Abonado</th>
+                            <th>Registrado por</th>
+                            <th class="text-center">Comprobante</th>
+                            <th class="text-center">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabla-reporte-cobranzas-body">
+                        <tr><td colspan="8" class="text-center py-3 text-muted">Genera un reporte para ver las cobranzas del período.</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -301,7 +390,9 @@
                             <th class="text-end">Transferencia</th>
                             <th class="text-end">Débito</th>
                             <th class="text-end">Crédito</th>
-                            <th class="text-end">Total del Día</th>
+                            <th class="text-end">A Cuenta</th>
+                            <th class="text-end text-success">Cobranzas CC</th>
+                            <th class="text-end">Total Recaudación</th>
                         </tr>
                     </thead>
                     <tbody id="tabla-reporte-diario-body"></tbody>

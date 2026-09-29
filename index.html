@@ -299,6 +299,16 @@
                             <label for="clienteTelefono" class="form-label">Teléfono</label>
                             <input type="text" class="form-control" id="clienteTelefono">
                         </div>
+                        <div class="mb-3">
+                            <label for="clienteLimiteCredito" class="form-label d-flex justify-content-between align-items-center">
+                                <span><i class="fas fa-hand-holding-usd text-primary me-1"></i>Límite de Crédito / Fiado ($)</span>
+                                <small class="text-muted">Por defecto: $50.000</small>
+                            </label>
+                            <div class="input-group">
+                                <span class="input-group-text">$</span>
+                                <input type="number" class="form-control" id="clienteLimiteCredito" value="50000" step="1000" min="0">
+                            </div>
+                        </div>
                     </form>
                 </div>
                 <div class="modal-footer">

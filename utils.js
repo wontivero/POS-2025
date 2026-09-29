@@ -542,6 +542,12 @@ export async function generatePDF(ticketId, venta, isNotaCredito = false) {
     if (venta.pagos.transferencia > 0) { drawText(`- Transferencia:`, margin + 5, y, 10); drawText(formatCurrency(venta.pagos.transferencia), pageWidth - margin, y, 10, 'normal', 'right'); y += lineHeight; }
     if (venta.pagos.debito > 0) { drawText(`- Débito:`, margin + 5, y, 10); drawText(formatCurrency(venta.pagos.debito), pageWidth - margin, y, 10, 'normal', 'right'); y += lineHeight; }
     if (venta.pagos.credito > 0) { drawText(`- Crédito (${venta.pagos.recargoCredito}%):`, margin + 5, y, 10); drawText(formatCurrency(venta.pagos.credito), pageWidth - margin, y, 10, 'normal', 'right'); y += lineHeight; }
+    if (venta.pagos.a_cuenta > 0) { drawText(`- A Cuenta (Fiado):`, margin + 5, y, 10); drawText(formatCurrency(venta.pagos.a_cuenta), pageWidth - margin, y, 10, 'normal', 'right'); y += lineHeight; }
+    if (venta.saldoDeudorSnapshot !== undefined && venta.saldoDeudorSnapshot !== null && (venta.pagos.a_cuenta > 0 || venta.saldoDeudorSnapshot > 0)) {
+        y += lineHeight * 0.5;
+        drawText(`* Saldo deudor acumulado: ${formatCurrency(venta.saldoDeudorSnapshot)}`, margin + 5, y, 10, 'bold');
+        y += lineHeight;
+    }
     y += lineHeight * 2;
     doc.line(margin, y, pageWidth - margin, y);
     y += lineHeight * 2;
@@ -794,9 +800,12 @@ export async function printThermalTicket(ticketId, venta, isNotaCredito = false)
     if (pagosConMonto.length > 0) {
         html += `<hr><p><strong>Forma de Pago:</strong></p>`;
         pagosConMonto.forEach(([metodo, monto]) => {
-            const nombreMetodo = metodo.charAt(0).toUpperCase() + metodo.slice(1);
+            const nombreMetodo = metodo === 'a_cuenta' ? 'A Cuenta (Fiado)' : (metodo.charAt(0).toUpperCase() + metodo.slice(1));
             html += `<p>${nombreMetodo}: ${formatCurrency(monto)}</p>`;
         });
+        if (venta.saldoDeudorSnapshot !== undefined && venta.saldoDeudorSnapshot !== null && (venta.pagos.a_cuenta > 0 || venta.saldoDeudorSnapshot > 0)) {
+            html += `<p style="margin-top: 4px; font-weight: bold; border-top: 1px dashed #000; padding-top: 3px;">* Saldo deudor acumulado: ${formatCurrency(venta.saldoDeudorSnapshot)}</p>`;
+        }
     }
     
     // Puntos de lealtad
@@ -839,6 +848,295 @@ export async function printThermalTicket(ticketId, venta, isNotaCredito = false)
     };
 }
 
+/**
+ * Imprime un Recibo de Cobranza / Abono de Cuenta Corriente en impresora térmica de 80mm
+ * @param {object} cobro Datos del cobro registrado
+ */
+export async function printReciboCobranzaThermal(cobro) {
+    const appConfig = getAppConfig();
+    const companyInfo = appConfig.companyInfo || {};
+    const arcaInfo = cobro.arcaData;
+    const isFacturaAFIP = cobro.facturadoEnArca && arcaInfo && arcaInfo.CAE;
+    const comprobanteNro = isFacturaAFIP ? `0001-${arcaInfo.CbteNro.toString().padStart(8, '0')}` : (cobro.id || 'REC');
+
+    let afipQrBase64 = '';
+    if (isFacturaAFIP) {
+        try {
+            const qrUrl = getAfipQrUrl({
+                total: Math.abs(cobro.monto),
+                fecha: cobro.fecha || getTodayDate(),
+                facturadoEnArca: true,
+                arcaData: arcaInfo,
+                cliente: { cuit: cobro.clienteCuit || '' }
+            }, appConfig, false);
+            if (qrUrl) {
+                const qrImgUrl = `https://quickchart.io/qr?text=${encodeURIComponent(qrUrl)}&size=150`;
+                await new Promise((resolve) => {
+                    const img = new Image();
+                    img.crossOrigin = "Anonymous";
+                    img.src = qrImgUrl;
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        canvas.width = img.width;
+                        canvas.height = img.height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0);
+                        afipQrBase64 = canvas.toDataURL('image/png');
+                        resolve();
+                    };
+                    img.onerror = () => resolve();
+                });
+            }
+        } catch (e) { console.error("Error cargando QR AFIP en recibo", e); }
+    }
+
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'absolute';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = 'none';
+    document.body.appendChild(iframe);
+
+    const ticketWindow = iframe.contentWindow;
+    const ticketDocument = ticketWindow.document;
+
+    const styles = `
+        <style>
+            @page { margin: 0; size: 80mm auto; }
+            body {
+                font-family: 'Courier New', Courier, monospace;
+                width: 72mm;
+                margin: 0 auto;
+                padding: 10px 0;
+                font-size: 11px;
+                color: #000;
+                line-height: 1.25;
+            }
+            .center { text-align: center; }
+            .left { text-align: left; }
+            .right { text-align: right; }
+            .bold { font-weight: bold; }
+            hr { border: none; border-top: 1px dashed #000; margin: 6px 0; }
+            table { width: 100%; border-collapse: collapse; }
+            td { padding: 2px 0; }
+            .title-box {
+                border: 1px solid #000;
+                padding: 4px;
+                margin: 6px 0;
+                text-align: center;
+                font-weight: bold;
+                font-size: 12px;
+            }
+        </style>
+    `;
+
+    const fechaStr = cobro.timestamp || (cobro.fecha ? new Date(cobro.fecha).toLocaleString('es-AR') : new Date().toLocaleString('es-AR'));
+    const metodoStr = (cobro.metodoPago || 'Efectivo').toUpperCase();
+    const montoAbs = Math.abs(cobro.monto);
+
+    let html = `
+        <div class="center">
+            ${companyInfo.name ? `<h3 style="margin: 0; font-size: 14px;">${companyInfo.name}</h3>` : ''}
+            ${companyInfo.cuit ? `<p style="margin: 2px 0;">CUIT: ${companyInfo.cuit}</p>` : ''}
+            ${companyInfo.address ? `<p style="margin: 2px 0;">${companyInfo.address}</p>` : ''}
+            ${companyInfo.phone ? `<p style="margin: 2px 0;">Tel: ${companyInfo.phone}</p>` : ''}
+        </div>
+        <hr>
+        <div class="title-box">
+            ${isFacturaAFIP ? 'FACTURA ELECTRÓNICA' : 'RECIBO DE COBRANZA (X)'}
+        </div>
+        <p class="center" style="margin: 2px 0; font-size: 10px;">${isFacturaAFIP ? 'DOCUMENTO FISCAL' : 'DOCUMENTO NO VÁLIDO COMO FACTURA'}</p>
+        <p><strong>N° Comprobante:</strong> ${comprobanteNro}</p>
+        <p><strong>Fecha y Hora:</strong> ${fechaStr}</p>
+        <hr>
+        <p><strong>Cliente:</strong> ${cobro.clienteNombre || 'Cliente'}</p>
+        ${cobro.clienteCuit ? `<p><strong>DNI/CUIT:</strong> ${cobro.clienteCuit}</p>` : ''}
+        <hr>
+        <table>
+            <tr>
+                <td class="left"><strong>Concepto:</strong></td>
+                <td class="right">${cobro.concepto || 'Cobro de Cuenta Corriente'}</td>
+            </tr>
+            <tr>
+                <td class="left"><strong>Medio de Pago:</strong></td>
+                <td class="right">${metodoStr}</td>
+            </tr>
+            <tr>
+                <td class="left bold" style="font-size: 13px;">MONTO ABONADO:</td>
+                <td class="right bold" style="font-size: 13px;">${formatCurrency(montoAbs)}</td>
+            </tr>
+        </table>
+        <hr>
+        <table>
+            ${cobro.saldoAnterior !== undefined ? `
+            <tr>
+                <td class="left">Saldo anterior:</td>
+                <td class="right">${formatCurrency(cobro.saldoAnterior)}</td>
+            </tr>` : ''}
+            ${cobro.saldoRestante !== undefined ? `
+            <tr>
+                <td class="left bold">Saldo deudor restante:</td>
+                <td class="right bold">${formatCurrency(cobro.saldoRestante)}</td>
+            </tr>` : ''}
+        </table>
+        ${cobro.vendedor ? `<p style="margin-top: 5px;">Atendido por: ${cobro.vendedor}</p>` : ''}
+    `;
+
+    if (isFacturaAFIP) {
+        const vtoStr = arcaInfo.CAEFchVto || '';
+        const vtoFormat = vtoStr.length === 8 ? `${vtoStr.substring(6,8)}/${vtoStr.substring(4,6)}/${vtoStr.substring(0,4)}` : vtoStr;
+        html += `
+            <hr>
+            <div class="center">
+                <p><strong>Comprobante Autorizado por AFIP/ARCA</strong></p>
+                <p>CAE: ${arcaInfo.CAE}</p>
+                <p>Vto CAE: ${vtoFormat}</p>
+                ${afipQrBase64 ? `<p><img src="${afipQrBase64}" style="width:120px; height:120px; margin-top:4px;" /></p>` : ''}
+            </div>
+        `;
+    }
+
+    html += `
+        <hr>
+        <div class="center" style="margin-top: 8px;">
+            <p>¡Gracias por su pago!</p>
+        </div>
+    `;
+
+    ticketDocument.open();
+    ticketDocument.write(styles + html);
+    ticketDocument.close();
+
+    iframe.onload = () => {
+        ticketWindow.focus();
+        ticketWindow.print();
+        setTimeout(() => {
+            if (document.body.contains(iframe)) document.body.removeChild(iframe);
+        }, 1000);
+    };
+}
+
+/**
+ * Genera un PDF del Recibo de Cobranza de Cuenta Corriente
+ * @param {object} cobro Datos del cobro registrado
+ */
+export async function generateReciboCobranzaPDF(cobro) {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit: 'mm', format: 'a5' });
+    const appConfig = getAppConfig();
+    const companyInfo = appConfig.companyInfo || {};
+    const arcaInfo = cobro.arcaData;
+    const isFacturaAFIP = cobro.facturadoEnArca && arcaInfo && arcaInfo.CAE;
+
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const margin = 12;
+    let y = 15;
+
+    // Encabezado
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(14);
+    doc.text(companyInfo.name || "PUNTO DE VENTA", pageWidth / 2, y, { align: "center" });
+    y += 6;
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    if (companyInfo.cuit) { doc.text(`CUIT: ${companyInfo.cuit}`, pageWidth / 2, y, { align: "center" }); y += 4; }
+    if (companyInfo.address) { doc.text(companyInfo.address, pageWidth / 2, y, { align: "center" }); y += 4; }
+    if (companyInfo.phone) { doc.text(`Tel: ${companyInfo.phone}`, pageWidth / 2, y, { align: "center" }); y += 4; }
+
+    y += 2;
+    doc.setLineWidth(0.3);
+    doc.line(margin, y, pageWidth - margin, y);
+    y += 6;
+
+    // Título Recibo
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12);
+    const titulo = isFacturaAFIP ? "FACTURA B ELECTRÓNICA" : "RECIBO DE COBRANZA";
+    doc.text(titulo, pageWidth / 2, y, { align: "center" });
+    y += 4;
+
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "italic");
+    doc.text(isFacturaAFIP ? "DOCUMENTO FISCAL AUTORIZADO" : "COMPROBANTE NO FISCAL - TIPO X", pageWidth / 2, y, { align: "center" });
+    y += 7;
+
+    // Info Cliente y Comprobante
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    const nroCbte = isFacturaAFIP ? `0001-${arcaInfo.CbteNro.toString().padStart(8, '0')}` : (cobro.id || 'X-0001');
+    const fechaStr = cobro.timestamp || (cobro.fecha ? new Date(cobro.fecha).toLocaleString('es-AR') : new Date().toLocaleString('es-AR'));
+
+    doc.text(`Comprobante N°: ${nroCbte}`, margin, y);
+    doc.text(`Fecha: ${fechaStr}`, pageWidth - margin, y, { align: "right" });
+    y += 5;
+
+    doc.text(`Cliente: ${cobro.clienteNombre || 'Cliente'}`, margin, y);
+    if (cobro.clienteCuit) {
+        doc.text(`DNI / CUIT: ${cobro.clienteCuit}`, pageWidth - margin, y, { align: "right" });
+    }
+    y += 6;
+
+    doc.line(margin, y, pageWidth - margin, y);
+    y += 6;
+
+    // Detalle de pago
+    doc.setFont("helvetica", "bold");
+    doc.text("Detalle de la Operación", margin, y);
+    y += 5;
+
+    doc.setFont("helvetica", "normal");
+    doc.text(`Concepto: ${cobro.concepto || 'Cobro de Cuenta Corriente'}`, margin + 2, y);
+    y += 5;
+    doc.text(`Medio de Pago: ${(cobro.metodoPago || 'Efectivo').toUpperCase()}`, margin + 2, y);
+    y += 6;
+
+    // Cuadro de montos
+    doc.setFillColor(245, 247, 250);
+    doc.roundedRect(margin, y, pageWidth - (margin * 2), 22, 2, 2, "F");
+    y += 6;
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.text("MONTO ABONADO:", margin + 5, y);
+    doc.text(formatCurrency(Math.abs(cobro.monto)), pageWidth - margin - 5, y, { align: "right" });
+    y += 6;
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    if (cobro.saldoAnterior !== undefined) {
+        doc.text(`Saldo deudor anterior: ${formatCurrency(cobro.saldoAnterior)}`, margin + 5, y);
+    }
+    if (cobro.saldoRestante !== undefined) {
+        doc.text(`Saldo restante actual: ${formatCurrency(cobro.saldoRestante)}`, pageWidth - margin - 5, y, { align: "right" });
+    }
+    y += 12;
+
+    if (cobro.vendedor) {
+        doc.setFontSize(8);
+        doc.text(`Registrado por: ${cobro.vendedor}`, margin, y);
+        y += 5;
+    }
+
+    // Pie AFIP si corresponde
+    if (isFacturaAFIP) {
+        doc.line(margin, y, pageWidth - margin, y);
+        y += 5;
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(9);
+        doc.text(`CAE: ${arcaInfo.CAE}    Vto CAE: ${arcaInfo.CAEFchVto || ''}`, pageWidth / 2, y, { align: "center" });
+        y += 6;
+    }
+
+    doc.setFont("helvetica", "italic");
+    doc.setFontSize(9);
+    doc.text("¡Muchas gracias por su pago!", pageWidth / 2, y + 4, { align: "center" });
+
+    const pdfData = doc.output('arraybuffer');
+    const pdfBlob = new Blob([pdfData], { type: 'application/pdf' });
+    const pdfUrl = URL.createObjectURL(pdfBlob);
+    window.open(pdfUrl, '_blank');
+}
 
 let genericModalEl, genericModal;
 

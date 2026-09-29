@@ -985,3 +985,175 @@ form.duplicando::before {
     font-weight: 700;
     border-radius: 0.5rem;
 }
+
+/* --- Estilos para Botón A Cuenta (Fiado) y Selector de Cliente Moderno --- */
+.btn-purple {
+    background-color: #6f42c1;
+    border-color: #6f42c1;
+    color: #ffffff;
+}
+
+.btn-purple:hover {
+    background-color: #59359a;
+    border-color: #533190;
+    color: #ffffff;
+}
+
+.btn-purple:disabled {
+    background-color: #6f42c1;
+    border-color: #6f42c1;
+    opacity: 0.5;
+    color: #ffffff;
+    cursor: not-allowed;
+}
+
+.text-purple {
+    color: #6f42c1 !important;
+}
+
+.cliente-selector-card {
+    border-radius: 0.75rem;
+    overflow: visible;
+}
+
+#clienteSearchResults {
+    border: 1px solid rgba(0, 0, 0, 0.12);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15) !important;
+}
+
+#clienteSearchResults .list-group-item {
+    transition: background-color 0.15s ease, transform 0.1s ease;
+    cursor: pointer;
+    border-left: none;
+    border-right: none;
+}
+
+#clienteSearchResults .list-group-item:hover,
+#clienteSearchResults .list-group-item.active {
+    background-color: #f0f4f9;
+}
+
+#clienteSeleccionadoCard {
+    transition: all 0.2s ease;
+    border: 1px solid #e2e8f0 !important;
+}
+
+#clienteSeleccionadoCard:hover {
+    background-color: #f8fafc !important;
+    border-color: #cbd5e1 !important;
+}
+
+/* --- Buscador Moderno de Clientes en Ventas --- */
+.cliente-search-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+    background-color: #f8fafc;
+    border: 1px solid #d1d5db;
+    border-radius: 0.5rem;
+    padding: 3px 6px 3px 12px;
+    transition: all 0.2s ease-in-out;
+}
+
+.cliente-search-wrapper:focus-within {
+    background-color: #ffffff;
+    border-color: #4e73df;
+    box-shadow: 0 0 0 0.2rem rgba(78, 115, 223, 0.15);
+}
+
+.cliente-search-wrapper .search-icon {
+    color: #94a3b8;
+    margin-right: 10px;
+    font-size: 0.95rem;
+    display: flex;
+    align-items: center;
+    pointer-events: none;
+    transition: color 0.2s ease;
+    flex-shrink: 0;
+}
+
+.cliente-search-wrapper:focus-within .search-icon {
+    color: #4e73df;
+}
+
+.cliente-search-wrapper input#clienteSearch {
+    border: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    padding: 0.45rem 0.25rem;
+    font-size: 0.88rem;
+    color: #1e293b;
+    flex-grow: 1;
+    outline: none !important;
+    width: 100%;
+}
+
+.cliente-search-wrapper input#clienteSearch::placeholder {
+    color: #94a3b8;
+    font-size: 0.85rem;
+}
+
+.cliente-search-wrapper #btnLimpiarClienteSearch {
+    border: none;
+    background: transparent;
+    color: #94a3b8;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.375rem;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.cliente-search-wrapper #btnLimpiarClienteSearch:hover {
+    color: #ef4444;
+    background-color: rgba(239, 68, 68, 0.1);
+}
+
+/* --- Clases utilitarias de tarjetas con bordes de color --- */
+.border-left-primary { border-left: 0.25rem solid #4e73df !important; }
+.border-left-success { border-left: 0.25rem solid #1cc88a !important; }
+.border-left-info { border-left: 0.25rem solid #36b9cc !important; }
+.border-left-warning { border-left: 0.25rem solid #f6c23e !important; }
+.border-left-danger { border-left: 0.25rem solid #e74a3b !important; }
+.border-left-purple { border-left: 0.25rem solid #6f42c1 !important; }
+
+/* --- Pestañas y Filtros Clientes --- */
+.filter-pills-group .btn {
+    border-radius: 2rem;
+    font-size: 0.85rem;
+    padding: 0.35rem 0.9rem;
+    font-weight: 600;
+    transition: all 0.2s ease;
+}
+
+.filter-pills-group .btn.active {
+    box-shadow: 0 3px 8px rgba(0,0,0,0.12);
+}
+
+.avatar-initials-badge {
+    width: 42px;
+    height: 42px;
+    font-size: 1.05rem;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    color: #fff;
+    background: linear-gradient(135deg, #4e73df 0%, #224abe 100%);
+    box-shadow: 0 2px 6px rgba(78, 115, 223, 0.25);
+    flex-shrink: 0;
+}
+
+.avatar-initials-badge.danger {
+    background: linear-gradient(135deg, #e74a3b 0%, #be2617 100%);
+    box-shadow: 0 2px 6px rgba(231, 74, 59, 0.25);
+}
+
+.avatar-initials-badge.success {
+    background: linear-gradient(135deg, #1cc88a 0%, #13855c 100%);
+    box-shadow: 0 2px 6px rgba(28, 200, 138, 0.25);
+}
+

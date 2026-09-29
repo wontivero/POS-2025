@@ -304,16 +304,18 @@ async function generateCierrePDF(sesion) {
     const ventasSnapshot = await getDocs(ventasQuery);
     const ventas = ventasSnapshot.docs.map(doc => doc.data());
 
-    const totalTransferencia = ventas.reduce((sum, v) => sum + (v.pagos.transferencia || 0), 0);
-    const totalDebito = ventas.reduce((sum, v) => sum + (v.pagos.debito || 0), 0);
-    const totalCredito = ventas.reduce((sum, v) => sum + (v.pagos.credito || 0), 0);
-    const totalGeneral = sesion.totalVentasEfectivo + totalTransferencia + totalDebito + totalCredito;
+    const totalTransferencia = ventas.reduce((sum, v) => sum + (v.pagos?.transferencia || 0), 0);
+    const totalDebito = ventas.reduce((sum, v) => sum + (v.pagos?.debito || 0), 0);
+    const totalCredito = ventas.reduce((sum, v) => sum + (v.pagos?.credito || 0), 0);
+    const totalACuenta = ventas.reduce((sum, v) => sum + (v.pagos?.a_cuenta || 0), 0);
+    const totalGeneral = sesion.totalVentasEfectivo + totalTransferencia + totalDebito + totalCredito + totalACuenta;
 
     doc.setFontSize(12);
     drawLineItem("Total Efectivo:", sesion.totalVentasEfectivo);
     drawLineItem("Total Transferencia:", totalTransferencia);
     drawLineItem("Total Débito:", totalDebito);
     drawLineItem("Total Crédito:", totalCredito);
+    drawLineItem("Total A Cuenta (Fiado):", totalACuenta);
     y += lineHeight * 0.5;
     doc.line(margin, y, pageWidth - margin, y);
     y += lineHeight;

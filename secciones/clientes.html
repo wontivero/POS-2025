@@ -1,63 +1,127 @@
 <section id="seccion-clientes">
-    <div class="d-flex justify-content-between align-items-center mb-4">
+    <!-- Encabezado de Sección -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-2">
         <div>
-            <h2 class="mb-1"><i class="fas fa-users me-2"></i>Gestión de Clientes</h2>
-            <p class="text-muted mb-0">Administra perfiles y puntos de fidelidad.</p>
+            <h2 class="mb-1 text-gray-800 fw-bold"><i class="fas fa-users-cog text-primary me-2"></i>Gestión de Clientes y Cuentas Corrientes</h2>
+            <p class="text-muted mb-0">Control de saldos fiados, cobranzas, perfiles y puntos de fidelidad.</p>
         </div>
-        <button class="btn btn-primary" id="btnNuevoClienteSeccion">
-            <i class="fas fa-plus me-2"></i>Nuevo Cliente
+        <button class="btn btn-primary shadow-sm rounded-pill px-4 py-2 fw-bold" id="btnNuevoClienteSeccion">
+            <i class="fas fa-user-plus me-2"></i>Nuevo Cliente
         </button>
     </div>
 
-    <!-- Tarjetas de Resumen -->
-    <div class="row mb-4">
-        <div class="col-md-4">
-            <div class="card border-left-primary shadow h-100 py-2">
+    <!-- Tarjetas de Resumen / KPIs -->
+    <div class="row mb-4 g-3">
+        <!-- Total Clientes -->
+        <div class="col-xl-3 col-md-6">
+            <div class="card border-left-primary shadow-sm h-100 py-2 border-0">
                 <div class="card-body">
                     <div class="row no-gutters align-items-center">
                         <div class="col mr-2">
                             <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">Total Clientes</div>
-                            <div class="h5 mb-0 font-weight-bold text-gray-800" id="total-clientes-count">0</div>
+                            <div class="h4 mb-0 font-weight-bold text-gray-800" id="total-clientes-count">0</div>
                         </div>
-                        <div class="col-auto"><i class="fas fa-user fa-2x text-gray-300"></i></div>
+                        <div class="col-auto">
+                            <div class="rounded-circle bg-primary bg-opacity-10 p-3 text-primary">
+                                <i class="fas fa-users fa-2x"></i>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
-        <div class="col-md-4">
-            <div class="card border-left-warning shadow h-100 py-2">
+
+        <!-- Total Deuda en la Calle -->
+        <div class="col-xl-3 col-md-6">
+            <div class="card border-left-danger shadow-sm h-100 py-2 border-0">
                 <div class="card-body">
                     <div class="row no-gutters align-items-center">
                         <div class="col mr-2">
-                            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">Puntos Circulantes</div>
-                            <div class="h5 mb-0 font-weight-bold text-gray-800" id="total-puntos-circulantes">0</div>
+                            <div class="text-xs font-weight-bold text-danger text-uppercase mb-1">Deuda en la Calle (Fiado)</div>
+                            <div class="h4 mb-0 font-weight-bold text-danger" id="total-deuda-calle">$0.00</div>
                         </div>
-                        <div class="col-auto"><i class="fas fa-star fa-2x text-gray-300"></i></div>
+                        <div class="col-auto">
+                            <div class="rounded-circle bg-danger bg-opacity-10 p-3 text-danger">
+                                <i class="fas fa-hand-holding-usd fa-2x"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Clientes con Deuda -->
+        <div class="col-xl-3 col-md-6">
+            <div class="card border-left-warning shadow-sm h-100 py-2 border-0">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">Clientes con Deuda</div>
+                            <div class="h4 mb-0 font-weight-bold text-gray-800" id="total-clientes-deuda-count">0</div>
+                        </div>
+                        <div class="col-auto">
+                            <div class="rounded-circle bg-warning bg-opacity-10 p-3 text-warning">
+                                <i class="fas fa-exclamation-circle fa-2x"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Puntos Circulantes -->
+        <div class="col-xl-3 col-md-6">
+            <div class="card border-left-info shadow-sm h-100 py-2 border-0">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-info text-uppercase mb-1">Puntos Club Circulantes</div>
+                            <div class="h4 mb-0 font-weight-bold text-gray-800" id="total-puntos-circulantes">0</div>
+                        </div>
+                        <div class="col-auto">
+                            <div class="rounded-circle bg-info bg-opacity-10 p-3 text-info">
+                                <i class="fas fa-star fa-2x"></i>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Filtros y Tabla -->
-    <div class="card shadow mb-4">
-        <div class="card-header py-3 bg-white d-flex justify-content-between align-items-center">
-            <h6 class="m-0 font-weight-bold text-primary">Directorio</h6>
-            <div class="input-group" style="width: 300px;">
-                <span class="input-group-text bg-light border-0"><i class="fas fa-search text-gray-400"></i></span>
-                <input type="text" class="form-control bg-light border-0 small" placeholder="Buscar cliente..." id="filtro-clientes-input">
+    <!-- Directorio de Clientes -->
+    <div class="card shadow-sm border-0 mb-4 rounded-4 overflow-hidden">
+        <div class="card-header bg-white py-3 px-4 d-flex flex-wrap justify-content-between align-items-center gap-3 border-bottom">
+            <!-- Pestañas Filtro -->
+            <div class="filter-pills-group d-flex gap-2 flex-wrap" id="filtros-estado-clientes">
+                <button type="button" class="btn btn-sm btn-primary active filter-pill" data-filtro="todos">
+                    <i class="fas fa-list me-1"></i>Todos (<span id="count-filtro-todos">0</span>)
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-danger filter-pill" data-filtro="con_deuda">
+                    <i class="fas fa-clock me-1"></i>Con Deuda (<span id="count-filtro-deuda">0</span>)
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-success filter-pill" data-filtro="al_dia">
+                    <i class="fas fa-check-circle me-1"></i>Al Día (<span id="count-filtro-aldia">0</span>)
+                </button>
+            </div>
+
+            <!-- Buscador -->
+            <div class="input-group" style="max-width: 340px;">
+                <span class="input-group-text bg-light border-0 ps-3"><i class="fas fa-search text-muted"></i></span>
+                <input type="text" class="form-control bg-light border-0 small py-2" placeholder="Buscar por nombre, DNI, teléfono..." id="filtro-clientes-input">
             </div>
         </div>
+
         <div class="card-body p-0">
             <div class="table-responsive">
                 <table class="table table-hover align-middle mb-0" id="tabla-clientes">
-                    <thead class="bg-light">
+                    <thead class="table-light text-muted small text-uppercase">
                         <tr>
-                            <th class="ps-4">Cliente</th>
-                            <th>Contacto</th>
-                            <th>Puntos</th>
-                            <th>Estado</th>
-                            <th class="text-end pe-4">Acciones</th>
+                            <th class="ps-4 py-3">Cliente</th>
+                            <th class="py-3">Contacto</th>
+                            <th class="py-3">Cuenta Corriente</th>
+                            <th class="py-3">Fidelidad</th>
+                            <th class="text-end pe-4 py-3">Acciones</th>
                         </tr>
                     </thead>
                     <tbody id="tabla-clientes-body">
@@ -68,85 +132,374 @@
         </div>
     </div>
 
-    <!-- Modal Detalle Cliente & Loyalty -->
-    <div class="modal fade" id="clienteLoyaltyModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header bg-primary text-white">
-                    <h5 class="modal-title"><i class="fas fa-id-card me-2"></i>Perfil del Cliente</h5>
+    <!-- Modal Ficha Integral del Cliente (Cuenta Corriente, Compras, Datos, Loyalty) -->
+    <div class="modal fade" id="modalFichaCliente" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content rounded-4 border-0 shadow-lg">
+                <!-- Header Ficha -->
+                <div class="modal-header bg-dark text-white border-0 py-3 px-4">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="avatar-initials-badge fs-4" id="ficha-avatar-initials" style="width: 50px; height: 50px;">
+                            C
+                        </div>
+                        <div>
+                            <div class="d-flex align-items-center gap-2">
+                                <h4 class="modal-title mb-0 fw-bold" id="ficha-cliente-nombre">Cliente</h4>
+                                <span class="badge" id="ficha-cliente-estado-badge">Al día</span>
+                            </div>
+                            <small class="text-white-50" id="ficha-cliente-cuit">DNI: -</small>
+                        </div>
+                    </div>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <div class="modal-body">
-                    <div class="row">
-                        <!-- Columna Izquierda: Datos Personales -->
-                        <div class="col-md-5 border-end">
-                            <div class="text-center mb-3">
-                                <div class="avatar-circle bg-primary text-white d-inline-flex align-items-center justify-content-center rounded-circle" style="width: 80px; height: 80px; font-size: 2rem;">
-                                    <span id="loyalty-avatar-initials">JP</span>
-                                </div>
-                                <h5 class="mt-2 mb-0 fw-bold" id="loyalty-cliente-nombre">Juan Perez</h5>
-                                <small class="text-muted" id="loyalty-cliente-cuit">20-30405060-9</small>
-                            </div>
-                            <form id="form-editar-cliente-loyalty">
-                                <input type="hidden" id="loyalty-cliente-id">
-                                <div class="mb-2"><label class="small text-muted">Email</label><input type="email" class="form-control form-control-sm" id="loyalty-email"></div>
-                                <div class="mb-2"><label class="small text-muted">Teléfono</label><input type="text" class="form-control form-control-sm" id="loyalty-telefono"></div>
-                                <div class="mb-3"><label class="small text-muted">Domicilio</label><input type="text" class="form-control form-control-sm" id="loyalty-domicilio"></div>
-                                <button type="submit" class="btn btn-sm btn-outline-primary w-100">Guardar Datos</button>
-                            </form>
-                        </div>
-                        <!-- Columna Derecha: Loyalty -->
-                        <div class="col-md-7 ps-md-4">
-                            <div class="card bg-light border-0 mb-3">
-                                <div class="card-body d-flex justify-content-between align-items-center">
+
+                <!-- Nav Tabs -->
+                <div class="bg-light px-4 pt-3 border-bottom">
+                    <ul class="nav nav-tabs border-0" id="fichaTabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active fw-bold text-dark border-0 border-bottom border-3 border-primary pb-2 px-3" id="tab-cc-btn" data-bs-toggle="tab" data-bs-target="#tab-cc-pane" type="button" role="tab">
+                                <i class="fas fa-wallet text-primary me-2"></i>Cuenta Corriente
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link fw-bold text-muted border-0 pb-2 px-3" id="tab-compras-btn" data-bs-toggle="tab" data-bs-target="#tab-compras-pane" type="button" role="tab">
+                                <i class="fas fa-shopping-bag text-secondary me-2"></i>Historial de Compras
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link fw-bold text-muted border-0 pb-2 px-3" id="tab-datos-btn" data-bs-toggle="tab" data-bs-target="#tab-datos-pane" type="button" role="tab">
+                                <i class="fas fa-user-edit text-secondary me-2"></i>Datos Personales
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link fw-bold text-muted border-0 pb-2 px-3" id="tab-loyalty-btn" data-bs-toggle="tab" data-bs-target="#tab-loyalty-pane" type="button" role="tab">
+                                <i class="fas fa-star text-warning me-2"></i>Puntos Loyalty
+                            </button>
+                        </li>
+                    </ul>
+                </div>
+
+                <!-- Tab Content -->
+                <div class="modal-body p-4">
+                    <div class="tab-content" id="fichaTabsContent">
+                        
+                        <!-- TAB 1: CUENTA CORRIENTE -->
+                        <div class="tab-pane fade show active" id="tab-cc-pane" role="tabpanel">
+                            <!-- Banner Estado Saldo -->
+                            <div class="card border-0 shadow-sm rounded-4 mb-4" id="ficha-cc-saldo-card" style="background: linear-gradient(135deg, #f8f9fc 0%, #edf2f9 100%);">
+                                <div class="card-body p-4 d-flex flex-wrap justify-content-between align-items-center gap-3">
                                     <div>
-                                        <small class="text-uppercase text-muted fw-bold">Puntos Disponibles</small>
-                                        <h2 class="mb-0 text-primary fw-bold" id="loyalty-puntos-display">0</h2>
+                                        <span class="text-uppercase text-muted fw-bold small">Saldo Actual Pendiente</span>
+                                        <h2 class="display-6 fw-bold mb-0" id="ficha-saldo-deudor-display">$0.00</h2>
+                                        <small class="text-muted d-block" id="ficha-saldo-deudor-info">El cliente no registra deuda pendiente.</small>
+                                        <div class="mt-2 d-flex flex-wrap align-items-center gap-2 small" id="ficha-limite-credito-info">
+                                            <span class="badge bg-secondary-subtle text-dark border">
+                                                <i class="fas fa-shield-alt text-primary me-1"></i>Límite: <strong id="ficha-limite-credito-valor">$50.000</strong>
+                                            </span>
+                                            <span class="badge" id="ficha-limite-credito-disponible-badge">
+                                                Disponible: $50.000
+                                            </span>
+                                        </div>
                                     </div>
-                                    <button class="btn btn-sm btn-outline-secondary" id="btn-ajuste-manual-puntos"><i class="fas fa-sliders-h me-1"></i>Ajustar</button>
+                                    <div class="d-flex flex-wrap gap-2">
+                                        <button class="btn btn-success fw-bold px-3 py-2 rounded-pill shadow-sm" id="btn-ficha-cobrar-deuda">
+                                            <i class="fas fa-hand-holding-usd me-2"></i>Registrar Cobro / Abono
+                                        </button>
+                                        <button class="btn btn-outline-success fw-bold px-3 py-2 rounded-pill" id="btn-ficha-whatsapp-deuda">
+                                            <i class="fab fa-whatsapp me-2"></i>Notificar por WhatsApp
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
-                            <h6 class="fw-bold text-muted mb-3">Historial de Movimientos</h6>
-                            <div class="list-group list-group-flush small" id="loyalty-historial-list" style="max-height: 250px; overflow-y: auto;">
-                                <!-- Historial renderizado por JS -->
+
+                            <!-- Tabla Movimientos CC -->
+                            <h6 class="fw-bold text-dark mb-3"><i class="fas fa-history me-2 text-primary"></i>Extracto de Movimientos de Cuenta Corriente</h6>
+                            <div class="table-responsive rounded-3 border">
+                                <table class="table table-hover align-middle mb-0">
+                                    <thead class="table-light small text-uppercase">
+                                        <tr>
+                                            <th>Fecha y Hora</th>
+                                            <th>Tipo</th>
+                                            <th>Detalle / Concepto</th>
+                                            <th class="text-end">Monto</th>
+                                            <th>Registrado por</th>
+                                            <th class="text-center">Comprobante</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="ficha-cc-movimientos-list">
+                                        <!-- JS renderizará movimientos de CC aquí -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- TAB 2: HISTORIAL DE COMPRAS -->
+                        <div class="tab-pane fade" id="tab-compras-pane" role="tabpanel">
+                            <h6 class="fw-bold text-dark mb-3"><i class="fas fa-receipt me-2 text-primary"></i>Compras Realizadas por el Cliente</h6>
+                            <div class="table-responsive rounded-3 border">
+                                <table class="table table-hover align-middle mb-0">
+                                    <thead class="table-light small text-uppercase">
+                                        <tr>
+                                            <th>Ticket #</th>
+                                            <th>Fecha y Hora</th>
+                                            <th>Productos</th>
+                                            <th class="text-end">Total</th>
+                                            <th>Forma de Pago</th>
+                                            <th class="text-center">Acción</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="ficha-compras-list">
+                                        <!-- JS renderizará compras aquí -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- TAB 3: DATOS PERSONALES -->
+                        <div class="tab-pane fade" id="tab-datos-pane" role="tabpanel">
+                            <div class="row justify-content-center">
+                                <div class="col-lg-8">
+                                    <div class="card border-0 shadow-sm rounded-4 p-4">
+                                        <h5 class="fw-bold mb-3"><i class="fas fa-user-edit me-2 text-primary"></i>Editar Datos del Cliente</h5>
+                                        <form id="form-editar-cliente-ficha">
+                                            <input type="hidden" id="ficha-cliente-id">
+                                            <div class="mb-3">
+                                                <label class="form-label small fw-bold">Nombre Completo <span class="text-danger">*</span></label>
+                                                <input type="text" class="form-control" id="ficha-nombre" required>
+                                            </div>
+                                            <div class="row">
+                                                <div class="col-md-6 mb-3">
+                                                    <label class="form-label small fw-bold">DNI / CUIT</label>
+                                                    <input type="text" class="form-control" id="ficha-cuit" placeholder="Sin guiones">
+                                                </div>
+                                                <div class="col-md-6 mb-3">
+                                                    <label class="form-label small fw-bold">Teléfono (WhatsApp)</label>
+                                                    <input type="text" class="form-control" id="ficha-telefono" placeholder="Ej: 1123456789">
+                                                </div>
+                                            </div>
+                                            <div class="mb-3">
+                                                <label class="form-label small fw-bold">Correo Electrónico</label>
+                                                <input type="email" class="form-control" id="ficha-email" placeholder="cliente@correo.com">
+                                            </div>
+                                            <div class="mb-3">
+                                                <label class="form-label small fw-bold">Domicilio</label>
+                                                <input type="text" class="form-control" id="ficha-domicilio" placeholder="Calle, Número, Ciudad">
+                                            </div>
+                                            <div class="mb-4">
+                                                <label class="form-label small fw-bold d-flex justify-content-between align-items-center">
+                                                    <span><i class="fas fa-hand-holding-usd text-primary me-1"></i>Límite de Crédito / Fiado ($)</span>
+                                                    <small class="text-muted fw-normal">Por defecto: $50.000</small>
+                                                </label>
+                                                <div class="input-group">
+                                                    <span class="input-group-text bg-light">$</span>
+                                                    <input type="number" class="form-control" id="ficha-limite-credito" value="50000" step="1000" min="0" placeholder="50000">
+                                                </div>
+                                                <div class="form-text small">Tope máximo de deuda fiada autorizado para este cliente.</div>
+                                            </div>
+                                            <button type="submit" class="btn btn-primary rounded-pill px-4 fw-bold">
+                                                <i class="fas fa-save me-2"></i>Guardar Modificaciones
+                                            </button>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- TAB 4: PUNTOS LOYALTY -->
+                        <div class="tab-pane fade" id="tab-loyalty-pane" role="tabpanel">
+                            <div class="row g-4">
+                                <div class="col-md-5">
+                                    <div class="card bg-light border-0 rounded-4 p-4 text-center">
+                                        <small class="text-uppercase text-muted fw-bold">Puntos Disponibles</small>
+                                        <h1 class="display-4 fw-bold text-primary my-2" id="ficha-loyalty-puntos-display">0</h1>
+                                        <p class="text-muted small mb-3">Equivalen a beneficios y descuentos exclusivos.</p>
+                                        <button class="btn btn-outline-secondary rounded-pill px-3 py-2 fw-bold" id="btn-ficha-ajuste-puntos">
+                                            <i class="fas fa-sliders-h me-2"></i>Ajustar Puntos Manualmente
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="col-md-7">
+                                    <h6 class="fw-bold text-dark mb-3"><i class="fas fa-star me-2 text-warning"></i>Historial de Movimientos de Puntos</h6>
+                                    <div class="list-group list-group-flush rounded-3 border small" id="loyalty-historial-list" style="max-height: 300px; overflow-y: auto;">
+                                        <!-- Historial renderizado por JS -->
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+
+                <!-- Footer Ficha -->
+                <div class="modal-footer bg-light border-0 px-4 py-3 d-flex justify-content-between">
+                    <button type="button" class="btn btn-outline-danger btn-eliminar-cliente-modal rounded-pill px-3">
+                        <i class="fas fa-trash-alt me-2"></i>Eliminar Cliente
+                    </button>
+                    <button type="button" class="btn btn-secondary rounded-pill px-4" data-bs-dismiss="modal">
+                        Cerrar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Registrar Cobro / Abono de Cuenta Corriente -->
+    <div class="modal fade" id="modalCobroCuentaCorriente" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content rounded-4 border-0 shadow-lg">
+                <div class="modal-header bg-success text-white border-0 py-3 px-4">
+                    <h5 class="modal-title fw-bold mb-0">
+                        <i class="fas fa-hand-holding-usd me-2"></i>Registrar Cobro / Abono
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <!-- Resumen del Cliente y Deuda -->
+                    <div class="bg-light rounded-4 p-3 mb-4 border">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <small class="text-muted text-uppercase fw-bold">Cliente</small>
+                                <h6 class="fw-bold mb-0" id="cobro-cc-cliente-nombre">Cliente</h6>
+                            </div>
+                            <div class="text-end">
+                                <small class="text-muted text-uppercase fw-bold">Deuda Actual</small>
+                                <h5 class="fw-bold text-danger mb-0" id="cobro-cc-deuda-actual">$0.00</h5>
                             </div>
                         </div>
                     </div>
+
+                    <form id="formCobroCuentaCorriente">
+                        <!-- Monto -->
+                        <div class="mb-3">
+                            <label for="cobro-cc-monto" class="form-label small fw-bold">Monto a Cobrar ($) <span class="text-danger">*</span></label>
+                            <input type="number" class="form-control form-control-lg fw-bold text-center text-success fs-3" id="cobro-cc-monto" step="any" min="1" placeholder="0.00" required>
+                            <div class="d-flex gap-2 mt-2">
+                                <button type="button" class="btn btn-sm btn-outline-primary flex-fill rounded-pill" id="btn-cobro-todo">
+                                    Pagar Total
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary flex-fill rounded-pill" id="btn-cobro-mitad">
+                                    Pagar 50%
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Método de Pago -->
+                        <div class="mb-3">
+                            <label for="cobro-cc-metodo" class="form-label small fw-bold">Método de Pago Recibido</label>
+                            <select class="form-select" id="cobro-cc-metodo">
+                                <option value="contado">Efectivo / Contado</option>
+                                <option value="transferencia">Transferencia Bancaria</option>
+                                <option value="debito">Tarjeta de Débito / QR</option>
+                                <option value="credito">Tarjeta de Crédito</option>
+                            </select>
+                        </div>
+
+                        <!-- Checkbox Caja Activa -->
+                        <div class="card bg-light border-0 rounded-3 p-3 mb-3">
+                            <div class="form-check form-switch mb-0">
+                                <input class="form-check-input" type="checkbox" id="cobro-cc-registrar-caja" checked>
+                                <label class="form-check-label small fw-bold" for="cobro-cc-registrar-caja">
+                                    Registrar como ingreso en la caja activa
+                                </label>
+                            </div>
+                            <small class="text-muted mt-1 d-block" id="cobro-cc-caja-estado-text">
+                                Sumará al arqueo del turno actual.
+                            </small>
+                        </div>
+
+                        <!-- Checkbox Facturación ARCA Opcional -->
+                        <div class="card bg-light border-0 rounded-3 p-3 mb-3">
+                            <div class="form-check form-switch mb-0">
+                                <input class="form-check-input" type="checkbox" id="cobro-cc-facturar-arca">
+                                <label class="form-check-label small fw-bold text-dark" for="cobro-cc-facturar-arca">
+                                    <i class="fas fa-file-invoice text-primary me-1"></i>Emitir Factura Electrónica ARCA
+                                </label>
+                            </div>
+                            <small class="text-muted mt-1 d-block" id="cobro-cc-arca-estado-text">
+                                Autoriza factura oficial con CAE en AFIP/ARCA por este abono.
+                            </small>
+                        </div>
+
+                        <!-- Concepto / Observaciones -->
+                        <div class="mb-2">
+                            <label for="cobro-cc-concepto" class="form-label small fw-bold">Concepto / Nota</label>
+                            <input type="text" class="form-control form-control-sm" id="cobro-cc-concepto" value="Cobro cuenta corriente">
+                        </div>
+                    </form>
                 </div>
-                <div class="modal-footer justify-content-between bg-light">
-                    <button type="button" class="btn btn-outline-danger btn-eliminar-cliente-modal"><i class="fas fa-trash-alt me-2"></i>Eliminar Cliente</button>
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                <div class="modal-footer bg-light border-0 px-4 py-3">
+                    <button type="button" class="btn btn-secondary rounded-pill px-3" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-success fw-bold rounded-pill px-4 shadow-sm" id="btn-confirmar-cobro-cc">
+                        <i class="fas fa-check-circle me-1"></i>Confirmar Cobro
+                    </button>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Modal Detalle de Ticket (Reutilizado de Reportes) -->
-    <div class="modal fade" id="ticketModal" tabindex="-1" aria-labelledby="ticketModalTitulo" aria-hidden="true">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="ticketModalTitulo">Detalle de Venta</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+    <!-- Modal ABM Cliente (Nuevo / Editar) -->
+    <div class="modal fade" id="modalClienteABM" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content rounded-4 border-0 shadow-lg">
+                <div class="modal-header bg-primary text-white border-0 py-3 px-4">
+                    <h5 class="modal-title fw-bold" id="modalClienteABMLabel">Nuevo Cliente</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <div class="modal-body" id="ticketModalBody">
+                <div class="modal-body p-4">
+                    <form id="formClienteABM">
+                        <input type="hidden" id="abm-cliente-id">
+                        <div class="mb-3">
+                            <label for="abm-cliente-nombre" class="form-label small fw-bold">Nombre Completo <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="abm-cliente-nombre" placeholder="Ej: Maria Gonzalez" required>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="abm-cliente-cuit" class="form-label small fw-bold">DNI / CUIT</label>
+                                <input type="text" class="form-control" id="abm-cliente-cuit" placeholder="Sin guiones">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="abm-cliente-telefono" class="form-label small fw-bold">Teléfono (WhatsApp)</label>
+                                <input type="text" class="form-control" id="abm-cliente-telefono" placeholder="Ej: 1123456789">
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="abm-cliente-email" class="form-label small fw-bold">Correo Electrónico</label>
+                            <input type="email" class="form-control" id="abm-cliente-email" placeholder="cliente@email.com">
+                        </div>
+                        <div class="mb-3">
+                            <label for="abm-cliente-domicilio" class="form-label small fw-bold">Domicilio</label>
+                            <input type="text" class="form-control" id="abm-cliente-domicilio" placeholder="Calle, Número, Ciudad">
+                        </div>
+                        <div class="mb-3">
+                            <label for="abm-cliente-limite-credito" class="form-label small fw-bold d-flex justify-content-between align-items-center">
+                                <span><i class="fas fa-hand-holding-usd text-primary me-1"></i>Límite de Crédito / Fiado ($)</span>
+                                <small class="text-muted fw-normal">Por defecto: $50.000</small>
+                            </label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light">$</span>
+                                <input type="number" class="form-control" id="abm-cliente-limite-credito" value="50000" step="1000" min="0" placeholder="50000">
+                            </div>
+                            <div class="form-text small">Tope máximo de deuda fiada acumulable. Si se supera en ventas, el sistema avisará.</div>
+                        </div>
+                    </form>
                 </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                <div class="modal-footer bg-light border-0 px-4 py-3">
+                    <button type="button" class="btn btn-secondary rounded-pill px-3" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-primary rounded-pill px-4 fw-bold shadow-sm" id="btnGuardarClienteABM">Guardar Cliente</button>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Modal Ajuste Manual de Puntos -->
+    <!-- Modal Ajuste Manual de Puntos (Loyalty) -->
     <div class="modal fade" id="modalAjustePuntos" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered modal-sm">
-            <div class="modal-content">
-                <div class="modal-header bg-light">
+            <div class="modal-content rounded-4 border-0 shadow">
+                <div class="modal-header bg-light border-0">
                     <h5 class="modal-title fs-6 fw-bold">Ajustar Puntos</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <div class="modal-body">
+                <div class="modal-body p-3">
                     <div class="mb-3 text-center">
                         <span class="text-muted small text-uppercase fw-bold">Puntos Actuales</span>
                         <h2 class="fw-bold text-primary mb-0" id="ajuste-puntos-actuales">0</h2>
@@ -168,50 +521,24 @@
                         <label class="form-label small fw-bold">Motivo / Concepto</label>
                         <textarea class="form-control form-control-sm" id="ajuste-concepto" rows="2" placeholder="Ej: Regalo cumpleaños, Corrección error..."></textarea>
                     </div>
-                    <button type="button" class="btn btn-primary w-100" id="btn-confirmar-ajuste">Aplicar Ajuste</button>
+                    <button type="button" class="btn btn-primary rounded-pill w-100 fw-bold" id="btn-confirmar-ajuste">Aplicar Ajuste</button>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Modal ABM Cliente (Nuevo / Editar) -->
-    <div class="modal fade" id="modalClienteABM" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content">
-                <div class="modal-header bg-primary text-white">
-                    <h5 class="modal-title" id="modalClienteABMLabel">Nuevo Cliente</h5>
+    <!-- Modal Detalle de Ticket (Reutilizado de Reportes/Ventas) -->
+    <div class="modal fade" id="ticketModal" tabindex="-1" aria-labelledby="ticketModalTitulo" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content rounded-4 border-0 shadow-lg">
+                <div class="modal-header bg-dark text-white border-0 py-3 px-4">
+                    <h5 class="modal-title fw-bold" id="ticketModalTitulo">Detalle de Venta</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <div class="modal-body">
-                    <form id="formClienteABM">
-                        <input type="hidden" id="abm-cliente-id">
-                        <div class="mb-3">
-                            <label for="abm-cliente-nombre" class="form-label small fw-bold">Nombre Completo <span class="text-danger">*</span></label>
-                            <input type="text" class="form-control" id="abm-cliente-nombre" placeholder="Ej: Maria Gonzalez" required>
-                        </div>
-                        <div class="row">
-                            <div class="col-md-6 mb-3">
-                                <label for="abm-cliente-cuit" class="form-label small fw-bold">DNI / CUIT</label>
-                                <input type="text" class="form-control" id="abm-cliente-cuit" placeholder="Sin guiones">
-                            </div>
-                            <div class="col-md-6 mb-3">
-                                <label for="abm-cliente-telefono" class="form-label small fw-bold">Teléfono</label>
-                                <input type="text" class="form-control" id="abm-cliente-telefono">
-                            </div>
-                        </div>
-                        <div class="mb-3">
-                            <label for="abm-cliente-email" class="form-label small fw-bold">Correo Electrónico</label>
-                            <input type="email" class="form-control" id="abm-cliente-email" placeholder="cliente@email.com">
-                        </div>
-                        <div class="mb-3">
-                            <label for="abm-cliente-domicilio" class="form-label small fw-bold">Domicilio</label>
-                            <input type="text" class="form-control" id="abm-cliente-domicilio">
-                        </div>
-                    </form>
+                <div class="modal-body p-4" id="ticketModalBody">
                 </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="button" class="btn btn-primary" id="btnGuardarClienteABM">Guardar Cliente</button>
+                <div class="modal-footer bg-light border-0 px-4 py-3">
+                    <button type="button" class="btn btn-secondary rounded-pill px-4" data-bs-dismiss="modal">Cerrar</button>
                 </div>
             </div>
         </div>
