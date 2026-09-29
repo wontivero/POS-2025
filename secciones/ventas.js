@@ -160,14 +160,14 @@ function checkStockIssuesGlobally() {
         const p = productosPlanos.find(x => x.id === item.id);
         return p && p.publicarEnWeb && item.cantidad > p.stock;
     });
-    
+
     const metodosPagoCard = document.querySelector('.btn-pago-rapido')?.closest('.card');
-    
+
     if (hasStockIssues) {
         btnsPagoRapido.forEach(btn => btn.disabled = true);
         camposPago.forEach(input => input.disabled = true);
         document.getElementById('txtRecargoCredito').disabled = true;
-        
+
         if (metodosPagoCard && !document.getElementById('stock-issue-banner')) {
             const banner = document.createElement('div');
             banner.id = 'stock-issue-banner';
@@ -179,11 +179,11 @@ function checkStockIssuesGlobally() {
         btnsPagoRapido.forEach(btn => btn.disabled = false);
         camposPago.forEach(input => input.disabled = false);
         document.getElementById('txtRecargoCredito').disabled = false;
-        
+
         const banner = document.getElementById('stock-issue-banner');
         if (banner) banner.remove();
     }
-    
+
     checkFinalizarVenta();
 }
 
@@ -205,7 +205,7 @@ function renderTicket() {
 
         const itemDiv = document.createElement('div');
         itemDiv.className = `list-group-item d-flex justify-content-between align-items-center p-2 ticket-item ${isExceeded ? 'bg-danger bg-opacity-10 border-danger' : ''}`;
-        
+
         // --- Lógica para el efecto visual ---
         if (item.justAdded || item.justChanged) {
             itemDiv.classList.add('animate-highlight');
@@ -214,10 +214,10 @@ function renderTicket() {
             delete item.justChanged;
         }
         // --- Fin de la lógica para el efecto visual ---
- 
+
         const genericIndicator = item.isGeneric ? '<i class="fas fa-pencil-alt fa-xs text-info ms-2" title="Precio manual"></i>' : '';
         const marcaTexto = item.marca ? `<span class="text-muted fw-normal"> - ${item.marca}</span>` : '';
- 
+
         // --- INICIO: Lógica para el ícono de edición de precio ---
         // No mostramos el lápiz para productos genéricos, ya que su precio se define al agregar.
         // Usamos un botón sin bordes con data-bs-toggle nativo para evitar bugs de JS y saltos de pantalla
@@ -232,7 +232,7 @@ function renderTicket() {
 
         const stockWarningHtml = isExceeded ? `<small class="text-danger fw-bold d-block stock-warning-text mt-1"><i class="fas fa-exclamation-triangle"></i> Límite excedido (Stock TN: ${productoOriginal.stock})</small>` : '';
         // --- FIN: Lógica para el ícono de edición de precio ---
- 
+
         itemDiv.innerHTML = `
             <div>
                 <h6 class="mb-1 ticket-item-nombre">${item.nombre}${marcaTexto}${genericIndicator}</h6>
@@ -323,7 +323,7 @@ function initEditPriceModalListeners() {
         if (productoOriginal) {
             const modalInstance = bootstrap.Modal.getInstance(editPriceModalEl);
             if (modalInstance) modalInstance.hide();
-            
+
             // Esperamos un poco para que el modal se cierre bien
             await new Promise(resolve => setTimeout(resolve, 200));
 
@@ -340,17 +340,17 @@ function initEditPriceModalListeners() {
             return;
         }
 
-            const productIndex = ticket.findIndex(p => p.id === currentEditingProductId);
-            if (productIndex > -1) {
-                ticket[productIndex].precio = newPriceForTicket;
-                ticket[productIndex].total = newPriceForTicket * ticket[productIndex].cantidad;
-                ticket[productIndex].precioManual = true; // <-- MARCAMOS EL PRECIO COMO MANUAL
-                ticket[productIndex].justChanged = true;
-            }
-        
-            renderTicket();
-            const modalInstance = bootstrap.Modal.getInstance(editPriceModalEl);
-            if (modalInstance) modalInstance.hide();
+        const productIndex = ticket.findIndex(p => p.id === currentEditingProductId);
+        if (productIndex > -1) {
+            ticket[productIndex].precio = newPriceForTicket;
+            ticket[productIndex].total = newPriceForTicket * ticket[productIndex].cantidad;
+            ticket[productIndex].precioManual = true; // <-- MARCAMOS EL PRECIO COMO MANUAL
+            ticket[productIndex].justChanged = true;
+        }
+
+        renderTicket();
+        const modalInstance = bootstrap.Modal.getInstance(editPriceModalEl);
+        if (modalInstance) modalInstance.hide();
     });
 }
 
@@ -365,10 +365,10 @@ function handleQuantityLiveUpdate(e) {
 
     item.cantidad = newQuantity;
     item.total = item.precio * newQuantity;
-    
+
     const productoOriginal = productosPlanos.find(p => p.id === item.id);
     const isExceeded = productoOriginal && productoOriginal.publicarEnWeb && newQuantity > productoOriginal.stock;
-    
+
     const itemDiv = e.target.closest('.ticket-item');
     if (itemDiv) {
         if (isExceeded) {
@@ -421,7 +421,7 @@ async function handleQuantityManualChange(e) {
             showToast(`Eliminado: <strong>${removedItem.nombre}</strong>`, 'fa-trash-alt', '#dc3545');
         }
     }
- 
+
     // Si todo es correcto, actualizamos la cantidad y el total
     else {
         item.cantidad = newQuantity;
@@ -544,11 +544,11 @@ function handleSearch(e) {
             if (producto.color) {
                 detalles.push(producto.color);
             }
-            
+
             // Unimos los detalles con un guion si ambos existen.
             const detallesTexto = detalles.join(' - ');
             // --- FIN DE LA NUEVA LÓGICA DE VISUALIZACIÓN ---
-            
+
             // --- INICIO: Indicador visual de stock bajo o nulo ---
             let stockIndicator = '';
             if (producto.stock <= 0) {
@@ -580,7 +580,7 @@ async function addProductToTicket(productId) {
     if (producto.isGeneric) {
         // Guardamos el producto que queremos agregar
         genericProductToAdd = producto;
-        
+
         // Destruimos la instancia anterior y creamos una nueva limpia para evitar bugs de Bootstrap
         if (genericPriceModalEl) {
             const oldInstance = bootstrap.Modal.getInstance(genericPriceModalEl);
@@ -590,8 +590,8 @@ async function addProductToTicket(productId) {
 
         // Preparamos y mostramos el modal
         genericProductName.textContent = producto.nombre;
-        genericPriceInput.value = ''; 
-        
+        genericPriceInput.value = '';
+
         // Pequeño timeout para asegurar que el DOM esté listo y no se cruce con otros eventos
         setTimeout(() => {
             genericPriceModal.show();
@@ -614,17 +614,17 @@ async function addProductToTicket(productId) {
         }
         if (!productoEncontradoEnTicket) {
             ticket.push({
-                id: producto.id, 
+                id: producto.id,
                 parentId: producto.parentId || null,
                 isVariant: producto.isVariant || false,
                 varianteCodigo: producto.varianteCodigo || null,
-                nombre: producto.nombre, 
-                marca: producto.marca || '', 
-                precio: producto.venta, 
+                nombre: producto.nombre,
+                marca: producto.marca || '',
+                precio: producto.venta,
                 costo: producto.costo,
-                cantidad: 1, 
-                total: producto.venta, 
-                isGeneric: false, 
+                cantidad: 1,
+                total: producto.venta,
+                isGeneric: false,
                 justAdded: true
             });
             showToast(`Agregado: <strong>${producto.nombre}</strong>`);
@@ -792,7 +792,7 @@ async function handleQuickPayment(e) {
 function startCheckoutProcessUI(montoTotal, willInvoiceARCA) {
     const modalEl = document.getElementById('confirmacionVentaModal');
     if (!modalEl) return;
-    
+
     const modalBody = modalEl.querySelector('.modal-body');
     const modalFooter = modalEl.querySelector('.modal-footer');
     const modalHeader = modalEl.querySelector('.modal-header');
@@ -851,9 +851,9 @@ function startCheckoutProcessUI(montoTotal, willInvoiceARCA) {
 function updateCheckoutStep(stepId, status) {
     const stepEl = document.getElementById(stepId);
     if (!stepEl) return;
-    
+
     stepEl.style.color = status === 'pending' ? '#495057' : (status === 'success' ? '#198754' : '#dc3545');
-    
+
     const iconEl = stepEl.querySelector('.step-icon');
     if (status === 'pending') {
         iconEl.innerHTML = '<div class="spinner-border spinner-border-sm text-primary" role="status"></div>';
@@ -867,7 +867,7 @@ function updateCheckoutStep(stepId, status) {
 function setCheckoutSuccessUI(venta, docId) {
     const modalEl = document.getElementById('confirmacionVentaModal');
     if (!modalEl) return;
-    
+
     // Restauramos la posibilidad de cerrar el modal
     modalEl.removeAttribute('data-bs-backdrop');
     modalEl.removeAttribute('data-bs-keyboard');
@@ -915,7 +915,7 @@ function setCheckoutSuccessUI(venta, docId) {
     if (modalFooter) {
         modalFooter.style.display = 'flex';
         modalFooter.className = 'modal-footer justify-content-center border-0 pt-0 pb-4 flex-wrap gap-2';
-        
+
         let arcaBtnHtml = '';
         if (venta.facturadoEnArca) {
             arcaBtnHtml = `<span class="badge bg-info p-3 fs-6 rounded-pill shadow-sm" title="Facturado en ARCA"><i class="fas fa-check-circle me-2"></i> ARCA</span>`;
@@ -930,7 +930,7 @@ function setCheckoutSuccessUI(venta, docId) {
             <button id="btnImprimirTicketModal" class="btn btn-outline-dark rounded-pill px-4 py-2 shadow-sm"><i class="fas fa-print me-2"></i> Imprimir</button>
             <button id="btnConfirmacionVentaOK" class="btn btn-primary rounded-pill px-4 py-2 fw-bold shadow-sm">Aceptar (<span id="venta-exitosa-countdown">10</span>)</button>
         `;
-        
+
         // Reconectamos los eventos
         document.getElementById('btnConfirmacionVentaOK').addEventListener('click', () => {
             const modalInstance = bootstrap.Modal.getInstance(modalEl);
@@ -960,7 +960,7 @@ function setCheckoutSuccessUI(venta, docId) {
                 btnFacturar.classList.add('btn-conectando-afip');
                 btnFacturar.innerHTML = '<span class="spinner-grow spinner-grow-sm me-2"></span>Conectando...';
                 btnFacturar.disabled = true;
-                
+
                 const result = await facturarEnArca(venta);
                 if (result.success) {
                     btnFacturar.classList.remove('btn-conectando-afip');
@@ -977,7 +977,7 @@ function setCheckoutSuccessUI(venta, docId) {
             });
         }
     }
-    
+
     startVentaExitosaCountdown();
 }
 
@@ -1078,7 +1078,7 @@ async function finalizarVenta() {
     try {
         let loyaltyPercentage = 1;
         let loyaltyConfig = { percentage: 1, expirationEnabled: false, expirationDays: 365 };
-        
+
         if (appConfig && appConfig.loyalty) {
             loyaltyConfig = { ...loyaltyConfig, ...appConfig.loyalty };
             loyaltyPercentage = loyaltyConfig.percentage;
@@ -1088,14 +1088,14 @@ async function finalizarVenta() {
         updateCheckoutStep('step-caja', 'pending');
 
         await runTransaction(db, async (transaction) => {
-            
+
             // 1. PREPARAR TODAS LAS REFERENCIAS
             const counterRef = doc(db, 'config', 'ticket_counter');
-            
+
             // Filtramos los productos que requieren verificación de stock
             const itemsNoGenericos = ticket.filter(item => !item.isGeneric);
             const productRefs = itemsNoGenericos.map(item => doc(db, 'productos', item.parentId || item.id));
-            
+
             let clienteRef = null;
             if (clienteSeleccionado && clienteSeleccionado.id) {
                 clienteRef = doc(db, 'clientes', clienteSeleccionado.id);
@@ -1114,7 +1114,7 @@ async function finalizarVenta() {
             const results = await Promise.all(reads);
 
             // 3. PROCESAR RESULTADOS
-            
+
             // A) Procesar Número de Ticket (Instantáneo)
             const counterDoc = results[0];
             let ticketNumber = 1;
@@ -1128,7 +1128,7 @@ async function finalizarVenta() {
             // B) Procesar Productos
             const productsToUpdate = [];
             const productDocs = results.slice(1, 1 + productRefs.length);
-            
+
             itemsNoGenericos.forEach((item, index) => {
                 const productDoc = productDocs[index];
                 if (!productDoc.exists()) throw new Error(`El producto "${item.nombre}" ya no existe.`);
@@ -1210,7 +1210,7 @@ async function finalizarVenta() {
                 total: totalConRecargo,
                 ganancia: gananciaTotal
             };
-            
+
             const montoACuenta = nuevaVenta.pagos.a_cuenta || 0;
             if (montoACuenta > 0) {
                 if (!clienteRef || !clienteSeleccionado || clienteSeleccionado.nombre === 'Consumidor Final') {
@@ -1232,7 +1232,7 @@ async function finalizarVenta() {
                 if (loyaltyConfig.expirationEnabled && lastActivity) {
                     const lastDate = lastActivity.toDate();
                     const diffTime = Math.abs(new Date() - lastDate);
-                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
                     if (diffDays > loyaltyConfig.expirationDays) {
                         currentPuntos = 0; // Vencieron los puntos
                     }
@@ -1251,7 +1251,7 @@ async function finalizarVenta() {
                 }
 
                 transaction.update(clienteRef, clientUpdates);
-                
+
                 // Guardamos info de loyalty en la venta para el ticket
                 nuevaVenta.loyalty = {
                     puntosGanados: puntosGanados,
@@ -1264,7 +1264,7 @@ async function finalizarVenta() {
                 transaction.update(clienteRef, { saldoDeudor: nuevoSaldoDeudor });
                 nuevaVenta.saldoDeudorSnapshot = nuevoSaldoDeudor;
             }
-            
+
             // Guardar la venta
             const newVentaRef = doc(collection(db, 'ventas'));
             transaction.set(newVentaRef, nuevaVenta);
@@ -1285,7 +1285,7 @@ async function finalizarVenta() {
                     concepto: `Venta #${ticketNumber} (A cuenta)`
                 });
             }
-            
+
             ventaData = { id: ticketNumber, data: nuevaVenta, docId: newVentaRef.id };
         });
 
@@ -1474,7 +1474,7 @@ function handleClienteSearchInput(e) {
 
     if (btnLimpiarClienteSearch) btnLimpiarClienteSearch.style.display = 'block';
 
-    const matches = clientes.filter(c => 
+    const matches = clientes.filter(c =>
         c.nombre !== 'Consumidor Final' && (
             (c.nombre && c.nombre.toLowerCase().includes(termino)) ||
             (c.cuit && c.cuit.includes(termino)) ||
@@ -1852,7 +1852,7 @@ async function init() {
         genericPriceModal = bootstrap.Modal.getOrCreateInstance(genericPriceModalEl);
         // Garantizamos que el modal esté en el body para evitar bugs de z-index y pantallas grises
         if (genericPriceModalEl.parentNode !== document.body) document.body.appendChild(genericPriceModalEl);
-        
+
         // Agregamos la limpieza forzada al cerrar
         if (!genericPriceModalEl.dataset.cleanerAttached) {
             genericPriceModalEl.addEventListener('hidden.bs.modal', () => {
@@ -1868,7 +1868,7 @@ async function init() {
             genericPriceModalEl.dataset.cleanerAttached = 'true';
         }
     }
-    
+
     genericProductName = document.getElementById('genericProductName');
     genericPriceInput = document.getElementById('genericPriceInput');
     btnConfirmGenericPrice = document.getElementById('btnConfirmGenericPrice');
@@ -2061,7 +2061,7 @@ async function init() {
                     const activeItem = searchResults.querySelector('.list-group-item-action.active');
                     if (activeItem) {
                         addProductToTicket(activeItem.dataset.id);
-                    // 3. Si NO hay selección manual, solo agregamos si la lista tiene UN ÚNICO resultado.
+                        // 3. Si NO hay selección manual, solo agregamos si la lista tiene UN ÚNICO resultado.
                     } else if (items.length === 1) {
                         addProductToTicket(items[selectedIndex].dataset.id);
                     }
@@ -2074,22 +2074,22 @@ async function init() {
             }
 
             switch (e.key) {
-                case 'F1': e.preventDefault(); { const b = document.getElementById('btnPagoRapidoContado'); if(b && !b.disabled) b.click(); } break;
-                case 'F2': e.preventDefault(); { const b = document.getElementById('btnPagoRapidoTransferencia'); if(b && !b.disabled) b.click(); } break;
-                case 'F3': e.preventDefault(); { const b = document.getElementById('btnPagoRapidoDebito'); if(b && !b.disabled) b.click(); } break;
-                case 'F4': e.preventDefault(); { const b = document.getElementById('btnPagoRapidoCredito'); if(b && !b.disabled) b.click(); } break;
-                case 'F5': 
-                    e.preventDefault(); 
-                    { 
-                        const b = document.getElementById('btnPagoRapidoACuenta'); 
-                        if (b && !b.disabled) { 
-                            b.click(); 
+                case 'F1': e.preventDefault(); { const b = document.getElementById('btnPagoRapidoContado'); if (b && !b.disabled) b.click(); } break;
+                case 'F2': e.preventDefault(); { const b = document.getElementById('btnPagoRapidoTransferencia'); if (b && !b.disabled) b.click(); } break;
+                case 'F3': e.preventDefault(); { const b = document.getElementById('btnPagoRapidoDebito'); if (b && !b.disabled) b.click(); } break;
+                case 'F4': e.preventDefault(); { const b = document.getElementById('btnPagoRapidoCredito'); if (b && !b.disabled) b.click(); } break;
+                case 'F7':
+                    e.preventDefault();
+                    {
+                        const b = document.getElementById('btnPagoRapidoACuenta');
+                        if (b && !b.disabled) {
+                            b.click();
                         } else {
                             showToast('Para vender A Cuenta debe seleccionar o registrar un cliente.', 'fa-user-tag', '#ffc107');
                             const s = document.getElementById('clienteSearch');
                             if (s) { s.focus(); s.select(); }
                         }
-                    } 
+                    }
                     break;
                 case 'Escape':
                     e.preventDefault();

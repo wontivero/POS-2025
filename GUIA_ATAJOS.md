@@ -15,12 +15,12 @@ Estos atajos están diseñados para que puedas completar una venta de principio 
 
 Estos atajos funcionan en cualquier parte de la pantalla de ventas.
 
-* **`F1` a `F5` - Pagos Rápidos:**
+* **`F1` a `F4`, `F7` - Pagos Rápidos:**
     * **`F1`**: Finaliza la venta usando **Contado**.
     * **`F2`**: Finaliza la venta usando **Transferencia**.
     * **`F3`**: Finaliza la venta usando **Débito**.
     * **`F4`**: Finaliza la venta usando **Crédito**.
-    * **`F5`**: Finaliza la venta usando **A Cuenta (Fiado)** *(requiere cliente seleccionado)*.
+    * **`F7`**: Finaliza la venta usando **A Cuenta (Fiado)** *(requiere cliente seleccionado)*.
 
 * **`Escape` (ESC) - El Botón "Atrás" Inteligente:**
     La tecla Escape tiene un comportamiento de 3 niveles:
@@ -62,7 +62,7 @@ Estos atajos están diseñados para modificar rápidamente los productos que ya 
 | **`F2`** | En cualquier lugar de Ventas   | Finaliza la venta con **Transferencia**.          |
 | **`F3`** | En cualquier lugar de Ventas   | Finaliza la venta con **Débito**.                 |
 | **`F4`** | En cualquier lugar de Ventas   | Finaliza la venta con **Crédito**.                |
-| **`F5`** | En cualquier lugar de Ventas   | Finaliza la venta con **A Cuenta (Fiado)** (requiere cliente registrado). |
+| **`F7`** | En cualquier lugar de Ventas   | Finaliza la venta con **A Cuenta (Fiado)** (requiere cliente registrado). |
 |                   |                                |                                                   |
 | **`Escape`** | Lejos del buscador             | Pone el foco en el **buscador de productos**.     |
 | **`Escape`** | En el buscador (con texto)     | **Limpia** el texto de la búsqueda.               |
