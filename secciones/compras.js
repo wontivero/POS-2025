@@ -4,20 +4,38 @@ import { db } from '../firebase.js';
 import { getProductos, getRubros, getMarcas } from './dataManager.js';
 import { showAlertModal, showToast, formatMoney } from '../utils.js';
 
+// --- CONFIGURACIÓN DE CACHÉ DE VENTAS (12 HORAS) ---
+const CACHE_KEY_PREFIX = 'pos2025_compras_sales_';
+const CACHE_TTL_MS = 12 * 60 * 60 * 1000; // 12 horas para minimizar lecturas en Firebase
+
 // --- ESTADO LOCAL DEL MÓDULO ---
 let productosAnalizados = [];
+let productosFiltrados = [];
 let ordenCompra = []; // Ítems añadidos al carrito de reposición
 let salesMap = {}; // ID producto -> cantidad vendida en período
 let diasVentas = 30; // Por defecto 30 días
 let topSellerThreshold = 1; // Umbral de ventas para considerar Top Seller
 
+// Estado de Paginación, Ordenamiento y Filtros Rápidos
+let paginaActual = 1;
+let tamanioPagina = 50; // 25, 50, 100, 250, 'todos'
+let quickFilterActual = 'requieren'; // 'requieren', 'agotados', 'bajo_minimo', 'top_sellers', 'todos'
+let sortColumn = 'urgencia';
+let sortDirection = 'desc';
+
+// Timers y Flags
+let searchDebounceTimer = null;
+let eventsBound = false;
+let salesCacheTimestamp = 0;
+
 // Elementos DOM
 let tbodyCompras, searchInput, selectDiasVentas, selectUrgencia, selectRubro, selectMarca;
 let kpiAgotados, kpiBajoStock, kpiTopSellers, kpiInversion;
 let drawerEl, drawerBadgeCount, drawerItemsContainer, drawerTotalMonto;
+let selectPageSize, paginationContainer, paginationInfo, infoCacheVentas;
 
 export async function init() {
-    console.log("Inicializando módulo de Compras y Reposición Inteligente...");
+    console.log("Inicializando módulo de Compras y Reposición Inteligente (Optimizado 12h + Paginación)...");
     
     // Vincular elementos DOM
     tbodyCompras = document.getElementById('tbody-compras');
@@ -37,15 +55,20 @@ export async function init() {
     drawerItemsContainer = document.getElementById('drawer-items-container');
     drawerTotalMonto = document.getElementById('drawer-total-monto');
 
+    selectPageSize = document.getElementById('select-page-size');
+    paginationContainer = document.getElementById('pagination-container');
+    paginationInfo = document.getElementById('pagination-info');
+    infoCacheVentas = document.getElementById('info-cache-ventas');
+
     poblarFiltros();
     configurarEventListeners();
     
-    // Iniciar análisis con el rango por defecto (30 días)
-    await ejecutarAnalisisVentas(diasVentas);
+    // Iniciar análisis de ventas (usará caché de 12h de localStorage si está disponible)
+    await ejecutarAnalisisVentas(diasVentas, false);
 
-    // Escuchar actualizaciones de productos globales
+    // Escuchar actualizaciones globales de productos (manteniendo la página actual)
     document.addEventListener('productos-updated', () => {
-        procesarDatosYRenderizar();
+        procesarDatosYRenderizar(false);
     });
 }
 
@@ -82,23 +105,114 @@ function poblarFiltros() {
 }
 
 /**
- * Registra todos los oyentes de eventos de la sección.
+ * Registra todos los oyentes de eventos usando Delegación de Eventos para máximo rendimiento.
  */
 function configurarEventListeners() {
-    // Filtros de tabla
-    if (searchInput) searchInput.addEventListener('input', filtrarYRenderizarTabla);
-    if (selectUrgencia) selectUrgencia.addEventListener('change', filtrarYRenderizarTabla);
-    if (selectRubro) selectRubro.addEventListener('change', filtrarYRenderizarTabla);
-    if (selectMarca) selectMarca.addEventListener('change', filtrarYRenderizarTabla);
+    if (eventsBound) return;
+    eventsBound = true;
+
+    // Buscador con debounce de 250ms (evita recalcular en cada tecla)
+    if (searchInput) {
+        searchInput.addEventListener('input', () => {
+            clearTimeout(searchDebounceTimer);
+            searchDebounceTimer = setTimeout(() => {
+                paginaActual = 1;
+                filtrarYRenderizarTabla();
+            }, 250);
+        });
+    }
+
+    // Selectores de filtro
+    if (selectUrgencia) {
+        selectUrgencia.addEventListener('change', () => {
+            paginaActual = 1;
+            filtrarYRenderizarTabla();
+        });
+    }
+    if (selectRubro) {
+        selectRubro.addEventListener('change', () => {
+            paginaActual = 1;
+            filtrarYRenderizarTabla();
+        });
+    }
+    if (selectMarca) {
+        selectMarca.addEventListener('change', () => {
+            paginaActual = 1;
+            filtrarYRenderizarTabla();
+        });
+    }
 
     // Cambio de rango de días de ventas
     if (selectDiasVentas) {
         selectDiasVentas.addEventListener('change', async (e) => {
             diasVentas = parseInt(e.target.value) || 30;
             const thVentas = document.getElementById('th-ventas-periodo');
-            if (thVentas) thVentas.textContent = `Ventas (${diasVentas}d)`;
-            await ejecutarAnalisisVentas(diasVentas);
+            if (thVentas) thVentas.innerHTML = `Ventas (${diasVentas}d) <i class="fas fa-sort text-muted ms-1" data-sort-icon="ventasPeriodo"></i>`;
+            paginaActual = 1;
+            await ejecutarAnalisisVentas(diasVentas, false);
         });
+    }
+
+    // Botón refrescar ventas forzado (anula caché y consulta Firebase)
+    const btnRefreshVentas = document.getElementById('btn-refresh-ventas');
+    if (btnRefreshVentas) {
+        btnRefreshVentas.addEventListener('click', async () => {
+            btnRefreshVentas.classList.add('disabled');
+            const icon = btnRefreshVentas.querySelector('i');
+            if (icon) icon.classList.add('fa-spin');
+            
+            showToast("Actualizando datos de ventas desde Firebase...", "fa-rotate", "#0d6efd");
+            await ejecutarAnalisisVentas(diasVentas, true);
+            
+            btnRefreshVentas.classList.remove('disabled');
+            if (icon) icon.classList.remove('fa-spin');
+            showToast("Análisis de ventas actualizado y guardado en caché (12h)", "fa-check", "#198754");
+        });
+    }
+
+    // Pestañas de Filtro Rápido (Quick Filters)
+    const quickFiltersContainer = document.getElementById('quick-filters-container');
+    if (quickFiltersContainer) {
+        quickFiltersContainer.addEventListener('click', (e) => {
+            const btn = e.target.closest('.btn-quick-filter');
+            if (!btn) return;
+            
+            // Actualizar estilo visual activo
+            quickFiltersContainer.querySelectorAll('.btn-quick-filter').forEach(b => {
+                b.classList.remove('active');
+                // Quitar clases sólidas y volverlas outline
+                if (b.dataset.filter === 'requieren' || b.dataset.filter === 'agotados') {
+                    b.className = 'btn btn-sm btn-outline-danger rounded-pill fw-semibold btn-quick-filter';
+                } else if (b.dataset.filter === 'bajo_minimo') {
+                    b.className = 'btn btn-sm btn-outline-warning rounded-pill fw-semibold btn-quick-filter';
+                } else if (b.dataset.filter === 'top_sellers') {
+                    b.className = 'btn btn-sm btn-outline-info rounded-pill fw-semibold btn-quick-filter';
+                } else {
+                    b.className = 'btn btn-sm btn-outline-secondary rounded-pill fw-semibold btn-quick-filter';
+                }
+            });
+
+            btn.classList.add('active');
+            if (btn.dataset.filter === 'requieren' || btn.dataset.filter === 'agotados') {
+                btn.className = 'btn btn-sm btn-danger rounded-pill fw-semibold btn-quick-filter active';
+            } else if (btn.dataset.filter === 'bajo_minimo') {
+                btn.className = 'btn btn-sm btn-warning rounded-pill fw-semibold btn-quick-filter active';
+            } else if (btn.dataset.filter === 'top_sellers') {
+                btn.className = 'btn btn-sm btn-info rounded-pill fw-semibold text-white btn-quick-filter active';
+            } else {
+                btn.className = 'btn btn-sm btn-secondary rounded-pill fw-semibold btn-quick-filter active';
+            }
+
+            quickFilterActual = btn.dataset.filter;
+            paginaActual = 1;
+            filtrarYRenderizarTabla();
+        });
+    }
+
+    // Botón Acción Masiva: Cargar todos los sugeridos filtrados a la Orden
+    const btnCargarSugeridos = document.getElementById('btn-cargar-sugeridos-filtrados');
+    if (btnCargarSugeridos) {
+        btnCargarSugeridos.addEventListener('click', cargarSugeridosFiltrados);
     }
 
     // Botón reset filtros
@@ -109,7 +223,144 @@ function configurarEventListeners() {
             if (selectUrgencia) selectUrgencia.value = 'todos';
             if (selectRubro) selectRubro.value = 'todos';
             if (selectMarca) selectMarca.value = 'todos';
+            quickFilterActual = 'requieren';
+
+            // Resetear botones quick filter a 'requieren' activo
+            if (quickFiltersContainer) {
+                const btnReq = quickFiltersContainer.querySelector('[data-filter="requieren"]');
+                if (btnReq) btnReq.click();
+            } else {
+                paginaActual = 1;
+                filtrarYRenderizarTabla();
+            }
+        });
+    }
+
+    // Selector de tamaño de página
+    if (selectPageSize) {
+        selectPageSize.addEventListener('change', (e) => {
+            const val = e.target.value;
+            tamanioPagina = val === 'todos' ? 'todos' : parseInt(val) || 50;
+            paginaActual = 1;
             filtrarYRenderizarTabla();
+        });
+    }
+
+    // Navegación de paginación (Delegada en paginationContainer)
+    if (paginationContainer) {
+        paginationContainer.addEventListener('click', (e) => {
+            const btn = e.target.closest('.page-link');
+            if (!btn || btn.closest('.disabled')) return;
+            const targetPage = parseInt(btn.dataset.page);
+            if (!isNaN(targetPage) && targetPage > 0 && targetPage !== paginaActual) {
+                paginaActual = targetPage;
+                filtrarYRenderizarTabla(false);
+                // Scroll suave arriba de la tabla
+                const tablaEl = document.getElementById('tabla-compras');
+                if (tablaEl) tablaEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        });
+    }
+
+    // Ordenamiento por cabeceras de tabla (th-sortable)
+    const theadCompras = document.querySelector('#tabla-compras thead');
+    if (theadCompras) {
+        theadCompras.addEventListener('click', (e) => {
+            const th = e.target.closest('.th-sortable');
+            if (!th) return;
+            const columna = th.dataset.sort;
+            if (!columna) return;
+
+            if (sortColumn === columna) {
+                sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+            } else {
+                sortColumn = columna;
+                sortDirection = (columna === 'nombre' || columna === 'rubro') ? 'asc' : 'desc';
+            }
+
+            actualizarIconosOrdenamiento();
+            filtrarYRenderizarTabla(false);
+        });
+    }
+
+    // --- DELEGACIÓN DE EVENTOS EN EL TBODY (ELIMINA RECORRIDOS PESADOS DEL DOM) ---
+    if (tbodyCompras) {
+        // Clics delegados: Modal Detalle, Añadir a la Orden (+ Comprar), Sumar (+) y Restar (-)
+        tbodyCompras.addEventListener('click', (e) => {
+            // Ver detalle completo al hacer clic en nombre o foto
+            const detailTarget = e.target.closest('.btn-open-detail');
+            if (detailTarget) {
+                abrirModalDetalleProducto(detailTarget.dataset.id);
+                return;
+            }
+
+            // Botón "+ Comprar"
+            const btnAdd = e.target.closest('button[data-action="add-drawer"]');
+            if (btnAdd) {
+                const id = btnAdd.dataset.id;
+                const prod = productosAnalizados.find(p => p.id === id);
+                if (!prod) return;
+
+                const tr = btnAdd.closest('tr');
+                const inputSug = tr ? tr.querySelector('.input-sugerido-compra') : null;
+                const cantidad = parseInt(inputSug ? inputSug.value : 0) || prod.sugeridoCompra || 1;
+
+                agregarAOrden(prod, cantidad);
+                return;
+            }
+
+            // Incrementar cantidad (+) en tabla
+            const btnInc = e.target.closest('button[data-action="increase-drawer"]');
+            if (btnInc) {
+                const id = btnInc.dataset.id;
+                const item = ordenCompra.find(i => i.id === id);
+                if (item) {
+                    item.cantidadPedir++;
+                    actualizarDrawer();
+                    filtrarYRenderizarTabla(false);
+                }
+                return;
+            }
+
+            // Decrementar cantidad (-) en tabla
+            const btnDec = e.target.closest('button[data-action="decrease-drawer"]');
+            if (btnDec) {
+                const id = btnDec.dataset.id;
+                const item = ordenCompra.find(i => i.id === id);
+                if (item) {
+                    item.cantidadPedir--;
+                    if (item.cantidadPedir <= 0) {
+                        ordenCompra = ordenCompra.filter(i => i.id !== id);
+                    }
+                    actualizarDrawer();
+                    filtrarYRenderizarTabla(false);
+                }
+                return;
+            }
+        });
+
+        // Cambios delegados: Actualizar Stock Mínimo en Firestore
+        tbodyCompras.addEventListener('change', async (e) => {
+            const inputMin = e.target.closest('input[data-action="update-stock-min"]');
+            if (inputMin) {
+                const id = inputMin.dataset.id;
+                const nuevoMin = parseInt(inputMin.value) || 0;
+                try {
+                    const prodRef = doc(db, 'productos', id);
+                    await updateDoc(prodRef, { stockMinimo: nuevoMin });
+                    
+                    // Actualizar en el estado local de productos para evitar recarga pesada
+                    const prod = productosAnalizados.find(p => p.id === id);
+                    if (prod) {
+                        prod.stockMinimo = nuevoMin;
+                    }
+                    showToast("Stock mínimo actualizado", "fa-check", "#198754");
+                } catch (err) {
+                    console.error("Error al actualizar stock mínimo:", err);
+                    showAlertModal("No se pudo guardar el stock mínimo en Firestore.", "Error");
+                }
+                return;
+            }
         });
     }
 
@@ -125,7 +376,7 @@ function configurarEventListeners() {
         btnClearDrawer.addEventListener('click', () => {
             ordenCompra = [];
             actualizarDrawer();
-            filtrarYRenderizarTabla();
+            filtrarYRenderizarTabla(false);
             showToast("Se vació la lista de orden de compra", "fa-trash", "#dc3545");
         });
     }
@@ -135,36 +386,99 @@ function configurarEventListeners() {
 
     const btnExportPdf = document.getElementById('btn-export-pdf');
     if (btnExportPdf) btnExportPdf.addEventListener('click', imprimirOrdenCompra);
+
+    const btnExportExcel = document.getElementById('btn-export-excel');
+    if (btnExportExcel) btnExportExcel.addEventListener('click', exportarOrdenCSV);
 }
 
-let salesCacheMap = null;
-let lastQueriedDays = null;
-let lastQueryTimestamp = 0;
+/**
+ * Lee la caché de ventas persistente desde localStorage con TTL de 12 horas.
+ */
+function getSalesFromLocalStorage(dias) {
+    try {
+        const raw = localStorage.getItem(`${CACHE_KEY_PREFIX}${dias}`);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        const ahora = Date.now();
+        if (ahora - parsed.timestamp < CACHE_TTL_MS) {
+            return parsed;
+        }
+    } catch (e) {
+        console.warn("Error leyendo caché de ventas desde localStorage:", e);
+    }
+    return null;
+}
 
 /**
- * Consulta las ventas de los últimos X días desde Firestore con caché inteligente en memoria (5 minutos).
- * @param {number} dias - Cantidad de días hacia atrás a analizar.
- * @param {boolean} forceRefresh - Forzar nueva consulta ignorando la caché.
+ * Guarda el mapa agregado de ventas en localStorage con timestamp.
+ */
+function saveSalesToLocalStorage(dias, map) {
+    try {
+        const data = {
+            timestamp: Date.now(),
+            dias: dias,
+            salesMap: map
+        };
+        localStorage.setItem(`${CACHE_KEY_PREFIX}${dias}`, JSON.stringify(data));
+    } catch (e) {
+        console.warn("Error guardando caché de ventas en localStorage:", e);
+    }
+}
+
+/**
+ * Actualiza la etiqueta informativa de frescura de los datos de ventas.
+ */
+function actualizarIndicadorCache(timestamp) {
+    if (!infoCacheVentas) return;
+    if (!timestamp) {
+        infoCacheVentas.innerHTML = `<i class="fas fa-clock text-primary me-1"></i>Ventas: analizado recién (Caché 12h)`;
+        return;
+    }
+    const diffMs = Date.now() - timestamp;
+    const diffMin = Math.floor(diffMs / 60000);
+    let texto = 'recién';
+    if (diffMin >= 60) {
+        const diffHoras = Math.floor(diffMin / 60);
+        texto = diffHoras === 1 ? 'hace 1 hora' : `hace ${diffHoras} horas`;
+    } else if (diffMin > 0) {
+        texto = `hace ${diffMin} min`;
+    }
+    infoCacheVentas.innerHTML = `<i class="fas fa-bolt text-success me-1" title="Caché local activa: 0 lecturas en Firebase"></i>Ventas: analizado ${texto} (Caché 12h)`;
+}
+
+/**
+ * Consulta las ventas de los últimos X días con Caché Persistente de 12 Horas.
+ * Si la caché está vigente, realiza 0 lecturas en Firebase.
  */
 async function ejecutarAnalisisVentas(dias, forceRefresh = false) {
     try {
         const ahora = Date.now();
-        const cincoMinutos = 5 * 60 * 1000;
 
-        // Si tenemos caché reciente para el mismo rango de días, la reutilizamos (0 lecturas Firebase)
-        if (!forceRefresh && salesCacheMap && lastQueriedDays === dias && (ahora - lastQueryTimestamp < cincoMinutos)) {
-            salesMap = salesCacheMap;
-            procesarDatosYRenderizar();
-            return;
+        // 1. Verificar Caché en localStorage (12 HORAS)
+        if (!forceRefresh) {
+            const cached = getSalesFromLocalStorage(dias);
+            if (cached && cached.salesMap) {
+                console.log(`[Compras] Reutilizando caché de ventas para ${dias} días (0 lecturas Firebase).`);
+                salesMap = cached.salesMap;
+                salesCacheTimestamp = cached.timestamp;
+                actualizarIndicadorCache(cached.timestamp);
+                calcularTopSellerThreshold();
+                procesarDatosYRenderizar(false);
+                return;
+            }
         }
 
-        tbodyCompras.innerHTML = `
-            <tr>
-                <td colspan="8" class="text-center py-5 text-muted">
-                    <i class="fas fa-spinner fa-spin fa-2x mb-3 text-primary"></i>
-                    <p class="mb-0 fw-semibold">Analizando ventas de los últimos ${dias} días...</p>
-                </td>
-            </tr>`;
+        // 2. Si no hay caché o se forzó refresh, consultar Firestore
+        console.log(`[Compras] Consultando ventas de los últimos ${dias} días en Firestore...`);
+        if (tbodyCompras) {
+            tbodyCompras.innerHTML = `
+                <tr>
+                    <td colspan="8" class="text-center py-5 text-muted">
+                        <i class="fas fa-spinner fa-spin fa-2x mb-3 text-primary"></i>
+                        <p class="mb-0 fw-semibold">Consultando ventas de los últimos ${dias} días en Firebase...</p>
+                    </td>
+                </tr>`;
+        }
 
         salesMap = {};
         const fechaLimite = new Date();
@@ -187,40 +501,48 @@ async function ejecutarAnalisisVentas(dias, forceRefresh = false) {
             }
         });
 
-        // Guardar en caché local
-        salesCacheMap = { ...salesMap };
-        lastQueriedDays = dias;
-        lastQueryTimestamp = ahora;
+        // Guardar en localStorage con TTL de 12 horas
+        saveSalesToLocalStorage(dias, salesMap);
+        salesCacheTimestamp = ahora;
+        actualizarIndicadorCache(ahora);
 
-        // Calcular el umbral para Top Sellers (productos que superen el promedio o mediana de ventas)
-        const ventasValores = Object.values(salesMap).sort((a, b) => b - a);
-        if (ventasValores.length > 0) {
-            // Se considera Top Seller si está entre el top 25% de ventas del período
-            const index25 = Math.floor(ventasValores.length * 0.25);
-            topSellerThreshold = Math.max(2, ventasValores[index25] || 2);
-        } else {
-            topSellerThreshold = 2;
-        }
-
-        procesarDatosYRenderizar();
+        calcularTopSellerThreshold();
+        procesarDatosYRenderizar(true);
 
     } catch (err) {
         console.error("Error al analizar ventas en el período:", err);
-        // Si falla por falta de índice de Firestore o campo fecha, procesamos con stock actual
-        procesarDatosYRenderizar();
+        procesarDatosYRenderizar(true);
+    }
+}
+
+/**
+ * Calcula el umbral de unidades vendidas para considerar un producto Top Seller.
+ */
+function calcularTopSellerThreshold() {
+    const ventasValores = Object.values(salesMap).sort((a, b) => b - a);
+    if (ventasValores.length > 0) {
+        const index25 = Math.floor(ventasValores.length * 0.25);
+        topSellerThreshold = Math.max(2, ventasValores[index25] || 2);
+    } else {
+        topSellerThreshold = 2;
     }
 }
 
 /**
  * Procesa los datos de productos cruzados con las ventas y calcula niveles de urgencia.
  */
-function procesarDatosYRenderizar() {
+function procesarDatosYRenderizar(resetPage = true) {
     const rawProductos = getProductos();
 
     let cantAgotadosCriticos = 0;
     let cantBajoStockTotal = 0;
     let cantTopSellersRiesgo = 0;
     let sumaInversionEstimada = 0;
+
+    let cRequieren = 0;
+    let cAgotados = 0;
+    let cBajoMinimo = 0;
+    let cTopSellers = 0;
 
     productosAnalizados = rawProductos.map(prod => {
         const stockActual = Number(prod.stock) || 0;
@@ -255,20 +577,31 @@ function procesarDatosYRenderizar() {
         // Nivel de Urgencia
         let nivelUrgencia = 'saludable';
         if (stockActual === 0 && isTopSeller) {
-            nivelUrgencia = 'critico'; // 🔴 Crítico
+            nivelUrgencia = 'critico';
             cantAgotadosCriticos++;
             cantTopSellersRiesgo++;
             cantBajoStockTotal++;
+            cRequieren++;
+            cAgotados++;
+            cTopSellers++;
         } else if (stockActual === 0) {
             nivelUrgencia = 'critico';
             cantAgotadosCriticos++;
             cantBajoStockTotal++;
+            cRequieren++;
+            cAgotados++;
         } else if (stockActual <= stockMinimo) {
-            nivelUrgencia = 'bajo'; // 🟠 Reposición Necesaria
+            nivelUrgencia = 'bajo';
             cantBajoStockTotal++;
-            if (isTopSeller) cantTopSellersRiesgo++;
+            cRequieren++;
+            cBajoMinimo++;
+            if (isTopSeller) {
+                cantTopSellersRiesgo++;
+                cTopSellers++;
+            }
         } else if (diasCobertura <= 10 || (isTopSeller && stockActual <= stockMinimo * 1.5)) {
-            nivelUrgencia = 'preventivo'; // 🟡 Alerta Preventiva
+            nivelUrgencia = 'preventivo';
+            if (isTopSeller && diasCobertura <= 10) cTopSellers++;
         }
 
         if (sugeridoCalculado > 0 && nivelUrgencia !== 'saludable') {
@@ -290,14 +623,12 @@ function procesarDatosYRenderizar() {
         };
     });
 
-    // Ordenar de forma inteligente: Primero Críticos, luego Bajo Stock, luego Top Sellers, luego el resto
-    productosAnalizados.sort((a, b) => {
-        const pesoUrgencia = { 'critico': 4, 'bajo': 3, 'preventivo': 2, 'saludable': 1 };
-        if (pesoUrgencia[b.nivelUrgencia] !== pesoUrgencia[a.nivelUrgencia]) {
-            return pesoUrgencia[b.nivelUrgencia] - pesoUrgencia[a.nivelUrgencia];
-        }
-        return b.ventasPeriodo - a.ventasPeriodo;
-    });
+    // Actualizar contadores de las Pestañas de Filtro Rápido
+    const elReq = document.getElementById('count-requieren'); if (elReq) elReq.textContent = cRequieren;
+    const elAgo = document.getElementById('count-agotados'); if (elAgo) elAgo.textContent = cAgotados;
+    const elBaj = document.getElementById('count-bajo-minimo'); if (elBaj) elBaj.textContent = cBajoMinimo;
+    const elTop = document.getElementById('count-top-sellers'); if (elTop) elTop.textContent = cTopSellers;
+    const elTod = document.getElementById('count-todos'); if (elTod) elTod.textContent = productosAnalizados.length;
 
     // Actualizar KPIs
     if (kpiAgotados) kpiAgotados.textContent = cantAgotadosCriticos;
@@ -312,40 +643,112 @@ function procesarDatosYRenderizar() {
         badgeNavbar.style.display = cantBajoStockTotal > 0 ? 'inline-block' : 'none';
     }
 
-    filtrarYRenderizarTabla();
+    if (resetPage) paginaActual = 1;
+    filtrarYRenderizarTabla(resetPage);
 }
 
 /**
- * Aplica los filtros de búsqueda y selectors a la lista procesada y genera las filas HTML.
+ * Aplica los filtros, realiza el ordenamiento y renderiza ÚNICAMENTE la página actual (Paginación).
  */
-function filtrarYRenderizarTabla() {
+function filtrarYRenderizarTabla(resetPage = false) {
     if (!tbodyCompras) return;
+    if (resetPage) paginaActual = 1;
 
     const queryTexto = searchInput ? searchInput.value.toLowerCase().trim() : '';
     const urgenciaVal = selectUrgencia ? selectUrgencia.value : 'todos';
     const rubroVal = selectRubro ? selectRubro.value : 'todos';
     const marcaVal = selectMarca ? selectMarca.value : 'todos';
 
-    const filtrados = productosAnalizados.filter(p => {
+    // 1. Filtrado
+    let filtrados = productosAnalizados.filter(p => {
+        // Filtro rápido por pestañas (Quick Filter)
+        if (quickFilterActual === 'requieren') {
+            if (!(p.stockActual === 0 || p.stockActual <= p.stockMinimo)) return false;
+        } else if (quickFilterActual === 'agotados') {
+            if (p.stockActual !== 0) return false;
+        } else if (quickFilterActual === 'bajo_minimo') {
+            if (!(p.stockActual > 0 && p.stockActual <= p.stockMinimo)) return false;
+        } else if (quickFilterActual === 'top_sellers') {
+            if (!(p.isTopSeller && (p.diasCobertura <= 10 || p.stockActual <= p.stockMinimo))) return false;
+        }
+
         // Filtro texto
         const coincideTexto = !queryTexto || 
             (p.nombre && p.nombre.toLowerCase().includes(queryTexto)) ||
             (p.codigoBarras && p.codigoBarras.includes(queryTexto)) ||
+            (p.codigo && p.codigo.includes(queryTexto)) ||
             (p.marca && p.marca.toLowerCase().includes(queryTexto));
 
-        // Filtro urgencia
+        // Filtro urgencia dropdown
         const coincideUrgencia = (urgenciaVal === 'todos') || (p.nivelUrgencia === urgenciaVal);
 
-        // Filtro rubro
+        // Filtro rubro dropdown
         const coincideRubro = (rubroVal === 'todos') || (p.rubro === rubroVal);
 
-        // Filtro marca
+        // Filtro marca dropdown
         const coincideMarca = (marcaVal === 'todos') || (p.marca === marcaVal);
 
         return coincideTexto && coincideUrgencia && coincideRubro && coincideMarca;
     });
 
-    if (filtrados.length === 0) {
+    // 2. Ordenamiento inteligente según columna y dirección seleccionada
+    filtrados.sort((a, b) => {
+        const factor = sortDirection === 'asc' ? 1 : -1;
+        if (sortColumn === 'urgencia') {
+            const peso = { 'critico': 4, 'bajo': 3, 'preventivo': 2, 'saludable': 1 };
+            const diff = peso[b.nivelUrgencia] - peso[a.nivelUrgencia];
+            if (diff !== 0) return diff * (sortDirection === 'asc' ? -1 : 1);
+            return (b.ventasPeriodo - a.ventasPeriodo) * (sortDirection === 'asc' ? -1 : 1);
+        }
+        if (sortColumn === 'nombre') {
+            return (a.nombre || '').localeCompare(b.nombre || '') * factor;
+        }
+        if (sortColumn === 'rubro') {
+            const valA = (a.rubro || '') + (a.marca || '');
+            const valB = (b.rubro || '') + (b.marca || '');
+            return valA.localeCompare(valB) * factor;
+        }
+        if (sortColumn === 'stockActual') {
+            return (a.stockActual - b.stockActual) * factor;
+        }
+        if (sortColumn === 'ventasPeriodo') {
+            return (a.ventasPeriodo - b.ventasPeriodo) * factor;
+        }
+        if (sortColumn === 'diasCobertura') {
+            const cobA = a.diasCobertura === Infinity ? 999999 : a.diasCobertura;
+            const cobB = b.diasCobertura === Infinity ? 999999 : b.diasCobertura;
+            return (cobA - cobB) * factor;
+        }
+        if (sortColumn === 'sugeridoCompra') {
+            return (a.sugeridoCompra - b.sugeridoCompra) * factor;
+        }
+        if (sortColumn === 'costoUnitario') {
+            return (a.costoUnitario - b.costoUnitario) * factor;
+        }
+        return 0;
+    });
+
+    productosFiltrados = filtrados;
+    const totalItems = filtrados.length;
+
+    // 3. Manejo de Paginación
+    let totalPaginas = 1;
+    let itemsParaRenderizar = filtrados;
+
+    if (tamanioPagina !== 'todos') {
+        totalPaginas = Math.max(1, Math.ceil(totalItems / tamanioPagina));
+        if (paginaActual > totalPaginas) paginaActual = totalPaginas;
+        if (paginaActual < 1) paginaActual = 1;
+
+        const inicio = (paginaActual - 1) * tamanioPagina;
+        const fin = inicio + tamanioPagina;
+        itemsParaRenderizar = filtrados.slice(inicio, fin);
+    }
+
+    renderizarPaginacion(totalItems, totalPaginas);
+
+    // 4. Si no hay productos que coincidan
+    if (totalItems === 0) {
         tbodyCompras.innerHTML = `
             <tr>
                 <td colspan="8" class="text-center py-5 text-muted">
@@ -356,8 +759,9 @@ function filtrarYRenderizarTabla() {
         return;
     }
 
+    // 5. Renderizar únicamente el slice de la página actual (ultrarrápido)
     let html = '';
-    filtrados.forEach(p => {
+    itemsParaRenderizar.forEach(p => {
         const enOrden = ordenCompra.find(item => item.id === p.id);
         const cantEnOrden = enOrden ? enOrden.cantidadPedir : 0;
         const imgUrl = getProductoImagenUrl(p);
@@ -415,7 +819,7 @@ function filtrarYRenderizarTabla() {
                     <div class="small text-muted d-flex align-items-center justify-content-center gap-1">
                         Mín: 
                         <input type="number" min="0" value="${p.stockMinimo}" data-action="update-stock-min" data-id="${p.id}" 
-                               class="form-control form-control-sm input-table-sm py-0 px-1 d-inline-block">
+                               class="form-control form-control-sm input-table-sm py-0 px-1 d-inline-block" title="Ajustar stock mínimo">
                     </div>
                 </td>
                 <td class="text-center">
@@ -427,7 +831,7 @@ function filtrarYRenderizarTabla() {
                 </td>
                 <td class="text-center">
                     <input type="number" min="1" value="${cantEnOrden || p.sugeridoCompra || 1}" data-id="${p.id}" 
-                           class="form-control form-control-sm input-table-sm mx-auto input-sugerido-compra">
+                           class="form-control form-control-sm input-table-sm mx-auto input-sugerido-compra" title="Cantidad a pedir">
                 </td>
                 <td class="text-end fw-semibold text-dark">
                     ${formatMoney(p.costoUnitario)}
@@ -450,79 +854,134 @@ function filtrarYRenderizarTabla() {
     });
 
     tbodyCompras.innerHTML = html;
-    vincularEventosTabla();
 }
 
 /**
- * Asigna manejadores de eventos a los botones e inputs dentro de la tabla.
+ * Renderiza la barra de paginación interactiva.
  */
-function vincularEventosTabla() {
-    // Escuchar clic en nombre o imagen para ver modal de detalle completo del producto
-    tbodyCompras.querySelectorAll('.btn-open-detail').forEach(el => {
-        el.addEventListener('click', (e) => {
-            const id = e.currentTarget.dataset.id;
-            abrirModalDetalleProducto(id);
-        });
+function renderizarPaginacion(totalItems, totalPaginas) {
+    if (!paginationContainer || !paginationInfo) return;
+
+    if (totalItems === 0) {
+        paginationInfo.textContent = 'Mostrando 0 productos';
+        paginationContainer.innerHTML = '';
+        return;
+    }
+
+    if (tamanioPagina === 'todos') {
+        paginationInfo.textContent = `Mostrando todos los ${totalItems} productos`;
+        paginationContainer.innerHTML = '';
+        return;
+    }
+
+    const inicio = (paginaActual - 1) * tamanioPagina + 1;
+    const fin = Math.min(paginaActual * tamanioPagina, totalItems);
+    paginationInfo.textContent = `Mostrando ${inicio} - ${fin} de ${totalItems} productos`;
+
+    let html = '';
+
+    // Botón Anterior
+    html += `
+        <li class="page-item ${paginaActual === 1 ? 'disabled' : ''}">
+            <button class="page-link" data-page="${paginaActual - 1}" aria-label="Anterior">&laquo;</button>
+        </li>
+    `;
+
+    // Calcular páginas a mostrar (hasta 5 botones con '...')
+    const paginas = [];
+    if (totalPaginas <= 7) {
+        for (let i = 1; i <= totalPaginas; i++) paginas.push(i);
+    } else {
+        paginas.push(1);
+        if (paginaActual > 3) paginas.push('...');
+        
+        const start = Math.max(2, paginaActual - 1);
+        const end = Math.min(totalPaginas - 1, paginaActual + 1);
+        for (let i = start; i <= end; i++) {
+            if (!paginas.includes(i)) paginas.push(i);
+        }
+
+        if (paginaActual < totalPaginas - 2) paginas.push('...');
+        if (!paginas.includes(totalPaginas)) paginas.push(totalPaginas);
+    }
+
+    paginas.forEach(p => {
+        if (p === '...') {
+            html += `<li class="page-item disabled"><span class="page-link border-0">...</span></li>`;
+        } else {
+            html += `
+                <li class="page-item ${p === paginaActual ? 'active' : ''}">
+                    <button class="page-link" data-page="${p}">${p}</button>
+                </li>
+            `;
+        }
     });
 
-    // Escuchar edición de stock mínimo
-    tbodyCompras.querySelectorAll('input[data-action="update-stock-min"]').forEach(input => {
-        input.addEventListener('change', async (e) => {
-            const id = e.target.dataset.id;
-            const nuevoMin = parseInt(e.target.value) || 0;
-            try {
-                const prodRef = doc(db, 'productos', id);
-                await updateDoc(prodRef, { stockMinimo: nuevoMin });
-                showToast("Stock mínimo actualizado", "fa-check", "#198754");
-            } catch (err) {
-                console.error("Error al actualizar stock mínimo:", err);
-                showAlertModal("No se pudo guardar el stock mínimo en Firestore.", "Error");
-            }
-        });
+    // Botón Siguiente
+    html += `
+        <li class="page-item ${paginaActual === totalPaginas ? 'disabled' : ''}">
+            <button class="page-link" data-page="${paginaActual + 1}" aria-label="Siguiente">&raquo;</button>
+        </li>
+    `;
+
+    paginationContainer.innerHTML = html;
+}
+
+/**
+ * Actualiza los íconos de ordenamiento en los encabezados de la tabla.
+ */
+function actualizarIconosOrdenamiento() {
+    const thead = document.querySelector('#tabla-compras thead');
+    if (!thead) return;
+
+    thead.querySelectorAll('.th-sortable').forEach(th => {
+        const col = th.dataset.sort;
+        const icon = th.querySelector('i');
+        if (!icon) return;
+
+        if (col === sortColumn) {
+            icon.className = `fas ${sortDirection === 'asc' ? 'fa-sort-up' : 'fa-sort-down'} text-primary ms-1`;
+        } else {
+            icon.className = 'fas fa-sort text-muted ms-1';
+        }
+    });
+}
+
+/**
+ * Carga automáticamente todos los productos sugeridos de la lista filtrada a la orden de compra.
+ */
+function cargarSugeridosFiltrados() {
+    const conSugerido = productosFiltrados.filter(p => (p.sugeridoCompra || 0) > 0);
+    if (conSugerido.length === 0) {
+        showAlertModal("No hay productos con cantidad sugerida de compra en la vista actual.", "Sin sugeridos");
+        return;
+    }
+
+    let agregadosCount = 0;
+    conSugerido.forEach(prod => {
+        const codProd = prod.codigoBarras || prod.codigo || prod.cod || '';
+        const cant = prod.sugeridoCompra || 1;
+        const existe = ordenCompra.find(i => i.id === prod.id);
+        if (existe) {
+            existe.cantidadPedir = cant;
+        } else {
+            ordenCompra.push({
+                id: prod.id,
+                nombre: prod.nombre,
+                rubro: prod.rubro || 'Sin Rubro',
+                marca: prod.marca || '',
+                codigoBarras: codProd,
+                codigo: codProd,
+                costoUnitario: prod.costoUnitario,
+                cantidadPedir: cant
+            });
+        }
+        agregadosCount++;
     });
 
-    // Agregar a la orden de compra
-    tbodyCompras.querySelectorAll('button[data-action="add-drawer"]').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            const id = e.currentTarget.dataset.id;
-            const prod = productosAnalizados.find(p => p.id === id);
-            if (!prod) return;
-
-            const tr = e.currentTarget.closest('tr');
-            const inputSug = tr.querySelector('.input-sugerido-compra');
-            const cantidad = parseInt(inputSug.value) || prod.sugeridoCompra || 1;
-
-            agregarAOrden(prod, cantidad);
-        });
-    });
-
-    // Modificar cantidad en tabla si ya está en la orden
-    tbodyCompras.querySelectorAll('button[data-action="increase-drawer"]').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            const id = e.currentTarget.dataset.id;
-            const item = ordenCompra.find(i => i.id === id);
-            if (item) {
-                item.cantidadPedir++;
-                actualizarDrawer();
-                filtrarYRenderizarTabla();
-            }
-        });
-    });
-
-    tbodyCompras.querySelectorAll('button[data-action="decrease-drawer"]').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            const id = e.currentTarget.dataset.id;
-            const item = ordenCompra.find(i => i.id === id);
-            if (item) {
-                item.cantidadPedir--;
-                if (item.cantidadPedir <= 0) {
-                    ordenCompra = ordenCompra.filter(i => i.id !== id);
-                }
-                actualizarDrawer();
-                filtrarYRenderizarTabla();
-            }
-        });
-    });
+    actualizarDrawer();
+    filtrarYRenderizarTabla(false);
+    showToast(`Se cargaron ${agregadosCount} productos a la orden de compra`, "fa-bolt", "#ffc107");
 }
 
 /**
@@ -550,7 +1009,7 @@ function agregarAOrden(prod, cantidad) {
 
     showToast(`Añadido: ${prod.nombre} (${cantidad} u.)`, "fa-cart-plus", "#0d6efd");
     actualizarDrawer();
-    filtrarYRenderizarTabla();
+    filtrarYRenderizarTabla(false);
 }
 
 /**
@@ -592,7 +1051,6 @@ function actualizarDrawer() {
 
     // Agrupar ítems por Rubro para facilitar visualización
     const agrupadosPorRubro = {};
-
     ordenCompra.forEach(item => {
         const rubro = item.rubro || 'Sin Rubro';
         if (!agrupadosPorRubro[rubro]) agrupadosPorRubro[rubro] = [];
@@ -647,7 +1105,7 @@ function actualizarDrawer() {
             const id = e.currentTarget.dataset.id;
             ordenCompra = ordenCompra.filter(i => i.id !== id);
             actualizarDrawer();
-            filtrarYRenderizarTabla();
+            filtrarYRenderizarTabla(false);
         });
     });
 
@@ -658,7 +1116,7 @@ function actualizarDrawer() {
             if (item) {
                 item.cantidadPedir++;
                 actualizarDrawer();
-                filtrarYRenderizarTabla();
+                filtrarYRenderizarTabla(false);
             }
         });
     });
@@ -673,10 +1131,48 @@ function actualizarDrawer() {
                     ordenCompra = ordenCompra.filter(i => i.id !== id);
                 }
                 actualizarDrawer();
-                filtrarYRenderizarTabla();
+                filtrarYRenderizarTabla(false);
             }
         });
     });
+}
+
+/**
+ * Exporta la orden de compra a un archivo Excel / CSV con formato compatible.
+ */
+function exportarOrdenCSV() {
+    if (ordenCompra.length === 0) {
+        showAlertModal("Añade primero productos a tu lista de compra para exportar.", "Lista Vacía");
+        return;
+    }
+
+    // Encabezados CSV con BOM (\uFEFF) para que Excel reconozca tildes y caracteres especiales
+    let csv = "\uFEFF";
+    csv += "Código;Producto;Rubro;Marca;Cantidad a Pedir;Costo Unitario;Subtotal Estimado\r\n";
+
+    ordenCompra.forEach(item => {
+        const cod = `"${(item.codigoBarras || item.codigo || '').replace(/"/g, '""')}"`;
+        const nombre = `"${(item.nombre || '').replace(/"/g, '""')}"`;
+        const rubro = `"${(item.rubro || '').replace(/"/g, '""')}"`;
+        const marca = `"${(item.marca || '').replace(/"/g, '""')}"`;
+        const cant = item.cantidadPedir;
+        const costo = (item.costoUnitario || 0).toFixed(2).replace('.', ',');
+        const subtotal = ((item.cantidadPedir || 0) * (item.costoUnitario || 0)).toFixed(2).replace('.', ',');
+
+        csv += `${cod};${nombre};${rubro};${marca};${cant};${costo};${subtotal}\r\n`;
+    });
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const fecha = new Date().toISOString().slice(0, 10);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `Orden_de_Compra_${fecha}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    showToast("Planilla Excel / CSV descargada con éxito", "fa-file-excel", "#198754");
 }
 
 /**
@@ -928,5 +1424,3 @@ function abrirModalDetalleProducto(id) {
     const modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
     modal.show();
 }
-
-

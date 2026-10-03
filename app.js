@@ -324,9 +324,7 @@ async function initializeApp() {
     updateUserUI(activeUser);
 
     document.querySelectorAll('.admin-only').forEach(el => {
-        if (currentUserRole === 'admin') {
-            el.style.display = 'list-item';
-        }
+        el.style.display = (currentUserRole === 'admin') ? 'list-item' : 'none';
     });
 
     initPedidosWebGlobalListener();
@@ -441,6 +439,13 @@ document.addEventListener('DOMContentLoaded', () => {
 // --- Controlador de Secciones ---
 async function loadSection(section) {
     if (!section) return console.error("Intento de cargar una sección indefinida.");
+
+    // Protección de secciones restringidas exclusivamente para administradores
+    if ((section === 'configuracion' || section === 'compras') && currentUserRole !== 'admin') {
+        showToast('Acceso restringido a administradores', 'fa-lock', '#dc3545');
+        return loadSection('ventas');
+    }
+
     currentSection = section; // Actualizamos la sección actual
 
     // Resaltar el enlace de navegación activo
