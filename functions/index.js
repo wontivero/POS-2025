@@ -210,10 +210,18 @@ exports.sincronizarTiendanube = onDocumentWritten(
         }
 
         // CONTROL DE IMÁGENES
-        const imagenesNuevas = docNuevo.imagenes || [];
+        let imagenesNuevas = docNuevo.imagenes || [];
         const variantesNuevas = docNuevo.tieneVariantes ? (docNuevo.variantes || []) : [];
         const imagenesViejas = docViejo ? (docViejo.imagenes || []) : [];
         const variantesViejas = docViejo?.tieneVariantes ? (docViejo.variantes || []) : [];
+
+        // Si no hay imagen principal cargada pero las variantes sí tienen fotos, usamos la primera foto de variante como portada principal
+        if (imagenesNuevas.length === 0 && variantesNuevas.length > 0) {
+            const primerVarConFoto = variantesNuevas.find(v => v.imagenUrl);
+            if (primerVarConFoto) {
+                imagenesNuevas = [primerVarConFoto.imagenUrl];
+            }
+        }
         
         const stateImgNuevo = JSON.stringify({ i: imagenesNuevas, v: variantesNuevas.map(v => v.imagenUrl) });
         const stateImgViejo = JSON.stringify({ i: imagenesViejas, v: variantesViejas.map(v => v.imagenUrl) });
@@ -239,53 +247,101 @@ exports.sincronizarTiendanube = onDocumentWritten(
                 
                 const prodData = await getProd.json();
                 const currentTnVariants = prodData.variants || [];
-                const posSkus = new Set(tnVariants.map(v => v.sku).filter(Boolean));
-                const posVariantsBySku = new Map(tnVariants.map(v => [v.sku, v]));
 
-                // --- PASO 1: Eliminar variantes que ya no existen en el POS ---
-                const variantsToDelete = currentTnVariants.filter(tnVar => !posSkus.has(tnVar.sku));
-                if (variantsToDelete.length > 0) {
-                    logger.info(`🗑️ Se eliminarán ${variantsToDelete.length} variantes obsoletas de TN.`);
-                    for (const v of variantsToDelete) {
-                        logger.info(`   - Eliminando SKU: ${v.sku} (ID: ${v.id})`);
-                        await fetch(`${apiUrl}/products/${tnId}/variants/${v.id}`, { method: "DELETE", headers });
-                    }
-                }
+                if (!docNuevo.tieneVariantes) {
+                    // --- CASO 1: PRODUCTO SIMPLE ---
+                    // Un producto simple en Tiendanube siempre tiene exactamente una variante principal.
+                    // NUNCA debemos borrarla ni hacer POST; se actualiza directamente con PUT.
+                    const mainVariant = currentTnVariants[0];
+                    const simpleVariantData = tnVariants[0];
 
-                // --- PASO 2: Actualizar o Crear variantes ---
-                const currentTnVariantsBySku = new Map(currentTnVariants.map(v => [v.sku, v]));
-
-                // Si es un producto simple y el SKU cambió, lo actualizamos directamente.
-                if (!docNuevo.tieneVariantes && currentTnVariants.length === 1 && tnVariants.length === 1) {
-                    const oldTnVariant = currentTnVariants[0];
-                    const newPosVariant = tnVariants[0];
-                    if (oldTnVariant.sku !== newPosVariant.sku) {
-                        logger.info(`🔄 Actualizando SKU de producto simple: ${oldTnVariant.sku} -> ${newPosVariant.sku}`);
-                        await fetch(`${apiUrl}/products/${tnId}/variants/${oldTnVariant.id}`, { method: "PUT", headers, body: JSON.stringify(newPosVariant) });
-                    }
-                }
-
-                // Para cada variante en el POS, decidimos si crearla o actualizarla.
-                for (const [sku, posVariant] of posVariantsBySku.entries()) {
-                    const existingTnVar = currentTnVariantsBySku.get(sku);
-                    if (existingTnVar) {
-                        logger.info(`🔄 Actualizando variante SKU: ${sku} con precio: ${posVariant.price}`);
-                        const resVar = await fetch(`${apiUrl}/products/${tnId}/variants/${existingTnVar.id}`, { method: "PUT", headers, body: JSON.stringify(posVariant) });
+                    if (mainVariant && simpleVariantData) {
+                        logger.info(`🔄 Actualizando variante principal de producto simple ID: ${mainVariant.id} (SKU: ${simpleVariantData.sku}, Precio: ${simpleVariantData.price}, Stock: ${simpleVariantData.stock})`);
+                        const resVar = await fetch(`${apiUrl}/products/${tnId}/variants/${mainVariant.id}`, {
+                            method: "PUT",
+                            headers,
+                            body: JSON.stringify(simpleVariantData)
+                        });
                         if (!resVar.ok) {
-                            logger.error(`   ❌ Error al actualizar variante ${sku}:`, await resVar.text());
+                            logger.error(`❌ Error actualizando variante de producto simple en TN:`, await resVar.text());
                         }
-                    } else {
-                        logger.info(`✨ Creando nueva variante SKU: ${sku} con precio: ${posVariant.price}`);
-                        const resVar = await fetch(`${apiUrl}/products/${tnId}/variants`, { method: "POST", headers, body: JSON.stringify(posVariant) });
-                        if (!resVar.ok) {
-                            logger.error(`   ❌ Error al crear variante ${sku}:`, await resVar.text());
+                    } else if (simpleVariantData) {
+                        // Fallback defensivo si TN no tenía variantes
+                        logger.info(`✨ Creando variante principal de producto simple (SKU: ${simpleVariantData.sku})...`);
+                        await fetch(`${apiUrl}/products/${tnId}/variants`, {
+                            method: "POST",
+                            headers,
+                            body: JSON.stringify(simpleVariantData)
+                        });
+                    }
+
+                    // Si el producto en TN tenía variantes sobrantes (por haber sido antes con variantes) y ahora es simple,
+                    // eliminamos las variantes secundarias sobrantes dejando solo la primera.
+                    if (currentTnVariants.length > 1) {
+                        logger.info(`🧹 Limpiando ${currentTnVariants.length - 1} variantes sobrantes tras cambio a producto simple...`);
+                        for (let i = 1; i < currentTnVariants.length; i++) {
+                            await fetch(`${apiUrl}/products/${tnId}/variants/${currentTnVariants[i].id}`, { method: "DELETE", headers });
                         }
                     }
+                } else {
+                    // --- CASO 2: PRODUCTO CON VARIANTES ---
+                    // Reconciliación inteligente: asociar por SKU o nombre de opción, crear nuevas, actualizar existentes y borrar obsoletas.
+                    const matchedTnVariantIds = new Set();
+
+                    for (const posVariant of tnVariants) {
+                        const posSku = posVariant.sku;
+                        const posValName = posVariant.values?.[0]?.es;
+
+                        // Buscar coincidencia en TN: primero por SKU, luego por nombre de valor de opción
+                        const existingTnVar = currentTnVariants.find(tv => 
+                            !matchedTnVariantIds.has(tv.id) && (
+                                (posSku && tv.sku === posSku) ||
+                                (posValName && tv.values?.[0]?.es === posValName)
+                            )
+                        );
+
+                        if (existingTnVar) {
+                            matchedTnVariantIds.add(existingTnVar.id);
+                            logger.info(`🔄 Actualizando variante existente TN ID: ${existingTnVar.id} (SKU: ${posSku || existingTnVar.sku}, Opción: ${posValName})`);
+                            const resVar = await fetch(`${apiUrl}/products/${tnId}/variants/${existingTnVar.id}`, {
+                                method: "PUT",
+                                headers,
+                                body: JSON.stringify(posVariant)
+                            });
+                            if (!resVar.ok) {
+                                logger.error(`   ❌ Error al actualizar variante ${posSku || posValName}:`, await resVar.text());
+                            }
+                        } else {
+                            logger.info(`✨ Creando nueva variante SKU: ${posSku || posValName} con precio: ${posVariant.price}`);
+                            const resVar = await fetch(`${apiUrl}/products/${tnId}/variants`, {
+                                method: "POST",
+                                headers,
+                                body: JSON.stringify(posVariant)
+                            });
+                            if (!resVar.ok) {
+                                logger.error(`   ❌ Error al crear variante ${posSku || posValName}:`, await resVar.text());
+                            } else {
+                                const newVarData = await resVar.json();
+                                if (newVarData.id) matchedTnVariantIds.add(newVarData.id);
+                            }
+                        }
+                    }
+
+                    // Eliminar variantes en TN que ya no existen en el POS
+                    const variantsToDelete = currentTnVariants.filter(tv => !matchedTnVariantIds.has(tv.id));
+                    if (variantsToDelete.length > 0) {
+                        logger.info(`🗑️ Se eliminarán ${variantsToDelete.length} variantes obsoletas de TN.`);
+                        for (const v of variantsToDelete) {
+                            logger.info(`   - Eliminando SKU: ${v.sku || 'S/N'} (ID: ${v.id})`);
+                            await fetch(`${apiUrl}/products/${tnId}/variants/${v.id}`, { method: "DELETE", headers });
+                        }
+                    }
                 }
 
-                // C) Si las imágenes cambiaron, las sincronizamos dedicadamente
-                if (imagenesCambiaron) {
-                    logger.info(`📸 Las imágenes cambiaron, iniciando sincronización...`);
+                // C) Si las imágenes cambiaron (o si Tiendanube no tiene fotos y el producto sí), las sincronizamos
+                const tnSinFotos = (!prodData.images || prodData.images.length === 0) && (imagenesNuevas.length > 0 || variantesNuevas.some(v => v.imagenUrl));
+                if (imagenesCambiaron || tnSinFotos) {
+                    logger.info(`📸 Sincronizando imágenes en TN (Cambiaron: ${imagenesCambiaron}, TN sin fotos: ${tnSinFotos})...`);
                     // Borrar imágenes existentes en TN para no duplicar
                     if (prodData.images && prodData.images.length > 0) {
                         logger.info(`   - Eliminando ${prodData.images.length} imágenes antiguas de TN.`);
@@ -293,11 +349,11 @@ exports.sincronizarTiendanube = onDocumentWritten(
                             await fetch(`${apiUrl}/products/${tnId}/images/${img.id}`, { method: "DELETE", headers });
                         }
                     }
-                    // Subir nuevas imágenes una por una
+                    // Subir nuevas imágenes principales una por una
                     for (const imgUrl of imagenesNuevas) {
-                        logger.info(`   - Subiendo imagen principal: ${imgUrl.substring(0, 50)}...`);
+                        logger.info(`   - Subiendo imagen de portada: ${imgUrl.substring(0, 50)}...`);
                         const resImg = await fetch(`${apiUrl}/products/${tnId}/images`, { method: "POST", headers, body: JSON.stringify({ src: imgUrl }) });
-                        if (!resImg.ok) logger.error(`❌ Error subiendo imagen:`, await resImg.json());
+                        if (!resImg.ok) logger.error(`❌ Error subiendo imagen:`, await resImg.text());
                     }
                     
                     // Subir imágenes de variantes y enlazarlas a la opción correspondiente
@@ -305,19 +361,19 @@ exports.sincronizarTiendanube = onDocumentWritten(
                         const getProdVars = await fetch(`${apiUrl}/products/${tnId}`, { headers });
                         if (getProdVars.ok) {
                             const prodVarsData = await getProdVars.json();
+                            const tnVariantsList = prodVarsData.variants || [];
+
                             for (const v of variantesNuevas) {
                                 if (v.imagenUrl) {
-                                    const tnVar = prodVarsData.variants.find(tv => tv.sku === v.codigo);
-                                    const payload = { src: v.imagenUrl };
-                                    if (tnVar) payload.product_variant_ids = [tnVar.id];
-                                    
-                                    logger.info(`   - Subiendo imagen para variante ${v.codigo}...`);
-                                    const resImg = await fetch(`${apiUrl}/products/${tnId}/images`, { method: "POST", headers, body: JSON.stringify(payload) });
+                                    // Buscar variante en TN por SKU o por nombre de opción
+                                    const tnVar = tnVariantsList.find(tv => (v.codigo && tv.sku === v.codigo) || (tv.values && tv.values[0] && tv.values[0].es === v.nombre));
+                                    logger.info(`   - Subiendo imagen para variante ${v.codigo || v.nombre}...`);
+                                    const resImg = await fetch(`${apiUrl}/products/${tnId}/images`, { method: "POST", headers, body: JSON.stringify({ src: v.imagenUrl }) });
                                     if (!resImg.ok) {
-                                        logger.error(`Error subiendo imagen para variante ${v.codigo}:`, await resImg.text());
+                                        logger.error(`Error subiendo imagen para variante ${v.codigo || v.nombre}:`, await resImg.text());
                                     } else {
                                         const imgData = await resImg.json();
-                                        if (tnVar) {
+                                        if (tnVar && imgData.id) {
                                             // FORZAMOS LA VINCULACIÓN EXPLÍCITA
                                             await fetch(`${apiUrl}/products/${tnId}/variants/${tnVar.id}`, { method: "PUT", headers, body: JSON.stringify({ image_id: imgData.id }) });
                                         }
@@ -338,32 +394,31 @@ exports.sincronizarTiendanube = onDocumentWritten(
                     // Se creó el producto, guardamos su ID
                     await event.data.after.ref.update({ tiendanubeId: result.id });
 
-                    // Subir imágenes MANUALMENTE después de crear para asegurar que Tiendanube no las ignore
+                    // Subir imágenes principales (portada)
                     if (imagenesNuevas.length > 0) {
                         for (const imgUrl of imagenesNuevas) {
                             await fetch(`${apiUrl}/products/${result.id}/images`, { method: "POST", headers, body: JSON.stringify({ src: imgUrl }) });
                         }
                     }
+
+                    // Subir imágenes de variantes y vincularlas
                     if (docNuevo.tieneVariantes) {
-                        const getProdVars = await fetch(`${apiUrl}/products/${result.id}`, { headers });
-                        if (getProdVars.ok) {
-                            const prodVarsData = await getProdVars.json();
-                            for (const v of variantesNuevas) {
-                                if (v.imagenUrl) {
-                                        const tnVar = prodVarsData.variants.find(tv => tv.sku === v.codigo);
-                                        const payload = { src: v.imagenUrl };
-                                        if (tnVar) payload.product_variant_ids = [tnVar.id];
-                                        
-                                        const resImg = await fetch(`${apiUrl}/${result.id}/images`, { method: "POST", headers, body: JSON.stringify(payload) });
-                                        if (!resImg.ok) {
-                                            logger.error(`Error subiendo imagen para variante ${v.codigo}:`, await resImg.text());
-                                        } else {
-                                            const imgData = await resImg.json();
-                                            if (tnVar) {
-                                                // FORZAMOS LA VINCULACIÓN EXPLÍCITA
-                                                await fetch(`${apiUrl}/products/${result.id}/variants/${tnVar.id}`, { method: "PUT", headers, body: JSON.stringify({ image_id: imgData.id }) });
-                                            }
-                                        }
+                        const tnVariantsList = (result.variants && result.variants.length > 0) 
+                            ? result.variants 
+                            : ((await (await fetch(`${apiUrl}/products/${result.id}`, { headers })).json()).variants || []);
+
+                        for (const v of variantesNuevas) {
+                            if (v.imagenUrl) {
+                                const tnVar = tnVariantsList.find(tv => (v.codigo && tv.sku === v.codigo) || (tv.values && tv.values[0] && tv.values[0].es === v.nombre));
+                                const resImg = await fetch(`${apiUrl}/products/${result.id}/images`, { method: "POST", headers, body: JSON.stringify({ src: v.imagenUrl }) });
+                                if (!resImg.ok) {
+                                    logger.error(`Error subiendo imagen para variante ${v.codigo || v.nombre}:`, await resImg.text());
+                                } else {
+                                    const imgData = await resImg.json();
+                                    if (tnVar && imgData.id) {
+                                        // FORZAMOS LA VINCULACIÓN EXPLÍCITA
+                                        await fetch(`${apiUrl}/products/${result.id}/variants/${tnVar.id}`, { method: "PUT", headers, body: JSON.stringify({ image_id: imgData.id }) });
+                                    }
                                 }
                             }
                         }
@@ -407,16 +462,9 @@ exports.actualizarPedidoTiendanube = onDocumentUpdated(
         try {
             logger.info(`🔥 Trigger activado para pedido #${docNuevo.numeroOrden}`);
 
-            // 1. Si el pedido se marca como PAGADO
+            // 1. Si el pedido se marca como PAGADO localmente en POS
             if (docViejo.pagos?.estado !== 'paid' && docNuevo.pagos?.estado === 'paid') {
-                // SOLUCIÓN 1: Usar endpoint directo de acción POST /pay con cuerpo vacío
-                const urlPay = `https://api.tiendanube.com/v1/${userId}/orders/${docNuevo.tnOrderId}/pay`;
-                
-                logger.info(`Forzando pago mediante POST /pay en TN... URL: ${urlPay}`);
-                const resPay = await fetch(urlPay, { method: 'POST', headers, body: JSON.stringify({}) });
-                
-                if (resPay.ok) logger.info(`✅ Orden ${docNuevo.tnOrderId} marcada como PAGADA exitosamente usando /pay.`);
-                else logger.error(`❌ Error marcando pago en TN:`, await resPay.text());
+                logger.info(`ℹ️ Pedido #${docNuevo.numeroOrden} (TN #${docNuevo.tnOrderId}) marcado como PAGADO en POS. Nota: Tiendanube no permite registrar pagos manuales vía API (se confirma en el panel de Tiendanube o con el switch en el modal del POS).`);
             }
 
             // 2. Si el pedido se marca como DESPACHADO (Finalizado)
@@ -452,10 +500,7 @@ exports.actualizarPedidoTiendanube = onDocumentUpdated(
 // VERIFICADOR DE PRECIOS (POS 2025 vs TIENDANUBE)
 // ========================================================
 exports.verificarPreciosTiendanube = onCall({ timeoutSeconds: 120, memory: "512Mi" }, async (request) => {
-    const { skus } = request.data;
-    if (!skus || !Array.isArray(skus) || skus.length === 0) {
-        throw new HttpsError("invalid-argument", "Se requiere una lista de SKUs.");
-    }
+    const { skus } = request.data || {};
 
     const tnConfig = await getTiendanubeConfig();
     const token = tnConfig.token;
@@ -471,40 +516,202 @@ exports.verificarPreciosTiendanube = onCall({ timeoutSeconds: 120, memory: "512M
         "Content-Type": "application/json"
     };
 
-    // Tiendanube permite buscar múltiples SKUs separados por coma.
-    const skuString = skus.join(',');
-    const url = `https://api.tiendanube.com/v1/${userId}/products?sku=${skuString}&per_page=200`;
-
     try {
-        const response = await fetch(url, { headers });
-        if (!response.ok) {
-            const errorText = await response.text();
-            logger.error("Error al consultar la API de Tiendanube:", errorText);
-            throw new HttpsError("unavailable", `Error de Tiendanube: ${response.statusText}`);
+        const preciosTN = [];
+        let page = 1;
+        const perPage = 200;
+        let hasMore = true;
+
+        logger.info(`🔍 Iniciando verificación paginada de catálogo en Tiendanube...`);
+
+        while (hasMore) {
+            const url = `https://api.tiendanube.com/v1/${userId}/products?fields=id,variants&per_page=${perPage}&page=${page}`;
+            const response = await fetch(url, { headers });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                logger.error(`Error al consultar la API de Tiendanube (página ${page}):`, errorText);
+                throw new HttpsError("unavailable", `Error de Tiendanube en página ${page}: ${response.statusText}`);
+            }
+
+            const productsFromTN = await response.json();
+            if (!Array.isArray(productsFromTN) || productsFromTN.length === 0) {
+                hasMore = false;
+                break;
+            }
+
+            for (const product of productsFromTN) {
+                if (product.variants && product.variants.length > 0) {
+                    for (const variant of product.variants) {
+                        if (variant.sku) {
+                            preciosTN.push({
+                                sku: variant.sku,
+                                price: parseFloat(variant.price) || 0,
+                                promotional_price: variant.promotional_price ? parseFloat(variant.promotional_price) : null
+                            });
+                        }
+                    }
+                }
+            }
+
+            logger.info(`   - Página ${page}: ${productsFromTN.length} productos procesados (total acumulado: ${preciosTN.length} variantes con SKU)`);
+
+            if (productsFromTN.length < perPage) {
+                hasMore = false;
+            } else {
+                page++;
+            }
         }
 
-        const productsFromTN = await response.json();
-        const preciosTN = [];
+        // Si se especificaron SKUs, filtramos el resultado para optimizar el payload
+        let resultado = preciosTN;
+        if (skus && Array.isArray(skus) && skus.length > 0) {
+            const skuFilter = new Set(skus);
+            resultado = preciosTN.filter(p => skuFilter.has(p.sku));
+        }
 
-        productsFromTN.forEach(product => {
-            if (product.variants && product.variants.length > 0) {
-                product.variants.forEach(variant => {
-                    if (variant.sku) {
-                        preciosTN.push({ sku: variant.sku, price: parseFloat(variant.price) || 0 });
-                    }
-                });
-            }
-        });
-
-        return { success: true, data: preciosTN };
+        logger.info(`✅ Verificación completada. Total variantes encontradas: ${resultado.length}`);
+        return { success: true, data: resultado };
     } catch (error) {
         logger.error("Error crítico en verificarPreciosTiendanube:", error);
+        if (error instanceof HttpsError) throw error;
         throw new HttpsError("internal", "No se pudo completar la verificación de precios.");
     }
 });
 
 // ========================================================
-// WEBHOOK: Recibe ventas desde Tiendanube y descuenta stock
+// HELPER: Procesa una orden de Tiendanube, descuenta stock y guarda en pedidos_web
+// ========================================================
+async function procesarYGuardarOrden(order) {
+    const orderId = order.id;
+    if (!order.products || order.products.length === 0) {
+        logger.info(`Orden ${orderId} no tiene productos.`);
+        return { success: true, message: "Orden sin productos", orderId };
+    }
+
+    // 1. CONTROL DE STOCK ATÓMICO (Garantiza descontar solo 1 vez por orden)
+    let shouldDiscountStock = false;
+    const stockLockRef = admin.firestore().collection('tn_ordenes_stock_locks').doc(String(orderId));
+    try {
+        await stockLockRef.create({ fecha: admin.firestore.FieldValue.serverTimestamp() });
+        shouldDiscountStock = true; // Primer procesamiento: se descuenta el stock
+    } catch (error) {
+        shouldDiscountStock = false; // El stock ya se descontó previamente
+        logger.info(`El stock de la orden ${orderId} ya fue descontado previamente.`);
+    }
+
+    const batch = admin.firestore().batch();
+
+    if (shouldDiscountStock) {
+        const productsToUpdate = {};
+
+        for (const item of order.products) {
+            const tnIdNum = Number(item.product_id);
+            const tnIdStr = String(item.product_id);
+            const cantidadVendida = parseInt(item.quantity) || 0;
+            const itemSku = item.sku || "";
+
+            const snapshot = await admin.firestore().collection('productos')
+                .where('tiendanubeId', 'in', [tnIdNum, tnIdStr])
+                .limit(1)
+                .get();
+
+            if (!snapshot.empty) {
+                const docRef = snapshot.docs[0].ref;
+                const docId = docRef.id;
+
+                if (!productsToUpdate[docId]) {
+                    productsToUpdate[docId] = {
+                        ref: docRef,
+                        data: snapshot.docs[0].data()
+                    };
+                }
+
+                const pData = productsToUpdate[docId].data;
+
+                if (pData.tieneVariantes) {
+                    const varArr = pData.variantes || [];
+                    const vIndex = varArr.findIndex(v => v.codigo === itemSku);
+                    if (vIndex > -1) {
+                        varArr[vIndex].stock = (varArr[vIndex].stock || 0) - cantidadVendida;
+                    }
+                    pData.variantes = varArr;
+                    pData.stock = (pData.stock || 0) - cantidadVendida;
+                } else {
+                    pData.stock = (pData.stock || 0) - cantidadVendida;
+                }
+
+                logger.info(`📉 Descontando ${cantidadVendida} unidades de ${item.name} (SKU: ${itemSku})`);
+            }
+        }
+
+        // Aplicamos cambios acumulados al batch
+        for (const docId in productsToUpdate) {
+            const p = productsToUpdate[docId];
+            let newData = { stock: p.data.stock };
+            if (p.data.tieneVariantes) {
+                newData.variantes = p.data.variantes;
+            }
+            batch.update(p.ref, newData);
+        }
+    }
+
+    // 2. GUARDAR O ACTUALIZAR EL PEDIDO WEB
+    const pedidoRef = admin.firestore().collection('pedidos_web').doc(String(orderId));
+    const pedidoSnap = await pedidoRef.get();
+
+    const pedidoData = {
+        tnOrderId: order.id,
+        numeroOrden: order.number,
+        cliente: {
+            nombre: order.customer ? order.customer.name : 'Desconocido',
+            email: order.customer ? order.customer.email : '',
+            telefono: order.customer ? order.customer.phone : '',
+            dni: order.customer ? order.customer.identification : ''
+        },
+        envio: {
+            tipo: order.shipping_option || 'No especificado',
+            direccion: order.shipping_address ? `${order.shipping_address.address} ${order.shipping_address.number || ''}, ${order.shipping_address.city || ''}` : 'Retiro en Local',
+            estado: order.shipping_status || 'unpacked'
+        },
+        pagos: {
+            metodo: order.payment_details ? order.payment_details.method : 'Desconocido',
+            total: parseFloat(order.total) || 0,
+            estado: order.payment_status || 'pending',
+            sincronizadoTN: true
+        },
+        productos: order.products.map(p => ({
+            id_tn: p.product_id,
+            nombre: p.name,
+            cantidad: parseInt(p.quantity) || 0,
+            precio: parseFloat(p.price) || 0,
+            sku: p.sku || ''
+        })),
+        notas: order.note || ''
+    };
+
+    if (!pedidoSnap.exists) {
+        if (order.created_at) {
+            try {
+                pedidoData.fecha = admin.firestore.Timestamp.fromDate(new Date(order.created_at));
+            } catch (e) {
+                pedidoData.fecha = admin.firestore.FieldValue.serverTimestamp();
+            }
+        } else {
+            pedidoData.fecha = admin.firestore.FieldValue.serverTimestamp();
+        }
+        pedidoData.estado = 'pendiente';
+    }
+
+    batch.set(pedidoRef, pedidoData, { merge: true });
+    await batch.commit();
+
+    logger.info(`🛒 Pedido Web #${order.number} guardado/actualizado. (Stock descontado: ${shouldDiscountStock})`);
+    return { success: true, numero: order.number, stockDescontado: shouldDiscountStock, orderId };
+}
+
+// ========================================================
+// WEBHOOK: Recibe ventas en vivo desde Tiendanube y descuenta stock
 // ========================================================
 exports.webhookTiendanube = onRequest(async (req, res) => {
     logger.info("Webhook recibido! Body:", req.body);
@@ -553,7 +760,12 @@ exports.webhookTiendanube = onRequest(async (req, res) => {
     try {
         // 5. Vamos a Tiendanube a buscar qué compraron exactamente en esa orden
         const apiUrl = `https://api.tiendanube.com/v1/${myStoreId}/orders/${orderId}`;
-        const response = await fetch(apiUrl, { headers: { "Authentication": `bearer ${token}`, "User-Agent": "Sincronizador POS 2025 (wontivero@gmail.com)" } });
+        const response = await fetch(apiUrl, {
+            headers: {
+                "Authentication": `bearer ${token}`,
+                "User-Agent": "Sincronizador POS 2025 (wontivero@gmail.com)"
+            }
+        });
 
         if (!response.ok) {
             logger.error(`Error buscando orden ${orderId} en TN:`, await response.text());
@@ -562,132 +774,163 @@ exports.webhookTiendanube = onRequest(async (req, res) => {
         }
 
         const order = await response.json();
-        if (!order.products || order.products.length === 0) {
-            logger.info(`Orden ${orderId} no tiene productos.`);
-            res.status(200).send("Orden sin productos");
-            return;
-        }
+        await procesarYGuardarOrden(order);
 
-        // 6. CONTROL DE STOCK ATÓMICO (Garantiza descontar solo 1 vez por orden)
-        let shouldDiscountStock = false;
-        const stockLockRef = admin.firestore().collection('tn_ordenes_stock_locks').doc(String(orderId));
-        try {
-            await stockLockRef.create({ fecha: admin.firestore.FieldValue.serverTimestamp() });
-            shouldDiscountStock = true; // Somos los primeros, nos toca descontar el stock
-        } catch (error) {
-            shouldDiscountStock = false; // El stock ya se descontó en un evento anterior
-            logger.info(`El stock de la orden ${orderId} ya fue descontado previamente.`);
-        }
-
-        const batch = admin.firestore().batch();
-
-        // Descontamos stock SOLO si corresponde
-        if (shouldDiscountStock) {
-            const productsToUpdate = {}; // Acumulador en memoria para evitar sobrescribir datos del mismo documento
-
-            for (const item of order.products) {
-                const tnIdNum = Number(item.product_id);
-                const tnIdStr = String(item.product_id);
-                const cantidadVendida = parseInt(item.quantity) || 0;
-                const itemSku = item.sku || "";
-
-                const snapshot = await admin.firestore().collection('productos')
-                    .where('tiendanubeId', 'in', [tnIdNum, tnIdStr])
-                    .limit(1)
-                    .get();
-
-                if (!snapshot.empty) {
-                    const docRef = snapshot.docs[0].ref;
-                    const docId = docRef.id;
-
-                    // Si no lo teníamos en memoria, lo agregamos con sus datos originales
-                    if (!productsToUpdate[docId]) {
-                        productsToUpdate[docId] = {
-                            ref: docRef,
-                            data: snapshot.docs[0].data()
-                        };
-                    }
-
-                    // Trabajamos sobre la copia en memoria para acumular las restas
-                    const pData = productsToUpdate[docId].data;
-
-                    if (pData.tieneVariantes) {
-                        const varArr = pData.variantes || [];
-                        const vIndex = varArr.findIndex(v => v.codigo === itemSku);
-                        if (vIndex > -1) {
-                            varArr[vIndex].stock = (varArr[vIndex].stock || 0) - cantidadVendida;
-                        }
-                        pData.variantes = varArr;
-                        pData.stock = (pData.stock || 0) - cantidadVendida;
-                    } else {
-                        pData.stock = (pData.stock || 0) - cantidadVendida;
-                    }
-
-                    logger.info(`📉 Webhook: Descontando ${cantidadVendida} unidades de ${item.name} (SKU: ${itemSku})`);
-                }
-            }
-
-            // Aplicamos los cambios acumulados al batch de Firestore de una sola vez
-            for (const docId in productsToUpdate) {
-                const p = productsToUpdate[docId];
-                let newData = { stock: p.data.stock };
-                if (p.data.tieneVariantes) {
-                    newData.variantes = p.data.variantes;
-                }
-                batch.update(p.ref, newData);
-            }
-        }
-
-        // --- GUARDAR O ACTUALIZAR EL PEDIDO WEB ---
-        const pedidoRef = admin.firestore().collection('pedidos_web').doc(String(orderId));
-        const pedidoSnap = await pedidoRef.get();
-
-        const pedidoData = {
-            tnOrderId: order.id,
-            numeroOrden: order.number,
-            cliente: {
-                nombre: order.customer ? order.customer.name : 'Desconocido',
-                email: order.customer ? order.customer.email : '',
-                telefono: order.customer ? order.customer.phone : '',
-                dni: order.customer ? order.customer.identification : ''
-            },
-            envio: {
-                tipo: order.shipping_option || 'No especificado',
-                direccion: order.shipping_address ? `${order.shipping_address.address} ${order.shipping_address.number || ''}, ${order.shipping_address.city || ''}` : 'Retiro en Local',
-                estado: order.shipping_status || 'unpacked'
-            },
-            pagos: {
-                metodo: order.payment_details ? order.payment_details.method : 'Desconocido',
-                total: parseFloat(order.total) || 0,
-                estado: order.payment_status || 'pending',
-                sincronizadoTN: true
-            },
-            productos: order.products.map(p => ({
-                id_tn: p.product_id,
-                nombre: p.name,
-                cantidad: parseInt(p.quantity) || 0,
-                precio: parseFloat(p.price) || 0,
-                sku: p.sku || ''
-            })),
-            notas: order.note || ''
-        };
-
-        if (!pedidoSnap.exists) {
-            pedidoData.fecha = admin.firestore.FieldValue.serverTimestamp();
-            pedidoData.estado = 'pendiente';
-        }
-
-        batch.set(pedidoRef, pedidoData, { merge: true });
-        await batch.commit();
-
-        logger.info(`🛒 Pedido Web #${order.number} actualizado/guardado. (Stock descontado: ${shouldDiscountStock})`);
-
-        // 7. Finalmente, le decimos a Tiendanube que todo salió perfecto
         res.status(200).send("OK");
     } catch (error) {
-        logger.error("Error en Webhook TN", error);
+        logger.error("Error en Webhook TN:", error);
         res.status(500).send("Internal Server Error");
     }
+});
+
+// ========================================================
+// ONCALL: Sincronizar Pedidos Recientes desde Tiendanube
+// ========================================================
+exports.sincronizarPedidosTiendanube = onCall({ timeoutSeconds: 120 }, async (request) => {
+    const tnConfig = await getTiendanubeConfig();
+    const token = tnConfig.token;
+    const myStoreId = String(tnConfig.userId);
+
+    if (!token || !myStoreId) {
+        throw new HttpsError("failed-precondition", "Credenciales de Tiendanube no configuradas en el sistema.");
+    }
+
+    const limit = parseInt(request.data?.limit) || 15;
+    const apiUrl = `https://api.tiendanube.com/v1/${myStoreId}/orders?per_page=${limit}`;
+    const response = await fetch(apiUrl, {
+        headers: {
+            "Authentication": `bearer ${token}`,
+            "User-Agent": "Sincronizador POS 2025 (wontivero@gmail.com)"
+        }
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        logger.error("Error al consultar órdenes en TN:", errorText);
+        throw new HttpsError("internal", `Error de Tiendanube: ${errorText}`);
+    }
+
+    const orders = await response.json();
+    const resultados = [];
+
+    for (const order of orders) {
+        try {
+            const res = await procesarYGuardarOrden(order);
+            resultados.push(res);
+        } catch (err) {
+            logger.error(`Error procesando orden ${order.id}:`, err);
+            resultados.push({ success: false, orderId: order.id, numero: order.number, error: err.message });
+        }
+    }
+
+    return {
+        success: true,
+        total: orders.length,
+        resultados
+    };
+});
+
+// ========================================================
+// ONCALL: Gestionar / Verificar Webhooks de Tiendanube
+// ========================================================
+exports.gestionarWebhooksTiendanube = onCall({ timeoutSeconds: 60 }, async (request) => {
+    const tnConfig = await getTiendanubeConfig();
+    const token = tnConfig.token;
+    const myStoreId = String(tnConfig.userId);
+
+    if (!token || !myStoreId) {
+        throw new HttpsError("failed-precondition", "Credenciales de Tiendanube no configuradas en el sistema.");
+    }
+
+    // Identificar el proyecto y URL de webhook correspondiente
+    const projectId = admin.app().options.projectId || process.env.GCLOUD_PROJECT || "cajadiaria-infotech";
+    let targetWebhookUrl;
+    if (projectId === 'cajadiaria-infotech') {
+        targetWebhookUrl = 'https://webhooktiendanube-us5ki3g7va-uc.a.run.app';
+    } else if (projectId === 'cajadiaria-infotech-stage') {
+        targetWebhookUrl = 'https://webhooktiendanube-ih46pgqtea-uc.a.run.app';
+    } else {
+        targetWebhookUrl = `https://us-central1-${projectId}.cloudfunctions.net/webhookTiendanube`;
+    }
+
+    const headers = {
+        "Authentication": `bearer ${token}`,
+        "User-Agent": "Sincronizador POS 2025 (wontivero@gmail.com)",
+        "Content-Type": "application/json"
+    };
+
+    const accion = request.data?.accion || 'sincronizar'; // 'consultar' o 'sincronizar'
+
+    // 1. Obtener webhooks actuales en Tiendanube
+    const whRes = await fetch(`https://api.tiendanube.com/v1/${myStoreId}/webhooks`, { headers });
+    if (!whRes.ok) {
+        const errorText = await whRes.text();
+        throw new HttpsError("internal", `Error consultando webhooks en Tiendanube: ${errorText}`);
+    }
+    const currentWebhooks = await whRes.json();
+
+    if (accion === 'consultar') {
+        return {
+            success: true,
+            projectId,
+            targetWebhookUrl,
+            webhooks: currentWebhooks
+        };
+    }
+
+    // 2. Si es sincronizar: corregir o crear
+    const eventosRequeridos = ['order/created', 'order/paid'];
+    const eliminados = [];
+    const creados = [];
+
+    // Limpiar webhooks que tengan eventos de órdenes pero apunten a una URL obsoleta o equivocada
+    for (const wh of currentWebhooks) {
+        if (eventosRequeridos.includes(wh.event) && wh.url !== targetWebhookUrl) {
+            logger.info(`Eliminando webhook viejo ${wh.id} (${wh.event}) hacia ${wh.url}`);
+            const delRes = await fetch(`https://api.tiendanube.com/v1/${myStoreId}/webhooks/${wh.id}`, {
+                method: "DELETE",
+                headers
+            });
+            if (delRes.ok) eliminados.push({ id: wh.id, event: wh.event, oldUrl: wh.url });
+        }
+    }
+
+    // Registrar los eventos faltantes hacia la URL correcta
+    for (const ev of eventosRequeridos) {
+        const yaExiste = currentWebhooks.some(wh => wh.event === ev && wh.url === targetWebhookUrl && !eliminados.some(e => e.id === wh.id));
+        if (!yaExiste) {
+            logger.info(`Registrando webhook ${ev} hacia ${targetWebhookUrl}`);
+            const postRes = await fetch(`https://api.tiendanube.com/v1/${myStoreId}/webhooks`, {
+                method: "POST",
+                headers,
+                body: JSON.stringify({
+                    event: ev,
+                    url: targetWebhookUrl
+                })
+            });
+            if (postRes.ok) {
+                const nuevoWh = await postRes.json();
+                creados.push(nuevoWh);
+            } else {
+                const postErr = await postRes.text();
+                logger.error(`Error al registrar webhook ${ev}:`, postErr);
+                throw new HttpsError("internal", `Error registrando webhook ${ev}: ${postErr}`);
+            }
+        }
+    }
+
+    // Consultar lista final actualizada
+    const finalRes = await fetch(`https://api.tiendanube.com/v1/${myStoreId}/webhooks`, { headers });
+    const finalWebhooks = finalRes.ok ? await finalRes.json() : [];
+
+    return {
+        success: true,
+        projectId,
+        targetWebhookUrl,
+        eliminados,
+        creados,
+        webhooks: finalWebhooks
+    };
 });
 
 // ========================================================

@@ -946,6 +946,14 @@ async function handleFormSubmit(e) {
                 delete variantes[i].imagenFile;
             }
             productoData.variantes = variantes;
+
+            // Si no hay imagen principal pero sí hay en variantes, asignamos la primera como portada
+            if (productoData.imagenes.length === 0) {
+                const primerVarConFoto = variantes.find(v => v.imagenUrl);
+                if (primerVarConFoto) {
+                    productoData.imagenes.push(primerVarConFoto.imagenUrl);
+                }
+            }
         }
 
         // 3. Guardamos el documento final de una sola vez con todas las URLs listas
@@ -1960,26 +1968,15 @@ async function handleVerificarPreciosWeb() {
             }
         });
 
-        progress.update(30, "Enviando SKUs al servidor...");
+        progress.update(40, "Consultando catálogo y precios en Tiendanube...");
         
-        // --- INICIO DE LA CORRECCIÓN: PROCESAMIENTO POR LOTES ---
-        const loteSize = 100; // Tiendanube soporta hasta 100 SKUs por consulta
-        let todosLosPreciosTN = [];
-        
-        for (let i = 0; i < skus.length; i += loteSize) {
-            const lote = skus.slice(i, i + loteSize);
-            const progresoActual = 30 + (i / skus.length) * 40; // Progreso entre 30% y 70%
-            progress.update(progresoActual, `Consultando lote ${i/loteSize + 1} de ${Math.ceil(skus.length/loteSize)}...`);
+        const verificarPreciosTiendanube = httpsCallable(functions, 'verificarPreciosTiendanube');
+        const result = await verificarPreciosTiendanube({ skus });
 
-            const verificarPreciosTiendanube = httpsCallable(functions, 'verificarPreciosTiendanube');
-            const resultLote = await verificarPreciosTiendanube({ skus: lote });
-
-            if (!resultLote.data.success) {
-                throw new Error(resultLote.data.error || "Un lote de la función en la nube devolvió un error.");
-            }
-            todosLosPreciosTN = todosLosPreciosTN.concat(resultLote.data.data);
+        if (!result.data || !result.data.success) {
+            throw new Error(result.data?.error || "Error al consultar precios en Tiendanube.");
         }
-        // --- FIN DE LA CORRECCIÓN ---
+        const todosLosPreciosTN = result.data.data || [];
 
         progress.update(70, "Comparando precios recibidos...");
         const preciosTN = new Map(todosLosPreciosTN.map(item => [item.sku, parseFloat(item.price) || 0]));

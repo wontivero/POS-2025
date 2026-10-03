@@ -3,266 +3,744 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Guía de Atajos - POS 2025</title>
+    <title>Manual de Usuario y Guía de Operaciones - POS 2025</title>
+    <!-- Bootstrap 5 CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- FontAwesome 6 -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    <!-- Google Font: Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
-        body { background-color: #f8f9fa; }
-        .container { max-width: 960px; }
-        .card-header .fas, .list-group-item .fas { color: #0d6efd; }
-        kbd {
-            background-color: #343a40;
-            padding: 0.2em 0.4em;
-            border-radius: 3px;
-            font-size: 1.1em;
-            border: 1px solid #6c757d;
+        html { scroll-behavior: smooth; }
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background-color: #f4f6f9;
+            color: #2d3748;
+            line-height: 1.6;
         }
-        .table kbd { display: inline-block; min-width: 70px; text-align: center; }
-        .list-group-item strong { color: #212529; }
+        .container { max-width: 1040px; }
+        .hero-banner {
+            background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
+            color: #ffffff;
+            border-radius: 1.25rem;
+            padding: 3rem 2rem;
+            box-shadow: 0 10px 25px -5px rgba(59, 130, 246, 0.3);
+            margin-bottom: 2.5rem;
+        }
+        .nav-pills-sticky {
+            position: sticky;
+            top: 1rem;
+            z-index: 1020;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 0.75rem;
+            border-radius: 1rem;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
+            margin-bottom: 2rem;
+        }
+        .nav-pills .nav-link {
+            font-size: 0.88rem;
+            font-weight: 600;
+            color: #4a5568;
+            border-radius: 0.6rem;
+            padding: 0.5rem 0.9rem;
+            transition: all 0.2s ease;
+        }
+        .nav-pills .nav-link:hover {
+            color: #2563eb;
+            background-color: #eff6ff;
+        }
+        .nav-pills .nav-link.active {
+            background-color: #2563eb;
+            color: #ffffff;
+        }
+        .card-manual {
+            border: none;
+            border-radius: 1rem;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.04);
+            margin-bottom: 2.5rem;
+            overflow: hidden;
+            background: #ffffff;
+        }
+        .card-manual .card-header {
+            padding: 1.25rem 1.75rem;
+            border-bottom: 1px solid #edf2f7;
+            font-weight: 700;
+        }
+        .card-manual .card-body {
+            padding: 2rem 1.75rem;
+        }
+        kbd {
+            background-color: #1f2937;
+            color: #f3f4f6;
+            padding: 0.25rem 0.55rem;
+            border-radius: 0.375rem;
+            font-size: 0.95em;
+            font-weight: 600;
+            box-shadow: 0 2px 0 #111827;
+            border: 1px solid #374151;
+        }
+        .table kbd { display: inline-block; min-width: 65px; text-align: center; }
+        .step-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 2.25rem;
+            height: 2.25rem;
+            border-radius: 50%;
+            background-color: #2563eb;
+            color: white;
+            font-weight: 700;
+            font-size: 1rem;
+            margin-right: 0.75rem;
+            flex-shrink: 0;
+        }
+        .step-container {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 1.5rem;
+        }
+        .code-box {
+            background-color: #1e293b;
+            color: #e2e8f0;
+            border-radius: 0.75rem;
+            padding: 1rem 1.25rem;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.88rem;
+            position: relative;
+            overflow-x: auto;
+        }
+        .code-box code { color: #38bdf8; }
+        .callout {
+            border-left: 5px solid;
+            padding: 1rem 1.25rem;
+            border-radius: 0.5rem;
+            margin-bottom: 1.25rem;
+        }
+        .callout-info {
+            background-color: #eff6ff;
+            border-color: #3b82f6;
+            color: #1e40af;
+        }
+        .callout-warning {
+            background-color: #fffbeb;
+            border-color: #f59e0b;
+            color: #92400e;
+        }
+        .callout-danger {
+            background-color: #fef2f2;
+            border-color: #ef4444;
+            color: #991b1b;
+        }
+        .callout-success {
+            background-color: #f0fdf4;
+            border-color: #22c55e;
+            color: #166534;
+        }
+        .env-badge-stage {
+            background-color: #fef3c7;
+            color: #92400e;
+            font-weight: 700;
+            padding: 0.35rem 0.65rem;
+            border-radius: 0.5rem;
+            border: 1px solid #fde68a;
+        }
+        .env-badge-prod {
+            background-color: #dcfce7;
+            color: #166534;
+            font-weight: 700;
+            padding: 0.35rem 0.65rem;
+            border-radius: 0.5rem;
+            border: 1px solid #bbf7d0;
+        }
     </style>
 </head>
 <body>
-    <div class="container py-5">
-        <div class="text-center mb-5">
-            <h1 class="display-4">Guía de Atajos de Teclado</h1>
-            <p class="lead text-muted">Optimiza tu velocidad en la sección de Ventas con estos atajos.</p>
+
+    <div class="container py-4">
+
+        <!-- HERO HEADER -->
+        <div class="hero-banner text-center">
+            <span class="badge bg-white text-primary px-3 py-2 rounded-pill fw-bold text-uppercase mb-3 shadow-sm">
+                <i class="fas fa-shield-alt me-1"></i> Documentación Oficial & Manual Operativo
+            </span>
+            <h1 class="display-5 fw-bold mb-2">Manual Maestro POS 2025</h1>
+            <p class="lead text-white-50 mb-0">Atajos de teclado, Integración en Vivo con Tiendanube, Logística Web y Pase a Producción.</p>
         </div>
 
-        <div class="card shadow-sm mb-5">
-            <div class="card-header bg-light">
-                <h4 class="mb-0"><i class="fas fa-book-open me-2"></i>Guía Completa y Detallada</h4>
+        <!-- STICKY NAVIGATION BAR -->
+        <div class="nav-pills-sticky">
+            <ul class="nav nav-pills justify-content-center gap-1">
+                <li class="nav-item"><a class="nav-link" href="#seccion-atajos"><i class="fas fa-keyboard me-1"></i> Atajos de Caja</a></li>
+                <li class="nav-item"><a class="nav-link active" href="#seccion-tiendanube"><i class="fas fa-cloud me-1"></i> Vincular Tiendanube</a></li>
+                <li class="nav-item"><a class="nav-link" href="#seccion-pedidos"><i class="fas fa-shopping-cart me-1"></i> Pedidos Web</a></li>
+                <li class="nav-item"><a class="nav-link" href="#seccion-catalogo"><i class="fas fa-boxes me-1"></i> Catálogo y Precios</a></li>
+                <li class="nav-item"><a class="nav-link" href="#seccion-entornos"><i class="fas fa-server me-1"></i> Dev vs Producción</a></li>
+                <li class="nav-item"><a class="nav-link" href="#seccion-arca"><i class="fas fa-receipt me-1"></i> ARCA / AFIP</a></li>
+            </ul>
+        </div>
+
+        <!-- ======================================================== -->
+        <!-- SECCIÓN 1: ATAJOS DE TECLADO                             -->
+        <!-- ======================================================== -->
+        <div class="card card-manual" id="seccion-atajos">
+            <div class="card-header bg-primary text-white d-flex align-items-center justify-content-between">
+                <h4 class="mb-0"><i class="fas fa-keyboard me-2"></i>1. Atajos de Teclado (Operación Ultra Rápida)</h4>
+                <span class="badge bg-white text-primary">Sección Ventas</span>
             </div>
-            <div class="card-body p-4">
-                
-                <h5 class="card-title mb-3"><i class="fas fa-bolt me-2"></i>Acciones Principales y Pagos Rápidos</h5>
-                <p class="card-text text-muted mb-3">Estos atajos funcionan en cualquier parte de la pantalla de ventas para acciones inmediatas.</p>
-                <ul class="list-group list-group-flush">
-                    <li class="list-group-item"><kbd>F1</kbd> - Finaliza la venta por el total exacto en <strong>Contado</strong>.</li>
-                    <li class="list-group-item"><kbd>F2</kbd> - Finaliza la venta por el total exacto en <strong>Transferencia</strong>.</li>
-                    <li class="list-group-item"><kbd>F3</kbd> - Finaliza la venta por el total exacto en <strong>Débito</strong>.</li>
-                    <li class="list-group-item"><kbd>F4</kbd> - Finaliza la venta por el total exacto en <strong>Crédito</strong> (con recargo).</li>
-                    <li class="list-group-item"><kbd>F7</kbd> - Finaliza la venta en <strong>A Cuenta (Fiado)</strong> <em>(requiere cliente registrado)</em>.</li>
-                </ul>
+            <div class="card-body">
+                <p class="text-muted mb-4">Diseñados para que puedas cobrar, escanear y cerrar ventas completas sin necesidad de usar el ratón.</p>
 
-                <hr class="my-4">
-
-                <h5 class="card-title mb-3"><i class="fas fa-magic me-2"></i>La Tecla `Escape` - El Asistente Universal</h5>
-                <p class="card-text text-muted mb-3">La tecla <kbd>ESC</kbd> actúa como un "paso atrás" inteligente, con un comportamiento de 3 niveles:</p>
-                <div class="row">
+                <h5 class="fw-bold mb-3 text-primary"><i class="fas fa-bolt me-2"></i>Cobros Inmediatos (1 Solo Toque)</h5>
+                <div class="row g-2 mb-4">
                     <div class="col-md-4">
-                        <div class="card h-100">
+                        <div class="p-3 border rounded bg-light text-center h-100">
+                            <kbd class="fs-5 mb-2 d-inline-block">F1</kbd>
+                            <h6 class="fw-bold mb-1 text-dark">Contado</h6>
+                            <p class="small text-muted mb-0">Cierra la venta con el total exacto en efectivo.</p>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="p-3 border rounded bg-light text-center h-100">
+                            <kbd class="fs-5 mb-2 d-inline-block">F2</kbd>
+                            <h6 class="fw-bold mb-1 text-dark">Transferencia</h6>
+                            <p class="small text-muted mb-0">Cierra la venta mediante transferencia bancaria / MP.</p>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="p-3 border rounded bg-light text-center h-100">
+                            <kbd class="fs-5 mb-2 d-inline-block">F3</kbd>
+                            <h6 class="fw-bold mb-1 text-dark">Débito</h6>
+                            <p class="small text-muted mb-0">Cierra la venta cobrada con tarjeta de débito.</p>
+                        </div>
+                    </div>
+                    <div class="col-md-6 mt-2">
+                        <div class="p-3 border rounded bg-light text-center h-100">
+                            <kbd class="fs-5 mb-2 d-inline-block">F4</kbd>
+                            <h6 class="fw-bold mb-1 text-dark">Crédito</h6>
+                            <p class="small text-muted mb-0">Cierra la venta en crédito (calcula el recargo configurado).</p>
+                        </div>
+                    </div>
+                    <div class="col-md-6 mt-2">
+                        <div class="p-3 border rounded bg-light text-center h-100">
+                            <kbd class="fs-5 mb-2 d-inline-block">F7</kbd>
+                            <h6 class="fw-bold mb-1 text-dark">A Cuenta (Fiado)</h6>
+                            <p class="small text-muted mb-0">Envía el saldo a la cuenta corriente del cliente seleccionado.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <h5 class="fw-bold mb-3 text-primary"><i class="fas fa-magic me-2"></i>La Tecla `Escape` (ESC) - El Asistente Universal</h5>
+                <p class="text-muted small mb-3">La tecla <kbd>ESC</kbd> es un botón de retroceso inteligente con un comportamiento progresivo de 3 toques:</p>
+                <div class="row g-3 mb-4">
+                    <div class="col-md-4">
+                        <div class="card border-primary border-opacity-25 h-100">
                             <div class="card-body">
-                                <h6 class="card-title mb-2 text-dark ">1er Toque</h6>
-                                <p class="card-text">Si no estás en el buscador, te lleva directamente al campo <strong>"Buscar Productos"</strong>.</p>
+                                <span class="badge bg-primary mb-2">1er Toque</span>
+                                <h6 class="fw-bold text-dark">Ir al Buscador</h6>
+                                <p class="small text-muted mb-0">Si el cursor estaba en otra parte, salta directo al campo "Buscar Productos".</p>
                             </div>
                         </div>
                     </div>
                     <div class="col-md-4">
-                        <div class="card h-100">
+                        <div class="card border-warning border-opacity-25 h-100">
                             <div class="card-body">
-                                <h6 class="card-subtitle mb-2 text-muted">2do Toque</h6>
-                                <p class="card-text">Si estás en el buscador y hay texto, <strong>limpia el texto</strong> y los resultados.</p>
+                                <span class="badge bg-warning text-dark mb-2">2do Toque</span>
+                                <h6 class="fw-bold text-dark">Limpiar Búsqueda</h6>
+                                <p class="small text-muted mb-0">Si el buscador tiene texto escrito, lo borra y oculta los resultados.</p>
                             </div>
                         </div>
                     </div>
                     <div class="col-md-4">
-                        <div class="card h-100">
+                        <div class="card border-danger border-opacity-25 h-100">
                             <div class="card-body">
-                                <h6 class="card-subtitle mb-2 text-muted">3er Toque</h6>
-                                <p class="card-text">Si el buscador ya está vacío, te pregunta si deseas <strong>limpiar todo el ticket</strong>.</p>
+                                <span class="badge bg-danger mb-2">3er Toque</span>
+                                <h6 class="fw-bold text-dark">Limpiar Ticket</h6>
+                                <p class="small text-muted mb-0">Si el buscador ya estaba vacío, te pregunta si deseas vaciar el ticket de venta.</p>
                             </div>
                         </div>
                     </div>
                 </div>
-                
-                <hr class="my-4">
 
-                <h5 class="card-title mb-3"><i class="fas fa-keyboard me-2"></i>Búsqueda y Edición del Ticket</h5>
-                <p class="card-text text-muted mb-3">Atajos para el flujo principal: buscar, agregar y modificar productos.</p>
-                <ul class="list-group list-group-flush">
-                    <li class="list-group-item"><strong>En el Buscador:</strong> Usa <kbd>↓</kbd> / <kbd>↑</kbd> para navegar la lista de resultados y <kbd>Enter</kbd> para agregar el producto seleccionado. Funciona instantáneamente con códigos de barras.</li>
-                    <li class="list-group-item"><strong>Doble `Enter` Rápido:</strong> Presiona <kbd>Enter</kbd> dos veces seguidas en cualquier lugar para saltar a editar la cantidad del último producto añadido.</li>
-                    <li class="list-group-item"><strong>En un campo de Cantidad:</strong> Usa <kbd>↓</kbd> / <kbd>↑</kbd> para saltar entre los campos de cantidad de los otros productos del ticket.</li>
-                    <li class="list-group-item"><strong>En un campo de Cantidad:</strong> Presiona <kbd>Enter</gkbd> para finalizar la edición y volver al buscador.</li>
-                </ul>
-
+                <h5 class="fw-bold mb-3 text-primary"><i class="fas fa-list-ul me-2"></i>Tabla Ayuda Memoria</h5>
+                <div class="table-responsive rounded border">
+                    <table class="table table-striped table-hover mb-0 align-middle">
+                        <thead class="table-light">
+                            <tr><th>Tecla</th><th>Contexto</th><th>Acción</th></tr>
+                        </thead>
+                        <tbody>
+                            <tr><td><kbd>Enter</kbd></td><td>En el Buscador</td><td>Agrega el producto resaltado. Con lector de barras es 100% instantáneo.</td></tr>
+                            <tr><td><kbd>Doble Enter</kbd></td><td>Cualquier lugar de Ventas</td><td>Salta a editar la <strong>cantidad del último producto</strong> agregado.</td></tr>
+                            <tr><td><kbd>Enter</kbd></td><td>Editando una Cantidad</td><td>Guarda la cantidad y regresa de inmediato al buscador de productos.</td></tr>
+                            <tr><td><kbd>↓</kbd> / <kbd>↑</kbd></td><td>En el Buscador</td><td>Navega verticalmente entre los resultados sugeridos.</td></tr>
+                            <tr><td><kbd>↓</kbd> / <kbd>↑</kbd></td><td>Editando una Cantidad</td><td>Salta a editar la cantidad del producto de arriba o abajo en el ticket.</td></tr>
+                            <tr><td><kbd>Enter</kbd></td><td>En diálogos de confirmación</td><td>Equivale a hacer clic en <strong>"Aceptar"</strong>.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
 
-        <div class="card shadow-sm">
-            <div class="card-header bg-light">
-                <h4 class="mb-0"><i class="fas fa-list-ul me-2"></i>Guía Rápida (Ayuda Memoria)</h4>
+        <!-- ======================================================== -->
+        <!-- SECCIÓN 2: INTEGRACIÓN CON TIENDANUBE (PASO A PASO)      -->
+        <!-- ======================================================== -->
+        <div class="card card-manual" id="seccion-tiendanube">
+            <div class="card-header bg-success text-white d-flex align-items-center justify-content-between">
+                <h4 class="mb-0"><i class="fas fa-cloud me-2"></i>2. Integración con Tiendanube: Guía Definitiva</h4>
+                <span class="badge bg-white text-success">Sincronización Total</span>
             </div>
-            <div class="table-responsive">
-                <table class="table table-striped table-hover mb-0">
-                    <thead>
-                        <tr><th>Tecla(s)</th><th>Contexto</th><th>Acción</th></tr>
-                    </thead>
-                    <tbody>
-                        <tr><td><kbd>F1</kbd></td><td>En cualquier lugar de Ventas</td><td>Finaliza la venta con <strong>Contado</strong>.</td></tr>
-                        <tr><td><kbd>F2</kbd></td><td>En cualquier lugar de Ventas</td><td>Finaliza la venta con <strong>Transferencia</strong>.</td></tr>
-                        <tr><td><kbd>F3</kbd></td><td>En cualquier lugar de Ventas</td><td>Finaliza la venta con <strong>Débito</strong>.</td></tr>
-                        <tr><td><kbd>F4</kbd></td><td>En cualquier lugar de Ventas</td><td>Finaliza la venta con <strong>Crédito</strong>.</td></tr>
-                        <tr><td><kbd>F7</kbd></td><td>En cualquier lugar de Ventas</td><td>Finaliza la venta con <strong>A Cuenta (Fiado)</strong> <em>(requiere cliente registrado)</em>.</td></tr>
-                        <tr><td colspan="3"></td></tr>
-                        <tr><td><kbd>Escape</kbd></td><td>Lejos del buscador</td><td>Pone el foco en el <strong>buscador de productos</strong>.</td></tr>
-                        <tr><td><kbd>Escape</kbd></td><td>En el buscador (con texto)</td><td><strong>Limpia</strong> el texto de la búsqueda.</td></tr>
-                        <tr><td><kbd>Escape</kbd></td><td>En el buscador (vacío)</td><td>Pregunta si se desea <strong>limpiar el ticket</strong>.</td></tr>
-                        <tr><td colspan="3"></td></tr>
-                        <tr><td><kbd>Enter</kbd></td><td>En el buscador</td><td><strong>Agrega</strong> el producto seleccionado.</td></tr>
-                        <tr><td><kbd>Doble Enter</kbd></td><td>En cualquier lugar de Ventas</td><td>Pone el foco en la <strong>cantidad del último producto</strong>.</td></tr>
-                        <tr><td><kbd>Enter</kbd></td><td>En un campo de cantidad</td><td>Vuelve al <strong>buscador de productos</strong>.</td></tr>
-                        <tr><td colspan="3"></td></tr>
-                        <tr><td><kbd>↓</kbd> / <kbd>↑</kbd></td><td>En el buscador</td><td><strong>Navega</strong> por la lista de resultados.</td></tr>
-                        <tr><td><kbd>↓</kbd> / <kbd>↑</kbd></td><td>En un campo de cantidad</td><td><strong>Navega</strong> entre los campos de cantidad del ticket.</td></tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
+            <div class="card-body">
 
-        <div class="card shadow-sm mt-5 mb-5">
-            <div class="card-header text-white" style="background-color: #0dcaf0;">
-                <h4 class="mb-0 text-dark"><i class="fas fa-star me-2"></i>Novedades y Funciones Avanzadas (E-commerce)</h4>
-            </div>
-            <div class="card-body p-4">
-                <h5 class="card-title mb-3"><i class="fas fa-shield-alt text-danger me-2"></i>Protección de Stock Web en Ventas</h5>
-                <p class="card-text text-muted mb-3">Para evitar vender productos que ya no tienes y generar quiebres de stock en Tiendanube, el sistema cuenta con un bloqueo visual inteligente en la caja:</p>
-                <ul class="list-group list-group-flush mb-4">
-                    <li class="list-group-item">Si intentas facturar más cantidad de la disponible de un producto marcado como <strong>"Publicar en Tiendanube"</strong>, la fila del ticket se teñirá de <strong class="text-danger bg-danger bg-opacity-10 px-2 py-1 rounded">Rojo</strong>.</li>
-                    <li class="list-group-item">Aparecerá un cartel de <strong class="text-danger">Caja Bloqueada</strong> y los métodos de cobro (junto con los atajos F1-F4) se desactivarán hasta que ajustes la cantidad de ese producto.</li>
-                </ul>
-
-                <h5 class="card-title mb-3"><i class="fas fa-image text-primary me-2"></i>Optimización Inteligente de Imágenes</h5>
-                <p class="card-text text-muted mb-3">Tu catálogo web siempre se verá impecable y cargará rapidísimo gracias al nuevo motor interno:</p>
-                <ul class="list-group list-group-flush mb-0">
-                    <li class="list-group-item"><strong>Pegado Rápido:</strong> Copia cualquier imagen de internet (Clic derecho -> Copiar imagen) y presiona <kbd>Ctrl</kbd> + <kbd>V</kbd> dentro de la edición del producto para agregarla al instante.</li>
-                    <li class="list-group-item"><strong>Auto-Encuadre (1024x1024):</strong> Al guardar, el sistema centra la foto sin deformarla en un lienzo cuadrado perfecto con fondo blanco.</li>
-                    <li class="list-group-item"><strong>Súper Compresión (WebP):</strong> Las fotos se convierten automáticamente al formato de Google (WebP), reduciendo drásticamente su peso para que tu Tiendanube sea ultra rápida (Mejora el SEO).</li>
-                    <li class="list-group-item"><strong>Herramienta Masiva:</strong> En la sección "Productos", tienes el botón <button class="btn btn-sm btn-outline-info rounded-pill fw-bold ms-1" disabled><i class="fas fa-magic me-1"></i> Optimizar Imágenes</button> para arreglar automáticamente todas las fotos viejas de los productos que tengas filtrados en pantalla.</li>
-                </ul>
-            </div>
-        </div>
-
-        <div class="card shadow-sm mt-5 mb-5">
-            <div class="card-header bg-success text-white">
-                <h4 class="mb-0"><i class="fas fa-rocket me-2"></i>Guía de Pase a Producción</h4>
-            </div>
-            <div class="card-body p-4">
-                <h5 class="card-title mb-3"><i class="fas fa-cogs me-2"></i>Preparando tu POS 2025 para el Entorno Real</h5>
-                <p class="card-text text-muted mb-4">Estos son los pasos cruciales para desplegar tu sistema POS 2025 a un entorno de producción, asegurando que se conecte con tus servicios reales (Tiendanube, ARCA, Firebase de Producción).</p>
-
-                <ol class="list-group list-group-numbered">
-                    <li class="list-group-item d-flex justify-content-between align-items-start">
-                        <div class="ms-2 me-auto">
-                            <div class="fw-bold"><i class="fas fa-server me-2"></i>1. Conexión Automática a Base de Datos de Producción (Firebase)</div>
-                            Tu sistema ya está configurado para cambiar automáticamente al entorno de producción de Firebase.
-                            <br><small class="text-muted">No necesitas hacer nada con el código <code>firebase.js</code>. Cuando subas los archivos a tu servidor web (por ejemplo, Firebase Hosting, Vercel, etc.) y dejes de usar <code>localhost</code> o <code>127.0.0.1</code>, el sistema detectará automáticamente que está en producción y se conectará a la base de datos <code>cajadiaria-infotech</code>.</small>
-                        </div>
-                    </li>
-                    <li class="list-group-item d-flex justify-content-between align-items-start">
-                        <div class="ms-2 me-auto">
-                            <div class="fw-bold"><i class="fas fa-cloud-upload-alt me-2"></i>2. Despliegue de Cloud Functions a Producción</div>
-                            Las "Cloud Functions" (los robots que sincronizan con Tiendanube y generan backups) deben ser desplegadas en tu proyecto de Firebase de producción.
-                            <br><small class="text-muted">Abre tu terminal, navega hasta la carpeta <code>POS 2025</code> y ejecuta los siguientes comandos:</small>
-                            <pre class="bg-dark text-white p-2 rounded mt-2"><code>firebase use cajadiaria-infotech
-cd functions
-firebase deploy --only functions</code></pre>
-                            <br><small class="text-muted">Al finalizar, la consola de Firebase te mostrará la URL del <code>webhookTiendanube</code>. ¡Cópiala, la necesitarás en el paso 4!</small>
-                        </div>
-                    </li>
-                    <li class="list-group-item d-flex justify-content-between align-items-start">
-                        <div class="ms-2 me-auto">
-                            <div class="fw-bold"><i class="fas fa-sliders-h me-2"></i>3. Configuración de Tiendanube y ARCA (Desde tu POS 2025)</div>
-                            Una vez que tu POS 2025 esté corriendo en el entorno de producción (o en el stage, si quieres probar primero), debes ingresar las credenciales correctas.
-                            <br><small class="text-muted">Accede a tu POS 2025 (desde tu dominio o tu URL de stage), ve a la sección <strong>"Configuración"</strong> y completa los siguientes datos:</small>
-                            <ul>
-                                <li><strong class="text-primary">Integración Tiendanube:</strong>
-                                    <ul>
-                                        <li><strong>URL Base de la Tienda:</strong> La URL completa de tu tienda (ej: <code>https://mitienda.mitiendanube.com</code>).</li>
-                                        <li><strong>ID de la Tienda (User ID) y Token:</strong> Obtenidos mediante la instalación de tu App privada.</li>
-                                    </ul>
-                                    <details class="mt-2 mb-2 p-3 border rounded bg-light">
-                                        <summary class="fw-bold text-secondary" style="cursor:pointer;"><i class="fas fa-key me-1"></i> ¿Cómo obtener el Token y el ID ahora?</summary>
-                                        <ol class="small mt-2 mb-0 ps-3">
-                                            <li>Ingresa al <strong>Portal de Socios</strong> de Tiendanube y ten a mano el <strong>App ID</strong> (Client ID) y <strong>Client Secret</strong> de tu aplicación.</li>
-                                            <li>Inicia sesión en la tienda de Tiendanube de producción.</li>
-                                            <li>En otra pestaña, abre la URL: <br><code>https://www.tiendanube.com/apps/TU_APP_ID/authorize</code></li>
-                                            <li>Acepta los permisos. Serás redirigido a una página. Mira la barra de direcciones y copia el valor de <code>?code=...</code> <br><span class="text-danger fw-bold small">¡OJO! Este código caduca en minutos y sirve UNA SOLA VEZ. Úsalo rápido.</span></li>
-                                            <li>Para obtener el token, puedes usar la <strong>Consola del Navegador</strong> (F12 > Pestaña Console) pegando este código (JavaScript):
-                                                <pre class="bg-dark text-white p-2 rounded mt-2 mb-2" style="font-size: 0.9em;"><code>fetch("https://www.tiendanube.com/apps/authorize/token", {
-  headers: { "Content-Type": "application/x-www-form-urlencoded" },
-  body: "client_id=TU_APP_ID&client_secret=TU_CLIENT_SECRET&grant_type=authorization_code&code=EL_CODE",
-  method: "POST"
-}).then(r => r.json()).then(console.log);</code></pre>
-                                                O si prefieres usar una terminal (como <strong>Cloud Shell</strong> o Bash), usa este comando (cURL):
-                                                <pre class="bg-dark text-white p-2 rounded mt-2" style="font-size: 0.9em;"><code>curl -X POST "https://www.tiendanube.com/apps/authorize/token" \
--H "Content-Type: application/x-www-form-urlencoded" \
--d "client_id=TU_APP_ID&client_secret=TU_CLIENT_SECRET&grant_type=authorization_code&code=EL_CODE"</code></pre>
-                                            </li>
-                                            <li>La respuesta será un texto/JSON. Copia el <code>access_token</code> (Token) y el <code>user_id</code> (ID de Tienda) y pégalos en la Configuración del POS.</li>
-                                        </ol>
-                                        <div class="alert alert-warning mt-3 mb-0 py-2 px-3 small border-0 shadow-sm">
-                                            <i class="fas fa-exclamation-triangle me-2"></i><strong>¿Te da error "invalid_grant"?</strong><br>Significa que el código (code) expiró, escribiste mal un dato o ya lo usaste. Repite desde el paso 3 para generar uno <strong>nuevo</strong> y canjéalo inmediatamente.
-                                        </div>
-                                    </details>
-                                </li>
-                                <li><strong class="text-info">Facturación Automática ARCA:</strong>
-                                    <ul>
-                                        <li><strong>URL Base de la API:</strong> La URL de tu servicio ARCA (ej: <code>https://tu-api-arca.com</code>).</li>
-                                        <li><strong>CUIT Emisor:</strong> Tu CUIT.</li>
-                                        <li><strong>API Key:</strong> Tu llave secreta para ARCA.</li>
-                                        <li><strong class="text-danger">Importante:</strong> Asegúrate de marcar "Entorno de Producción (Servidores Reales)".</li>
-                                        <li>Configura los métodos de pago para auto-facturar según tu preferencia.</li>
-                                    </ul>
-                                </li>
-                            </ul>
-                            <br><small class="text-muted">No olvides hacer clic en <strong>"Guardar"</strong> en cada sección después de completar los datos.</small>
-                        </div>
-                    </li>
-                    <li class="list-group-item d-flex justify-content-between align-items-start">
-                        <div class="ms-2 me-auto">
-                            <div class="fw-bold"><i class="fas fa-webhook me-2"></i>4. Conectar Tiendanube con tu POS (Configuración de Webhooks)</div>
-                            Debes decirle a tu tienda de Tiendanube que avise a tu POS 2025 cuando haya un nuevo evento. Al usar una app privada, los webhooks se registran mediante la API.
-                            <br><small class="text-muted">Abre tu <strong>Cloud Shell</strong> (o cualquier terminal) y ejecuta estos dos comandos. Reemplaza <code>TU_ID_DE_TIENDA</code>, <code>TU_TOKEN</code> y <code>LA_URL_DEL_WEBHOOK</code> (la que obtuviste en el Paso 2):</small>
-                            <div class="mt-2">
-                                <strong class="small">1. Registrar evento de Orden Creada (order/created):</strong>
-                                <pre class="bg-dark text-white p-2 rounded mt-1 mb-2" style="font-size: 0.9em;"><code>curl -X POST "https://api.tiendanube.com/v1/TU_ID_DE_TIENDA/webhooks" \
--H "Authentication: bearer TU_TOKEN" \
--H "Content-Type: application/json" \
--d '{"event": "order/created", "url": "LA_URL_DEL_WEBHOOK"}'</code></pre>
-                                <strong class="small">2. Registrar evento de Orden Pagada (order/paid):</strong>
-                                <pre class="bg-dark text-white p-2 rounded mt-1 mb-2" style="font-size: 0.9em;"><code>curl -X POST "https://api.tiendanube.com/v1/TU_ID_DE_TIENDA/webhooks" \
--H "Authentication: bearer TU_TOKEN" \
--H "Content-Type: application/json" \
--d '{"event": "order/paid", "url": "LA_URL_DEL_WEBHOOK"}'</code></pre>
-                            </div>
-                            <small class="text-muted">Si la consola te responde con un JSON que contiene un <code>"id"</code>, ¡el webhook se registró exitosamente!</small>
-                        </div>
-                    </li>
-                    <li class="list-group-item d-flex justify-content-between align-items-start">
-                        <div class="ms-2 me-auto">
-                            <div class="fw-bold"><i class="fas fa-check-circle me-2"></i>5. ¡Verifica Todo!</div>
-                            Una vez completados todos los pasos, es crucial realizar una verificación exhaustiva.
-                            <br><small class="text-muted">Realiza una venta de prueba en tu Tiendanube, verifica que aparezca en tu sección de "Pedidos Web" en el POS, que el stock se haya descontado, y que, si configuraste la auto-facturación, se haya generado la factura en ARCA/AFIP.</small>
-                            <br><small class="text-danger fw-bold">No te saltes este paso. Una pequeña prueba puede ahorrarte muchos dolores de cabeza.</small>
-                        </div>
-                    </li>
-                </ol>
-
-                <hr class="my-4">
-
-                <h5 class="card-title mb-3"><i class="fas fa-sync-alt me-2"></i>¿Cómo funciona la sincronización? (Reglas de Oro)</h5>
-                <div class="alert alert-info border-0 shadow-sm mb-4">
-                    <ul class="mb-0">
-                        <li class="mb-2"><strong>De POS a Tiendanube (Productos):</strong> Funciona automáticamente mediante un "robot" interno de Firebase. Cuando creas o editas un producto en el POS, el cambio viaja instantáneamente a la nube. No necesitas webhooks para esto.</li>
-                        <li class="mb-2"><strong>De Tiendanube a POS (Ventas):</strong> Utiliza los Webhooks que configuraste en el paso 4. Cuando alguien compra en tu web, Tiendanube "toca el timbre" del POS enviando los datos para descontar el stock y avisarte de la nueva orden.</li>
-                        <li><strong class="text-danger">⚠️ REGLA DE ORO:</strong> El POS 2025 es tu "fuente de la verdad". <strong>NUNCA edites precios, stock o nombres directamente en el panel administrador de Tiendanube</strong>. Esos cambios NO viajarán de vuelta al POS, y la próxima vez que guardes el producto en el POS, sobrescribirá lo que habías cambiado en la web. Todo debe ser administrado siempre desde tu sistema POS.</li>
+                <!-- EXPLICACIÓN CONCEPTUAL -->
+                <div class="callout callout-info mb-4">
+                    <h6 class="fw-bold mb-2"><i class="fas fa-info-circle me-2"></i>¿Cómo funciona la conexión entre POS 2025 y Tiendanube?</h6>
+                    <p class="mb-2">La sincronización opera en dos direcciones completamente separadas e independientes:</p>
+                    <ul class="mb-0 small">
+                        <li><strong>1. De POS hacia Tiendanube (Productos y Precios):</strong> Cuando guardas un producto en el POS marcado para publicar, un robot en la nube (Cloud Function) actualiza Tiendanube usando tu <strong>Token</strong> y <strong>User ID</strong>.</li>
+                        <li><strong>2. De Tiendanube hacia el POS (Ventas y Pedidos en Vivo):</strong> Cuando un cliente compra en tu tienda web, Tiendanube necesita tener una URL registrada llamada <strong>Webhook</strong> para "tocar el timbre" en tu servidor, descontar el stock e ingresar el pedido en POS 2025.</li>
                     </ul>
                 </div>
 
-                <p class="card-text text-muted">¡Felicitaciones! Tu POS 2025 estará listo para operar en un entorno de producción, con todas las integraciones y automatizaciones activas.</p>
+                <!-- LOS 3 DATOS NECESARIOS -->
+                <h5 class="fw-bold text-dark mb-3"><i class="fas fa-id-card me-2 text-primary"></i>Los 3 Datos que necesitas configurar en el POS</h5>
+                <p class="text-muted small">Desde la barra lateral de tu sistema, ingresa en <strong>Configuración</strong> y localiza la tarjeta <strong>"Integración Tiendanube"</strong>:</p>
+
+                <div class="row g-3 mb-4">
+                    <div class="col-md-4">
+                        <div class="p-3 border rounded bg-white shadow-sm h-100">
+                            <span class="badge bg-primary mb-2">Dato 1</span>
+                            <h6 class="fw-bold mb-1">URL Base de la Tienda</h6>
+                            <p class="small text-muted mb-2">La dirección web pública de tu tienda online:</p>
+                            <code class="d-block p-1 bg-light rounded text-dark small user-select-all">https://tiendainfotech.com.ar</code>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="p-3 border rounded bg-white shadow-sm h-100">
+                            <span class="badge bg-primary mb-2">Dato 2</span>
+                            <h6 class="fw-bold mb-1">ID de Tienda (User ID)</h6>
+                            <p class="small text-muted mb-2">El número único identificador de tu tienda en Tiendanube (ej: <code>7713653</code>).</p>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="p-3 border rounded bg-white shadow-sm h-100">
+                            <span class="badge bg-primary mb-2">Dato 3</span>
+                            <h6 class="fw-bold mb-1">Token de Acceso (Access Token)</h6>
+                            <p class="small text-muted mb-2">Llave secreta de autenticación privada otorgada por la API de Tiendanube.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- CÓMO OBTENER EL TOKEN PASO A PASO -->
+                <div class="card border-0 bg-light rounded-3 p-4 mb-4">
+                    <h5 class="fw-bold text-dark mb-2"><i class="fas fa-key me-2 text-warning"></i>¿Cómo obtener el Token y el User ID desde cero?</h5>
+                    <p class="text-muted small mb-4">Si necesitas vincular una tienda nueva o tu token anterior caducó, sigue estos 5 pasos exactos:</p>
+
+                    <!-- PASO 1 -->
+                    <div class="step-container">
+                        <div class="step-badge">1</div>
+                        <div>
+                            <h6 class="fw-bold mb-1">Ten a mano tus Credenciales de Desarrollador / Socio</h6>
+                            <p class="small text-muted mb-0">
+                                Ingresa al <a href="https://partners.tiendanube.com" target="_blank" class="fw-bold text-decoration-none">Portal de Socios de Tiendanube</a>, ve a tu aplicación privada y copia el <strong>App ID (Client ID)</strong> y el <strong>Client Secret</strong>.
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- PASO 2 -->
+                    <div class="step-container">
+                        <div class="step-badge">2</div>
+                        <div>
+                            <h6 class="fw-bold mb-1">Inicia sesión en la tienda que deseas vincular</h6>
+                            <p class="small text-muted mb-0">
+                                Abre una pestaña en tu navegador e inicia sesión en el panel administrador de tu Tiendanube (la de producción o la de dev).
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- PASO 3 -->
+                    <div class="step-container">
+                        <div class="step-badge">3</div>
+                        <div>
+                            <h6 class="fw-bold mb-1">Autoriza la aplicación en la tienda</h6>
+                            <p class="small text-muted mb-1">Abre en otra pestaña esta URL (reemplazando <code>TU_APP_ID</code> por tu Client ID):</p>
+                            <div class="code-box mb-2"><code>https://www.tiendanube.com/apps/TU_APP_ID/authorize</code></div>
+                            <p class="small text-muted mb-0">Haz clic en <strong>"Instalar" / "Aceptar permisos"</strong>.</p>
+                        </div>
+                    </div>
+
+                    <!-- PASO 4 -->
+                    <div class="step-container">
+                        <div class="step-badge">4</div>
+                        <div>
+                            <h6 class="fw-bold mb-1">Copia el Código Temporal (?code=...)</h6>
+                            <p class="small text-muted mb-1">
+                                Al aceptar los permisos, el navegador te redirigirá a una dirección web. Mira la barra de direcciones de tu navegador y copia el código que aparece al final:
+                            </p>
+                            <div class="p-2 border rounded bg-white small mb-2">
+                                <code>https://tu-sitio.com/?code=<strong class="text-danger">c7f28a9b3e1045de...</strong></code>
+                            </div>
+                            <div class="callout callout-warning py-2 px-3 small mb-0">
+                                <i class="fas fa-stopwatch me-1"></i><strong>¡Atención!</strong> Este código sirve una sola vez y expira en 5 minutos. Canjéalo de inmediato en el paso 5.
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- PASO 5 -->
+                    <div class="step-container mb-0">
+                        <div class="step-badge">5</div>
+                        <div class="w-100">
+                            <h6 class="fw-bold mb-1">Canjea el código por tu Token Permanente</h6>
+                            <p class="small text-muted mb-2">
+                                En la misma ventana de tu navegador, presiona la tecla <kbd>F12</kbd> (o Clic derecho -> Inspeccionar), ve a la pestaña <strong>Console</strong>, pega este código reemplazando tus datos y presiona <kbd>Enter</kbd>:
+                            </p>
+                            <div class="code-box">
+<pre class="mb-0 text-white"><code>fetch("https://www.tiendanube.com/apps/authorize/token", {
+  method: "POST",
+  headers: { "Content-Type": "application/x-www-form-urlencoded" },
+  body: "client_id=TU_APP_ID&client_secret=TU_CLIENT_SECRET&grant_type=authorization_code&code=EL_CODIGO_DEL_PASO_4"
+}).then(r => r.json()).then(res => {
+  console.log("=== CREDENCIALES OBTENIDAS ===");
+  console.log("User ID (ID de Tienda):", res.user_id);
+  console.log("Access Token (Token):", res.access_token);
+});</code></pre>
+                            </div>
+                            <p class="small text-success fw-bold mt-2 mb-0">
+                                <i class="fas fa-check-circle me-1"></i>¡Listo! La consola imprimirá tu <code>user_id</code> y tu <code>access_token</code>. Pégalos en el POS y haz clic en "Guardar Configuración Tiendanube".
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- NOVEDAD: VINCULACIÓN AUTOMÁTICA DE WEBHOOKS -->
+                <div class="card border border-primary border-2 shadow-sm rounded-3 p-4">
+                    <div class="d-flex align-items-center mb-3">
+                        <div class="bg-primary text-white rounded-circle p-3 me-3">
+                            <i class="fas fa-satellite-dish fs-4"></i>
+                        </div>
+                        <div>
+                            <h5 class="fw-bold mb-1 text-primary">Vinculación Automática de Webhooks (En 1 Solo Clic)</h5>
+                            <p class="text-muted small mb-0">¡Ya no necesitas usar comandos cURL ni consolas de terminal para conectar las ventas en vivo!</p>
+                        </div>
+                    </div>
+
+                    <p class="small text-muted">
+                        Una vez guardadas tus credenciales en <strong>Configuración</strong>, verás el panel <strong>"Conexión en Vivo (Webhooks de Ventas)"</strong> con dos botones inteligentes:
+                    </p>
+
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <div class="p-3 border rounded bg-light h-100">
+                                <h6 class="fw-bold text-dark"><i class="fas fa-search me-2 text-primary"></i>Botón "Verificar Estado"</h6>
+                                <p class="small text-muted mb-0">
+                                    Pregunta en vivo a Tiendanube qué webhooks tiene registrados. Te indicará en verde si los eventos <code>order/created</code> y <code>order/paid</code> están conectados a tu entorno actual.
+                                </p>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="p-3 border rounded bg-light h-100">
+                                <h6 class="fw-bold text-dark"><i class="fas fa-link me-2 text-success"></i>Botón "Vincular Webhooks Automáticamente"</h6>
+                                <p class="small text-muted mb-0">
+                                    Configura de inmediato los webhooks en Tiendanube con la URL exacta de tu Cloud Function, elimina conexiones viejas y activa las notificaciones en vivo.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
             </div>
         </div>
+
+        <!-- ======================================================== -->
+        <!-- SECCIÓN 3: LOGÍSTICA WEB Y GESTIÓN DE PEDIDOS            -->
+        <!-- ======================================================== -->
+        <div class="card card-manual" id="seccion-pedidos">
+            <div class="card-header bg-dark text-white d-flex align-items-center justify-content-between">
+                <h4 class="mb-0"><i class="fas fa-shopping-cart me-2"></i>3. Logística Web y Gestión de Pedidos Online</h4>
+                <span class="badge bg-primary">Kanban en Tiempo Real</span>
+            </div>
+            <div class="card-body">
+                <p class="text-muted mb-4">La sección <strong>"Logística Web (Tiendanube)"</strong> de tu POS 2025 está pensada para agilizar la preparación de envíos y retiros de tus clientes web.</p>
+
+                <!-- CÓMO LLEGA UN PEDIDO -->
+                <h5 class="fw-bold text-dark mb-3"><i class="fas fa-bell me-2 text-danger"></i>¿Qué ocurre cuando alguien compra en tu Tiendanube?</h5>
+                <div class="row g-3 mb-4">
+                    <div class="col-md-3">
+                        <div class="p-3 border rounded text-center bg-light h-100">
+                            <i class="fas fa-bell fs-2 text-danger mb-2"></i>
+                            <h6 class="fw-bold text-dark mb-1">Alarma Sonora</h6>
+                            <p class="small text-muted mb-0">Suena una campanita en la caja para avisar a los empleados.</p>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="p-3 border rounded text-center bg-light h-100">
+                            <i class="fas fa-circle-exclamation fs-2 text-warning mb-2"></i>
+                            <h6 class="fw-bold text-dark mb-1">Badge de Menú</h6>
+                            <p class="small text-muted mb-0">El número rojo en el menú principal sube indicando pedidos pendientes.</p>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="p-3 border rounded text-center bg-light h-100">
+                            <i class="fas fa-cubes fs-2 text-primary mb-2"></i>
+                            <h6 class="fw-bold text-dark mb-1">Descuento de Stock</h6>
+                            <p class="small text-muted mb-0">El inventario del POS se descuenta al instante de forma atómica.</p>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="p-3 border rounded text-center bg-light h-100">
+                            <i class="fas fa-table-columns fs-2 text-success mb-2"></i>
+                            <h6 class="fw-bold text-dark mb-1">Tarjeta en Kanban</h6>
+                            <p class="small text-muted mb-0">Aparece la tarjeta en la columna "Nuevos / Pendientes".</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- BOTÓN SINCRONIZAR PEDIDOS -->
+                <div class="callout callout-success mb-4">
+                    <div class="d-flex align-items-center mb-2">
+                        <i class="fas fa-sync-alt fs-4 me-2"></i>
+                        <h6 class="fw-bold mb-0">Nuevo Botón: "🔄 Sincronizar Pedidos de Tiendanube"</h6>
+                    </div>
+                    <p class="small mb-1">
+                        Ubicado en la parte superior derecha de la pantalla de Pedidos Web. Permite consultar la API de Tiendanube en cualquier momento para:
+                    </p>
+                    <ul class="small mb-0">
+                        <li>Recuperar ventas que hayan ocurrido mientras no tenías conexión a internet.</li>
+                        <li>Importar pedidos históricos al conectar una tienda nueva.</li>
+                        <li><strong>Protección contra duplicados:</strong> Si el pedido ya existe, no vuelve a descontar el stock ni duplica la tarjeta.</li>
+                    </ul>
+                </div>
+
+                <!-- FLUJO DE TRABAJO KANBAN -->
+                <h5 class="fw-bold text-dark mb-3"><i class="fas fa-tasks me-2 text-primary"></i>El Flujo de Trabajo en 3 Pasos</h5>
+                <div class="row g-3 mb-4">
+                    <div class="col-md-4">
+                        <div class="card border-danger border-2 h-100">
+                            <div class="card-header bg-danger text-white fw-bold">
+                                1. Nuevos / Pendientes
+                            </div>
+                            <div class="card-body">
+                                <p class="small text-muted mb-2">Pedidos recién comprados por la web que esperan ser armados.</p>
+                                <span class="badge bg-light text-danger border border-danger">Acción: Pasar a "Armar Pedido"</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card border-warning border-2 h-100">
+                            <div class="card-header bg-warning text-dark fw-bold">
+                                2. En Preparación
+                            </div>
+                            <div class="card-body">
+                                <p class="small text-muted mb-2">El personal del depósito está buscando los productos y empaquetándolos.</p>
+                                <span class="badge bg-light text-warning border border-warning text-dark">Acción: Pasar a "Listo / Entregar"</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card border-success border-2 h-100">
+                            <div class="card-header bg-success text-white fw-bold">
+                                3. Finalizados / Entregados
+                            </div>
+                            <div class="card-body">
+                                <p class="small text-muted mb-2">El cliente retiró por el local o el paquete fue entregado al correo.</p>
+                                <span class="badge bg-light text-success border border-success">Acción: Archivar al Historial</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- GESTIÓN DE PAGOS: FALTA EN TN -->
+                <h5 class="fw-bold text-dark mb-2"><i class="fas fa-hand-holding-usd me-2 text-warning"></i>Gestión de Pagos: ¿Qué significa "Falta en TN"?</h5>
+                <p class="small text-muted mb-2">
+                    Si el comprador eligió pagar en efectivo al retirar o por transferencia manual, la orden ingresará con estado <strong>"Pendiente de Pago"</strong>.
+                </p>
+                <div class="callout callout-warning small mb-0">
+                    <ul class="mb-0">
+                        <li><strong>Registrar Pago Local:</strong> Cuando el cliente te paga en el local, puedes presionar <em>"Cobrar Pedido"</em>. La orden se marcará como pagada en tu POS, pero mostrará la etiqueta amarilla <code>Falta en TN</code>.</li>
+                        <li><strong>Switch de Confirmación:</strong> Como Tiendanube exige que los pagos manuales se confirmen en su panel, una vez que marques la orden como pagada en Tiendanube, activas el interruptor <strong>"Ya marqué en TN"</strong> en el modal del pedido para que todo quede en verde sincronizado.</li>
+                    </ul>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- ======================================================== -->
+        <!-- SECCIÓN 4: CATÁLOGO, PRECIOS Y VARIANTES                 -->
+        <!-- ======================================================== -->
+        <div class="card card-manual" id="seccion-catalogo">
+            <div class="card-header bg-info text-dark d-flex align-items-center justify-content-between">
+                <h4 class="mb-0"><i class="fas fa-boxes me-2"></i>4. Catálogo, Precios, Variantes e Imágenes</h4>
+                <span class="badge bg-white text-dark">Productos</span>
+            </div>
+            <div class="card-body">
+
+                <!-- REGLA DE ORO -->
+                <div class="callout callout-danger mb-4">
+                    <h6 class="fw-bold mb-1"><i class="fas fa-exclamation-triangle me-2"></i>LA REGLA DE ORO DE LA INTEGRACIÓN</h6>
+                    <p class="small mb-0">
+                        <strong>Tu sistema POS 2025 es la única fuente de la verdad.</strong> NUNCA edites precios, nombres o stock directamente desde el panel de Tiendanube. Cualquier modificación debe hacerse siempre dentro de POS 2025; de lo contrario, al volver a editar el producto en el POS se sobrescribirán los cambios de la web.
+                    </p>
+                </div>
+
+                <div class="row g-4">
+                    <!-- PRODUCTOS SIMPLES Y VARIANTES -->
+                    <div class="col-md-6">
+                        <div class="p-3 border rounded bg-white shadow-sm h-100">
+                            <h6 class="fw-bold text-dark mb-2"><i class="fas fa-tags me-2 text-primary"></i>Productos Simples vs Variantes</h6>
+                            <ul class="small text-muted mb-0 ps-3">
+                                <li class="mb-2"><strong>Productos Simples:</strong> Poseen un único precio, código de barra y stock. Al actualizarse, el sistema sincroniza su variante principal en Tiendanube sin riesgo de duplicar datos.</li>
+                                <li><strong>Productos con Variantes (Talles/Colores):</strong> Cada variante tiene su propio código SKU independiente y su propio control de stock. Al venderse un talle específico en la web, el POS descuenta el stock de ese talle exacto.</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <!-- HERRAMIENTAS MASIVAS DE PRECIOS -->
+                    <div class="col-md-6">
+                        <div class="p-3 border rounded bg-white shadow-sm h-100">
+                            <h6 class="fw-bold text-dark mb-2"><i class="fas fa-coins me-2 text-warning"></i>Herramientas Masivas de Precios Web</h6>
+                            <ul class="small text-muted mb-0 ps-3">
+                                <li class="mb-2"><strong>Sincronizar Precios Web:</strong> Calcula automáticamente el precio con el recargo configurado (%) sobre el precio de venta y lo sube en lote a Tiendanube.</li>
+                                <li><strong>Verificar Precios Web:</strong> Compara en vivo todo tu catálogo con Tiendanube y filtra en pantalla solo aquellos productos cuyos precios hayan quedado desactualizados.</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- IMÁGENES -->
+                <h5 class="fw-bold text-dark mt-4 mb-3"><i class="fas fa-image me-2 text-primary"></i>Manejo Inteligente de Imágenes</h5>
+                <ul class="list-group list-group-flush small">
+                    <li class="list-group-item d-flex align-items-center">
+                        <i class="fas fa-paste text-primary me-3 fs-5"></i>
+                        <div><strong>Pegado con Ctrl + V:</strong> Copia cualquier imagen de internet y pégala directamente dentro del formulario del producto.</div>
+                    </li>
+                    <li class="list-group-item d-flex align-items-center">
+                        <i class="fas fa-compress-arrows-alt text-success me-3 fs-5"></i>
+                        <div><strong>Formato WebP 1024x1024:</strong> Las fotos se encuadran en fondo blanco y se comprimen en WebP para que tu web cargue a la máxima velocidad posible (mejora posicionamiento en Google).</div>
+                    </li>
+                    <li class="list-group-item d-flex align-items-center">
+                        <i class="fas fa-layer-group text-info me-3 fs-5"></i>
+                        <div><strong>Fotos por Variante:</strong> Ahora puedes asignar imágenes individuales a cada talle o color. Si el producto tiene variantes pero no foto principal, el sistema usa automáticamente la foto de la primera variante como portada.</div>
+                    </li>
+                </ul>
+
+            </div>
+        </div>
+
+        <!-- ======================================================== -->
+        <!-- SECCIÓN 5: ENTORNOS: STAGE (DEV) VS PRODUCCIÓN          -->
+        <!-- ======================================================== -->
+        <div class="card card-manual" id="seccion-entornos">
+            <div class="card-header bg-secondary text-white d-flex align-items-center justify-content-between">
+                <h4 class="mb-0"><i class="fas fa-server me-2"></i>5. Entornos de Trabajo: Stage (Dev) vs Producción</h4>
+                <span class="badge bg-light text-dark">Arquitectura Segura</span>
+            </div>
+            <div class="card-body">
+                <p class="text-muted mb-4">
+                    Tu sistema POS 2025 está blindado con <strong>dos bases de datos y dos tiendas separadas</strong> para que puedas probar cambios y hacer pruebas sin alterar las ventas reales de tu negocio.
+                </p>
+
+                <!-- TABLA COMPARATIVA -->
+                <div class="table-responsive rounded border mb-4">
+                    <table class="table table-bordered mb-0 align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Característica</th>
+                                <th><span class="env-badge-stage"><i class="fas fa-vial me-1"></i> Stage (Desarrollo / Pruebas)</span></th>
+                                <th><span class="env-badge-prod"><i class="fas fa-store me-1"></i> Producción (Real)</span></th>
+                            </tr>
+                        </thead>
+                        <tbody class="small">
+                            <tr>
+                                <td><strong>¿Cuándo se usa?</strong></td>
+                                <td>Cuando abres el sistema en tu PC local (<code>http://127.0.0.1:5500</code> o <code>localhost</code>).</td>
+                                <td>Cuando accedes desde la web oficial de tu negocio (tu dominio público / hosting).</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Proyecto Firebase</strong></td>
+                                <td><code>cajadiaria-infotech-stage</code></td>
+                                <td><code>cajadiaria-infotech</code></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Tienda Tiendanube</strong></td>
+                                <td><code>https://tiendainfotechdev.mitiendanube.com</code></td>
+                                <td><code>https://tiendainfotech.com.ar</code></td>
+                            </tr>
+                            <tr>
+                                <td><strong>URL de Webhook (Cloud Run)</strong></td>
+                                <td><code>https://webhooktiendanube-ih46pgqtea-uc.a.run.app</code></td>
+                                <td><code>https://webhooktiendanube-us5ki3g7va-uc.a.run.app</code></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Facturación ARCA</strong></td>
+                                <td>Servidores de Homologación (Pruebas AFIP)</td>
+                                <td>Servidores de Producción (Comprobantes Reales)</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="callout callout-info mb-0">
+                    <h6 class="fw-bold mb-1"><i class="fas fa-laptop-code me-2"></i>¿Cómo desplegar cambios en las Cloud Functions?</h6>
+                    <p class="small mb-2">Si realizas cambios en el código de backend (<code>functions/index.js</code>), puedes subirlos a cada entorno ejecutando en tu terminal:</p>
+                    <div class="code-box">
+<pre class="mb-0 text-white"><code># Para desplegar a Producción:
+firebase use cajadiaria-infotech
+firebase deploy --only functions
+
+# Para desplegar a Stage (Dev):
+firebase use cajadiaria-infotech-stage
+firebase deploy --only functions</code></pre>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- ======================================================== -->
+        <!-- SECCIÓN 6: FACTURACIÓN ELECTRÓNICA ARCA (AFIP)           -->
+        <!-- ======================================================== -->
+        <div class="card card-manual" id="seccion-arca">
+            <div class="card-header text-white d-flex align-items-center justify-content-between" style="background-color: #0284c7;">
+                <h4 class="mb-0"><i class="fas fa-receipt me-2"></i>6. Facturación Electrónica ARCA (AFIP)</h4>
+                <span class="badge bg-white text-dark">Fiscal</span>
+            </div>
+            <div class="card-body">
+                <p class="text-muted mb-4">El sistema puede emitir facturas electrónicas de forma 100% automática tanto en las ventas de mostrador como en las compras recibidas por la web.</p>
+
+                <div class="row g-3 mb-4">
+                    <div class="col-md-6">
+                        <div class="p-3 border rounded bg-white shadow-sm h-100">
+                            <h6 class="fw-bold text-dark mb-2"><i class="fas fa-sliders-h me-2 text-primary"></i>Configuración de Métodos Automáticos</h6>
+                            <p class="small text-muted mb-0">
+                                En <strong>Configuración -> Facturación Automática ARCA</strong>, puedes activar cuáles métodos de pago emiten comprobante de forma instantánea al finalizar la venta (Contado, Transferencia, Débito o Crédito).
+                            </p>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="p-3 border rounded bg-white shadow-sm h-100">
+                            <h6 class="fw-bold text-dark mb-2"><i class="fas fa-file-invoice-dollar me-2 text-success"></i>Facturar Pedidos Web</h6>
+                            <p class="small text-muted mb-0">
+                                Al abrir el detalle de cualquier pedido web en Kanban, dispones del botón <strong>"Facturar en ARCA"</strong>, el cual toma automáticamente el DNI/CUIT y datos del comprador para emitir el comprobante legal con CAE y código QR oficial.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="callout callout-warning small mb-0">
+                    <i class="fas fa-exclamation-triangle me-2"></i><strong>Recordatorio:</strong> Verifica siempre tener marcada la casilla <em>"Entorno de Producción (Servidores Reales)"</em> en la configuración de ARCA cuando estés operando con clientes reales para que los comprobantes tengan validez fiscal ante la AFIP.
+                </div>
+
+            </div>
+        </div>
+
+        <!-- FOOTER -->
+        <div class="text-center text-muted small py-4">
+            <p class="mb-1"><strong>POS 2025</strong> - Sistema Integral de Punto de Venta y Comercio Electrónico</p>
+            <p class="mb-0">Desarrollado para InfoTech • Todos los derechos reservados</p>
+        </div>
+
     </div>
+
+    <!-- Bootstrap 5 JS Bundle -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

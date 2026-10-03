@@ -2,6 +2,8 @@
 import { getFirestore, collection, query, onSnapshot, doc, updateDoc, orderBy } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
 import { formatCurrency, showConfirmationModal, showAlertModal, facturarEnArca, generatePDF, showToast } from '../utils.js';
 import { getAppConfig } from './dataManager.js';
+import { functions } from '../firebase.js';
+import { httpsCallable } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-functions.js";
 
 const db = getFirestore();
 let pedidos = [];
@@ -43,11 +45,47 @@ export async function init() {
     if (filtroFechaHastaWeb) filtroFechaHastaWeb.addEventListener('change', () => { if(filtroRangoWeb) filtroRangoWeb.value = 'custom'; });
     if (btnExportarWebExcel) btnExportarWebExcel.addEventListener('click', exportarPedidosWebAExcel);
 
+    const btnSincronizarTN = document.getElementById('btn-sincronizar-pedidos-tn');
+    if (btnSincronizarTN) btnSincronizarTN.addEventListener('click', sincronizarPedidosTN);
+
     crearModalHTML();
     modalDetalleEl = document.getElementById('modalDetallePedido');
     if (modalDetalleEl) modalDetalle = new bootstrap.Modal(modalDetalleEl);
 
     escucharPedidos();
+}
+
+/**
+ * Consulta las últimas órdenes directamente desde Tiendanube e importa las faltantes.
+ */
+async function sincronizarPedidosTN() {
+    const btn = document.getElementById('btn-sincronizar-pedidos-tn');
+    if (!btn) return;
+    const originalText = btn.innerHTML;
+    try {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Sincronizando con Tiendanube...';
+
+        const sincronizar = httpsCallable(functions, 'sincronizarPedidosTiendanube');
+        const res = await sincronizar({ limit: 15 });
+        const data = res.data;
+
+        if (data.success) {
+            const nuevos = (data.resultados || []).filter(r => r.stockDescontado).length;
+
+            if (nuevos > 0) {
+                showAlertModal(`¡Sincronización exitosa!<br><br>Se consultaron <strong>${data.total}</strong> órdenes en Tiendanube.<br>Se importaron <strong>${nuevos}</strong> pedidos nuevos a la lista y se descontó el stock correspondiente.`, "Sincronización Completada");
+            } else {
+                showToast(`Se consultaron ${data.total} órdenes en Tiendanube. Todos los pedidos están actualizados.`, 'fa-check-circle', '#198754');
+            }
+        }
+    } catch (err) {
+        console.error("Error al sincronizar pedidos web:", err);
+        showAlertModal(`Hubo un error al sincronizar con Tiendanube:<br><br><span class="text-danger">${err.message}</span>`, "Error de Sincronización");
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+    }
 }
 
 function exportarPedidosWebAExcel() {
@@ -437,12 +475,6 @@ function abrirDetalle(pedido) {
     const tnStoreUrl = appConfig.tiendanube?.storeUrl || 'https://admin.tiendanube.com';
     const adminUrl = `${tnStoreUrl.replace(/\/$/, '')}/admin/orders/${pedido.tnOrderId}`;
     
-    // --- INICIO DE LA CORRECCIÓN ---
-    // Se replica la lógica de slugify de productos.js para manejar caracteres especiales como '/'.
-    const slug = producto.nombre ? producto.nombre.replace(/\//g, ' ').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9\s-]/g, "").trim().replace(/\s+/g, "-").replace(/-+/g, "-") : '';
-    const productUrl = (producto.publicarEnWeb && tnStoreUrl && slug) ? `${tnStoreUrl.replace(/\/$/, '')}/productos/${slug}/` : '#';
-    // --- FIN DE LA CORRECCIÓN ---
-
     document.getElementById('detalle-titulo').innerHTML = `Orden #${pedido.numeroOrden}
         <a href="${adminUrl}" target="_blank" class="btn btn-sm btn-outline-primary ms-3 rounded-pill shadow-sm" title="Abrir pedido en Tiendanube">
             <i class="fas fa-external-link-alt me-1"></i>Ver en TN
@@ -450,13 +482,18 @@ function abrirDetalle(pedido) {
     
     let productosHtml = '';
     (pedido.productos || []).forEach(p => {
+        // Generamos el slug y URL individual de cada producto
+        const slug = p.nombre ? p.nombre.replace(/\//g, ' ').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9\s-]/g, "").trim().replace(/\s+/g, "-").replace(/-+/g, "-") : '';
+        const productUrl = (tnStoreUrl && slug) ? `${tnStoreUrl.replace(/\/$/, '')}/productos/${slug}/` : '';
+        const linkHtml = productUrl 
+            ? `<a href="${productUrl}" target="_blank" class="fw-bold text-dark text-decoration-none" title="Ver producto en la tienda">${p.nombre} <i class="fas fa-external-link-alt fa-xs text-muted ms-1"></i></a>`
+            : `<span class="fw-bold text-dark">${p.nombre}</span>`;
+
         productosHtml += `
             <li class="list-group-item d-flex justify-content-between align-items-center border-0 px-0 border-bottom">
                 <div>
-                    <a href="${productUrl}" target="_blank" class="fw-bold text-dark text-decoration-none" title="Ver producto en la tienda">
-                        ${p.nombre} <i class="fas fa-external-link-alt fa-xs text-muted"></i>
-                    </a>
-                    <small class="text-muted">SKU: ${p.sku || 'N/A'}</small>
+                    ${linkHtml}
+                    <small class="text-muted d-block">SKU: ${p.sku || 'N/A'}</small>
                 </div>
                 <div class="text-end">
                     <span class="badge bg-secondary rounded-pill fs-6 px-3">x${p.cantidad}</span>
@@ -478,12 +515,46 @@ function abrirDetalle(pedido) {
         }
     }
 
+    let syncStatusHtml = '';
+    if (isPaid) {
+        if (isSyncedTN) {
+            syncStatusHtml = `
+                <div class="d-flex align-items-center justify-content-end gap-2 mt-1">
+                    <span class="small text-success fw-bold"><i class="fas fa-check-double me-1"></i>Sincronizado con TN</span>
+                    <button type="button" class="btn btn-link btn-sm text-muted p-0 text-decoration-none" id="btn-revertir-sync-tn" title="Desmarcar sincronización con Tiendanube" style="font-size: 0.72rem;">(desmarcar)</button>
+                </div>
+            `;
+        } else {
+            syncStatusHtml = `
+                <div class="small mt-1 text-warning fw-bold"><i class="fas fa-clock me-1"></i>Pendiente en TN</div>
+            `;
+        }
+    }
+
     let alertaFaltaTNHtml = '';
     if (isPaid && !isSyncedTN) {
         alertaFaltaTNHtml = `
-            <div class="alert alert-warning mt-4 mb-0 d-flex justify-content-between align-items-center shadow-sm border-0 rounded-4">
-                <div><i class="fas fa-info-circle me-2 fs-5"></i><strong>Acción requerida:</strong> El pago está registrado en POS 2025, pero falta marcarlo en Tiendanube.</div>
-                <a href="${adminUrl}" target="_blank" class="btn btn-warning fw-bold shadow-sm rounded-pill text-dark px-4">Registrar en TN <i class="fas fa-arrow-right ms-2"></i></a>
+            <div class="alert alert-warning mt-4 mb-0 p-3 shadow-sm border-0 rounded-4">
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-exclamation-triangle text-warning-emphasis me-3 fs-4"></i>
+                        <div>
+                            <strong class="d-block text-dark">Acción requerida en Tiendanube:</strong>
+                            <span class="small text-muted">El pago se registró en POS 2025. Debes marcarlo como pagado en el panel de Tiendanube.</span>
+                        </div>
+                    </div>
+                    <div class="d-flex align-items-center gap-2 flex-wrap ms-auto">
+                        <a href="${adminUrl}" target="_blank" class="btn btn-sm btn-outline-dark fw-bold rounded-pill px-3 py-2 shadow-sm">
+                            <i class="fas fa-external-link-alt me-1"></i>Abrir en TN <i class="fas fa-arrow-right ms-1"></i>
+                        </a>
+                        <div class="form-check form-switch d-inline-flex align-items-center gap-2 m-0 bg-white px-3 py-2 rounded-pill shadow-sm border">
+                            <input class="form-check-input ms-0 mt-0" type="checkbox" id="switch-confirmar-pago-tn" role="switch" style="cursor: pointer; width: 2.2em; height: 1.1em;">
+                            <label class="form-check-label fw-bold text-success small user-select-none mb-0" for="switch-confirmar-pago-tn" style="cursor: pointer;">
+                                Ya marqué en TN
+                            </label>
+                        </div>
+                    </div>
+                </div>
             </div>
         `;
     }
@@ -531,6 +602,7 @@ function abrirDetalle(pedido) {
             <div class="text-end">
                 <h6 class="text-muted fw-bold mb-1">ESTADO DEL PAGO</h6>
                 ${estadoPagoHtml}
+                ${syncStatusHtml}
                 <div class="small mt-2 text-muted fw-bold">Vía: ${pedido.pagos?.metodo}</div>
             </div>
         </div>
@@ -664,6 +736,46 @@ function abrirDetalle(pedido) {
             'btn-success',
             'Confirmar Pago'
         );
+    });
+
+    // Switch para confirmar que se marcó como pagado en Tiendanube
+    const switchTn = document.getElementById('switch-confirmar-pago-tn');
+    if (switchTn) {
+        switchTn.addEventListener('change', async (e) => {
+            if (e.target.checked) {
+                try {
+                    e.target.disabled = true;
+                    await updateDoc(doc(db, 'pedidos_web', pedido.id), {
+                        'pagos.sincronizadoTN': true
+                    });
+                    pedido.pagos = pedido.pagos || {};
+                    pedido.pagos.sincronizadoTN = true;
+                    abrirDetalle(pedido);
+                    showToast('¡Pago confirmado como sincronizado en Tiendanube!', 'fa-check-circle', '#198754');
+                } catch (err) {
+                    console.error('Error sincronizando pago TN:', err);
+                    e.target.disabled = false;
+                    e.target.checked = false;
+                    showToast('Error al confirmar sincronización', 'fa-times-circle', '#dc3545');
+                }
+            }
+        });
+    }
+
+    // Botón para desmarcar sincronización en caso de error o ajuste
+    document.getElementById('btn-revertir-sync-tn')?.addEventListener('click', async () => {
+        try {
+            await updateDoc(doc(db, 'pedidos_web', pedido.id), {
+                'pagos.sincronizadoTN': false
+            });
+            pedido.pagos = pedido.pagos || {};
+            pedido.pagos.sincronizadoTN = false;
+            abrirDetalle(pedido);
+            showToast('Sincronización desmarcada. Queda como pago local pendiente de TN.', 'fa-exclamation-triangle', '#f6c23e');
+        } catch (err) {
+            console.error('Error desmarcando sincronización:', err);
+            showToast('Error al revertir sincronización', 'fa-times-circle', '#dc3545');
+        }
     });
 
     document.getElementById('btn-mover-preparacion')?.addEventListener('click', () => cambiarEstado(pedido.id, 'preparacion', modalDetalle));

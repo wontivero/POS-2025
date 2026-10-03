@@ -23,6 +23,7 @@ let webCategoriaNombreInput, webCategoriaPadreSelect, btnAddWebCategoria, btnCan
 let editingCategoriaId = null;
 let editingCategoriaOldRuta = null;
 let tnUrlInput, tnUserIdInput, tnTokenInput, tnSurchargeInput, saveTnConfigButton; // <-- MODIFICADO TIENDANUBE
+let btnVerificarWebhooksTN, btnConectarWebhooksTN, tnWebhooksStatusContainer;
 let btnGenerarBackup;
 // --- FIN DE LA MODIFICACIÓN ---
 
@@ -160,6 +161,73 @@ async function saveTnConfig() {
     } finally {
         saveTnConfigButton.disabled = false;
         saveTnConfigButton.innerHTML = originalHtml;
+    }
+}
+
+/**
+ * Consulta o sincroniza automáticamente los Webhooks de ventas con la API de Tiendanube.
+ */
+async function verificarOConectarWebhooks(accion = 'consultar') {
+    const btn = accion === 'consultar' ? btnVerificarWebhooksTN : btnConectarWebhooksTN;
+    if (!btn) return;
+    const originalText = btn.innerHTML;
+    try {
+        btn.disabled = true;
+        btn.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span>${accion === 'consultar' ? 'Verificando...' : 'Vinculando...'}`;
+
+        const gestionarWebhooks = httpsCallable(functions, 'gestionarWebhooksTiendanube');
+        const res = await gestionarWebhooks({ accion });
+        const data = res.data;
+
+        if (tnWebhooksStatusContainer) {
+            tnWebhooksStatusContainer.classList.remove('d-none');
+            const webhooks = data.webhooks || [];
+            const targetUrl = data.targetWebhookUrl;
+
+            const hasCreated = webhooks.some(w => w.event === 'order/created' && w.url === targetUrl);
+            const hasPaid = webhooks.some(w => w.event === 'order/paid' && w.url === targetUrl);
+
+            let html = `
+                <div class="card p-3 border-0 shadow-sm ${hasCreated && hasPaid ? 'bg-success-subtle text-success-emphasis border border-success' : 'bg-warning-subtle text-warning-emphasis border border-warning'}">
+                    <div class="d-flex align-items-center mb-2">
+                        <i class="fas ${hasCreated && hasPaid ? 'fa-check-circle text-success' : 'fa-exclamation-triangle text-warning'} fs-4 me-2"></i>
+                        <div>
+                            <strong class="d-block">${hasCreated && hasPaid ? 'Webhooks Activos y Vinculados Correctamente' : 'Webhooks Pendientes de Configuración'}</strong>
+                            <small class="text-muted">Proyecto Firebase: <strong>${data.projectId}</strong><br>URL Destino: <code class="user-select-all">${targetUrl}</code></small>
+                        </div>
+                    </div>
+                    <ul class="mb-2 ps-3 small">
+                        <li><strong>order/created (Orden Creada):</strong> ${hasCreated ? '<span class="badge bg-success ms-1">Conectado</span>' : '<span class="badge bg-danger ms-1">No registrado</span>'}</li>
+                        <li><strong>order/paid (Orden Pagada):</strong> ${hasPaid ? '<span class="badge bg-success ms-1">Conectado</span>' : '<span class="badge bg-danger ms-1">No registrado</span>'}</li>
+                    </ul>
+            `;
+
+            if (accion === 'sincronizar') {
+                const creadosCount = (data.creados || []).length;
+                const eliminadosCount = (data.eliminados || []).length;
+                html += `<div class="small mt-2 pt-2 border-top border-secondary-subtle">
+                    <strong>Acciones realizadas:</strong> ${creadosCount} webhooks creados / actualizados. ${eliminadosCount > 0 ? `(${eliminadosCount} webhooks obsoletos eliminados)` : ''}
+                </div>`;
+                showToast("¡Webhooks configurados correctamente en Tiendanube!", "fa-check-circle", "#198754");
+            }
+
+            html += `</div>`;
+            tnWebhooksStatusContainer.innerHTML = html;
+        }
+    } catch (err) {
+        console.error("Error al gestionar webhooks:", err);
+        if (tnWebhooksStatusContainer) {
+            tnWebhooksStatusContainer.classList.remove('d-none');
+            tnWebhooksStatusContainer.innerHTML = `
+                <div class="alert alert-danger mb-0">
+                    <i class="fas fa-times-circle me-2"></i><strong>Error:</strong> ${err.message || 'No se pudo comunicar con Tiendanube.'}
+                </div>
+            `;
+        }
+        showAlertModal(`Error con los webhooks de Tiendanube:<br><br><span class="text-danger">${err.message}</span>`, "Error Webhooks");
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
     }
 }
 
@@ -640,6 +708,9 @@ export async function init() {
     tnTokenInput = document.getElementById('config-tn-token');
     tnSurchargeInput = document.getElementById('config-tn-surcharge');
     saveTnConfigButton = document.getElementById('btn-guardar-tn-config');
+    btnVerificarWebhooksTN = document.getElementById('btn-verificar-webhooks-tn');
+    btnConectarWebhooksTN = document.getElementById('btn-conectar-webhooks-tn');
+    tnWebhooksStatusContainer = document.getElementById('tn-webhooks-status-container');
     btnGenerarBackup = document.getElementById('btn-generar-backup');
 
     if (savePrintingButton) {
@@ -650,6 +721,8 @@ export async function init() {
     if (btnSaveArca) btnSaveArca.addEventListener('click', saveArcaConfig);
     if (loyaltyExpirationCheck) loyaltyExpirationCheck.addEventListener('change', toggleExpirationInput);
     if (saveTnConfigButton) saveTnConfigButton.addEventListener('click', saveTnConfig);
+    if (btnVerificarWebhooksTN) btnVerificarWebhooksTN.addEventListener('click', () => verificarOConectarWebhooks('consultar'));
+    if (btnConectarWebhooksTN) btnConectarWebhooksTN.addEventListener('click', () => verificarOConectarWebhooks('sincronizar'));
     if (btnGenerarBackup) btnGenerarBackup.addEventListener('click', generarBackupCompleto);
 
     saveCommissionButton.addEventListener('click', saveCommissionPercentage);

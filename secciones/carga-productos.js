@@ -1270,6 +1270,14 @@ async function guardarTodoEnBD() {
                     }
                     delete p.variantes[i].imagenFile; // No lo guardamos en la base de datos
                 }
+
+                // Si no hay imagen principal pero sí hay en variantes, asignamos la primera como portada
+                if (productoData.imagenes.length === 0) {
+                    const primerVarConFoto = p.variantes.find(v => v.imagenUrl);
+                    if (primerVarConFoto) {
+                        productoData.imagenes.push(primerVarConFoto.imagenUrl);
+                    }
+                }
             }
 
             batch.set(docRef, productoData, { merge: true });
