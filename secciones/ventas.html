@@ -51,13 +51,13 @@
                     </div>
 
                     <!-- Ficha visual del Cliente Seleccionado -->
-                    <div id="clienteSeleccionadoCard" class="p-2 rounded border bg-light d-flex align-items-center justify-content-between">
-                        <div class="d-flex align-items-center overflow-hidden">
+                    <div id="clienteSeleccionadoCard" class="p-2 rounded border bg-light d-flex align-items-center justify-content-between flex-wrap gap-2">
+                        <div class="d-flex align-items-center overflow-hidden flex-grow-1">
                             <div id="clienteAvatarCircle" class="rounded-circle bg-secondary text-white d-flex align-items-center justify-content-center fw-bold me-2 flex-shrink-0" style="width: 38px; height: 38px; font-size: 0.95rem;">
                                 CF
                             </div>
                             <div class="text-truncate">
-                                <div class="d-flex align-items-center gap-2">
+                                <div class="d-flex align-items-center gap-2 flex-wrap">
                                     <span id="clienteNombreDisplay" class="fw-bold text-dark text-truncate" style="font-size: 0.95rem;">Consumidor Final</span>
                                     <span id="clienteSaldoBadge" class="badge bg-secondary-subtle text-secondary small" style="font-size: 0.72rem;">Sin cuenta</span>
                                 </div>
@@ -68,7 +68,10 @@
                         </div>
 
                         <!-- Acciones del cliente seleccionado -->
-                        <div class="d-flex gap-1 flex-shrink-0 ms-2">
+                        <div class="d-flex align-items-center gap-1 flex-shrink-0">
+                            <button class="btn btn-sm btn-outline-warning text-dark py-1 px-2 fw-bold shadow-sm" type="button" id="btnAgregarDeudaTicket" style="display:none;" title="Cobrar saldo pendiente de cuenta corriente en este ticket">
+                                <i class="fas fa-file-invoice-dollar me-1 text-warning-emphasis"></i>Cobrar Deuda
+                            </button>
                             <button class="btn btn-sm btn-outline-primary py-1 px-2" type="button" id="btnEditarCliente" style="display:none;" title="Editar datos del cliente">
                                 <i class="fas fa-edit"></i>
                             </button>

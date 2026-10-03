@@ -21,6 +21,8 @@ let montoContadoRapidoSpan, montoTransferenciaRapidoSpan, montoDebitoRapidoSpan,
 // Elementos del cliente
 let clienteSearch, clienteSearchResults, btnLimpiarClienteSearch, btnNuevoClienteRapido, btnEditarCliente, btnDeseleccionarCliente;
 let clienteNombreDisplay, clienteSaldoBadge, clienteDetalleExtra, clienteAvatarCircle, clienteSeleccionadoCard;
+let btnAgregarDeudaTicket;
+let cobroDeudaModalEl, cobroDeudaModal, cobroDeudaClienteNombre, cobroDeudaSaldoActual, btnCobroDeudaTotal, btnCobroDeudaMitad, cobroDeudaMontoInput, btnConfirmarCobroDeudaTicket;
 let clienteModal, clienteModalLabel, clienteId, clienteNombre, clienteCuit, clienteDomicilio, clienteEmail, clienteTelefono, clienteLimiteCreditoInput, btnGuardarCliente;
 let clienteSeleccionado = null;
 let clienteSelectedIndex = -1;
@@ -215,13 +217,15 @@ function renderTicket() {
         }
         // --- Fin de la lógica para el efecto visual ---
 
-        const genericIndicator = item.isGeneric ? '<i class="fas fa-pencil-alt fa-xs text-info ms-2" title="Precio manual"></i>' : '';
+        const genericIndicator = item.isDeuda
+            ? '<span class="badge bg-warning text-dark ms-2"><i class="fas fa-file-invoice-dollar me-1"></i>Cta. Cte.</span>'
+            : (item.isGeneric ? '<i class="fas fa-pencil-alt fa-xs text-info ms-2" title="Precio manual"></i>' : '');
         const marcaTexto = item.marca ? `<span class="text-muted fw-normal"> - ${item.marca}</span>` : '';
 
         // --- INICIO: Lógica para el ícono de edición de precio ---
-        // No mostramos el lápiz para productos genéricos, ya que su precio se define al agregar.
+        // No mostramos el lápiz para productos genéricos ni para cobro de deuda de cuenta corriente.
         // Usamos un botón sin bordes con data-bs-toggle nativo para evitar bugs de JS y saltos de pantalla
-        const editPriceIcon = !item.isGeneric ? `
+        const editPriceIcon = (!item.isGeneric && !item.isDeuda) ? `
             <button type="button" class="btn btn-link p-0 ms-2 text-primary edit-price-btn" 
                data-bs-toggle="modal" 
                data-bs-target="#editPriceModal"
@@ -233,6 +237,8 @@ function renderTicket() {
         const stockWarningHtml = isExceeded ? `<small class="text-danger fw-bold d-block stock-warning-text mt-1"><i class="fas fa-exclamation-triangle"></i> Límite excedido (Stock TN: ${productoOriginal.stock})</small>` : '';
         // --- FIN: Lógica para el ícono de edición de precio ---
 
+        const isControlsDisabled = item.isGeneric || item.isDeuda;
+
         itemDiv.innerHTML = `
             <div>
                 <h6 class="mb-1 ticket-item-nombre">${item.nombre}${marcaTexto}${genericIndicator}</h6>
@@ -241,9 +247,9 @@ function renderTicket() {
             </div>
             <div class="d-flex align-items-center">
                 <div class="input-group me-2" style="width: 140px;">
-                    <button class="btn btn-outline-secondary btn-sm change-quantity" type="button" data-action="decrement" data-index="${index}" ${item.isGeneric ? 'disabled' : ''}><i class="fas fa-minus"></i></button>
-                    <input type="number" class="form-control text-center quantity-input" value="${item.cantidad}" data-index="${index}" min="1" ${item.isGeneric ? 'disabled' : ''}>
-                    <button class="btn btn-outline-secondary btn-sm change-quantity" type="button" data-action="increment" data-index="${index}" ${item.isGeneric ? 'disabled' : ''}><i class="fas fa-plus"></i></button>
+                    <button class="btn btn-outline-secondary btn-sm change-quantity" type="button" data-action="decrement" data-index="${index}" ${isControlsDisabled ? 'disabled' : ''}><i class="fas fa-minus"></i></button>
+                    <input type="number" class="form-control text-center quantity-input" value="${item.cantidad}" data-index="${index}" min="1" ${isControlsDisabled ? 'disabled' : ''}>
+                    <button class="btn btn-outline-secondary btn-sm change-quantity" type="button" data-action="increment" data-index="${index}" ${isControlsDisabled ? 'disabled' : ''}><i class="fas fa-plus"></i></button>
                 </div>
                 <div class="fw-bold text-end" style="width: 100px;" id="subtotal-${index}">${formatCurrency(item.total)}</div>
                 <button class="btn btn-sm btn-link text-danger remove-item ms-2" data-index="${index}"><i class="fas fa-trash-alt"></i></button>
@@ -729,10 +735,12 @@ function changeQuantity(e) {
 
 function handleTicketItemRemove(e) {
     const index = e.target.closest('.remove-item').dataset.index;
-    const removedItem = ticket[index];
-    ticket.splice(index, 1);
+    const removedItem = ticket.splice(index, 1)[0];
     if (removedItem) {
         showToast(`Eliminado: <strong>${removedItem.nombre}</strong>`, 'fa-trash-alt', '#dc3545');
+        if (removedItem.isDeuda) {
+            actualizarUIClienteSeleccionado();
+        }
     }
     renderTicket();
 }
@@ -889,6 +897,14 @@ function setCheckoutSuccessUI(venta, docId) {
             `;
         }
     }
+    if (venta.montoDeudaCobrada && venta.montoDeudaCobrada > 0) {
+        detallesHtml += `
+            <div class="d-flex justify-content-between mb-2 border-top pt-2 text-warning-emphasis">
+                <span><i class="fas fa-file-invoice-dollar me-2"></i>Cobro Deuda Cta. Cte.</span>
+                <span class="fw-bold">${formatCurrency(venta.montoDeudaCobrada)}</span>
+            </div>
+        `;
+    }
 
     modalBody.innerHTML = `
         <div id="checkout-success-ui" class="text-center py-4 animate-fade-in">
@@ -952,6 +968,14 @@ function setCheckoutSuccessUI(venta, docId) {
         const btnFacturar = document.getElementById('btnFacturarArcaModal');
         if (btnFacturar && btnFacturar.tagName === 'BUTTON') {
             btnFacturar.addEventListener('click', async () => {
+                const prodsFacturables = (venta.productos || []).filter(p => !p.isDeuda);
+                const totalFacturable = Math.max(0, venta.total - (venta.montoDeudaCobrada || 0));
+                if (prodsFacturables.length === 0 || totalFacturable <= 0) {
+                    showToast('Este ticket solo contiene cobro de deuda previa. No corresponde emitir factura fiscal ARCA.', 'fa-info-circle', '#17a2b8');
+                    btnFacturar.disabled = true;
+                    return;
+                }
+
                 if (typeof ventaExitosaTimer !== 'undefined' && ventaExitosaTimer) {
                     clearInterval(ventaExitosaTimer);
                     const countdown = document.getElementById('venta-exitosa-countdown');
@@ -1008,7 +1032,11 @@ async function finalizarVenta() {
     const montoCreditoConRecargo = Math.round(montoCredito * (1 + recargo));
     const totalConRecargo = totalVentaBase + Math.round(montoCredito * recargo);
 
-    const autoFacturar = (
+    const itemDeuda = ticket.find(item => item.isDeuda);
+    const montoDeudaCobrada = itemDeuda ? (parseFloat(itemDeuda.total) || 0) : 0;
+    const tieneProductosFacturables = ticket.some(item => !item.isDeuda);
+
+    const autoFacturar = tieneProductosFacturables && (
         (montoContado > 0 && arcaConfig.contado) ||
         (montoTransferencia > 0 && arcaConfig.transferencia) ||
         (montoDebito > 0 && arcaConfig.debito) ||
@@ -1158,9 +1186,12 @@ async function finalizarVenta() {
             productsToUpdate.forEach(p => transaction.update(p.ref, p.newData));
 
             const productosParaGuardar = ticket.map(item => {
-                if (item.isGeneric) {
+                if (item.isGeneric && !item.isDeuda) {
                     const margen = (item.genericProfitMargin || 70) / 100;
                     return { ...item, costo: item.precio / (1 + margen) };
+                }
+                if (item.isDeuda) {
+                    return { ...item, costo: item.precio }; // Sin ganancia ficticia en estadísticas
                 }
                 return item;
             });
@@ -1191,13 +1222,15 @@ async function finalizarVenta() {
                 vendedor: vendedorInfo, // <-- AÑADIMOS EL VENDEDOR
                 facturadoEnArca: false, // <-- NUEVO ESTADO DE FACTURACION
                 arcaData: null,
+                montoDeudaCobrada: montoDeudaCobrada, // <-- MONTO DE DEUDA COBRADA
                 productos: productosParaGuardar.map(item => ({
                     id: item.parentId || item.id, // ID real para base de datos
                     varianteCodigo: item.varianteCodigo || null,
                     isVariant: item.isVariant || false,
+                    isDeuda: item.isDeuda || false, // <-- MARCADOR PARA EXCLUIR DE STOCK Y ARCA
                     nombre: item.nombre, precio: item.precio, costo: item.costo, cantidad: item.cantidad,
-                    rubro: productosPlanos.find(p => p.id === item.id)?.rubro || 'Desconocido',
-                    marca: productosPlanos.find(p => p.id === item.id)?.marca || 'Desconocido'
+                    rubro: item.isDeuda ? 'Cuenta Corriente' : (productosPlanos.find(p => p.id === item.id)?.rubro || 'Desconocido'),
+                    marca: item.isDeuda ? 'Cobro Deuda' : (productosPlanos.find(p => p.id === item.id)?.marca || 'Desconocido')
                 })),
                 pagos: {
                     contado: parseFloat(txtContado.value) || 0,
@@ -1223,8 +1256,9 @@ async function finalizarVenta() {
                 const cData = clienteDoc.data();
                 const clientUpdates = {};
 
-                // Lógica de Loyalty: Sumar puntos al cliente
-                puntosGanados = Math.floor(totalConRecargo * (loyaltyPercentage / 100));
+                // Lógica de Loyalty: Sumar puntos al cliente (solo sobre productos, excluyendo deuda previa)
+                const baseLoyalty = Math.max(0, totalConRecargo - montoDeudaCobrada);
+                puntosGanados = Math.floor(baseLoyalty * (loyaltyPercentage / 100));
                 let currentPuntos = cData.puntos || 0;
                 let lastActivity = cData.lastLoyaltyActivity;
 
@@ -1242,10 +1276,10 @@ async function finalizarVenta() {
                 clientUpdates.puntos = puntosTotalSnapshot;
                 clientUpdates.lastLoyaltyActivity = serverTimestamp();
 
-                // Sumar deuda si hay pago a cuenta
-                if (montoACuenta > 0) {
+                // Actualizar saldo deudor si hay pago a cuenta O si se cobró deuda previa
+                if (montoACuenta > 0 || montoDeudaCobrada > 0) {
                     const currentSaldo = cData.saldoDeudor || 0;
-                    const nuevoSaldoDeudor = currentSaldo + montoACuenta;
+                    const nuevoSaldoDeudor = Math.max(0, currentSaldo - montoDeudaCobrada + montoACuenta);
                     clientUpdates.saldoDeudor = nuevoSaldoDeudor;
                     nuevaVenta.saldoDeudorSnapshot = nuevoSaldoDeudor;
                 }
@@ -1257,10 +1291,10 @@ async function finalizarVenta() {
                     puntosGanados: puntosGanados,
                     puntosTotalSnapshot: puntosTotalSnapshot
                 };
-            } else if (clienteRef && montoACuenta > 0) {
+            } else if (clienteRef && (montoACuenta > 0 || montoDeudaCobrada > 0)) {
                 const cData = (clienteDoc && clienteDoc.exists()) ? clienteDoc.data() : {};
                 const currentSaldo = cData.saldoDeudor || 0;
-                const nuevoSaldoDeudor = currentSaldo + montoACuenta;
+                const nuevoSaldoDeudor = Math.max(0, currentSaldo - montoDeudaCobrada + montoACuenta);
                 transaction.update(clienteRef, { saldoDeudor: nuevoSaldoDeudor });
                 nuevaVenta.saldoDeudorSnapshot = nuevoSaldoDeudor;
             }
@@ -1268,6 +1302,29 @@ async function finalizarVenta() {
             // Guardar la venta
             const newVentaRef = doc(collection(db, 'ventas'));
             transaction.set(newVentaRef, nuevaVenta);
+
+            // Si se cobró deuda previa de cuenta corriente, registramos el movimiento de abono
+            if (montoDeudaCobrada > 0) {
+                const movAbonoRef = doc(collection(db, 'cuentas_corrientes_movimientos'));
+                const saldoAnterior = (clienteDoc && clienteDoc.exists()) ? (clienteDoc.data().saldoDeudor || 0) : (clienteSeleccionado.saldoDeudor || 0);
+                transaction.set(movAbonoRef, {
+                    clienteId: clienteSeleccionado.id,
+                    clienteNombre: clienteSeleccionado.nombre,
+                    clienteCuit: clienteSeleccionado.cuit || '',
+                    tipo: 'abono', // abono = pago/cancelación de deuda
+                    monto: -montoDeudaCobrada, // negativo para reflejar disminución en cuenta corriente
+                    ticketId: ticketNumber,
+                    ventaDocId: newVentaRef.id,
+                    fecha: getTodayDate(),
+                    timestamp: getFormattedDateTime(),
+                    vendedor: vendedorInfo.nombre || vendedorInfo.email || 'Sistema',
+                    concepto: `Cobro Deuda en Ticket #${ticketNumber}`,
+                    saldoAnterior: saldoAnterior,
+                    saldoRestante: nuevaVenta.saldoDeudorSnapshot !== undefined ? nuevaVenta.saldoDeudorSnapshot : Math.max(0, saldoAnterior - montoDeudaCobrada),
+                    facturadoEnArca: false,
+                    arcaData: null
+                });
+            }
 
             // Si hay cargo a cuenta, registramos el movimiento en cuentas_corrientes_movimientos
             if (montoACuenta > 0) {
@@ -1289,22 +1346,37 @@ async function finalizarVenta() {
             ventaData = { id: ticketNumber, data: nuevaVenta, docId: newVentaRef.id };
         });
 
+        // Actualizar el saldo en memoria del cliente seleccionado
+        if (clienteSeleccionado && (montoDeudaCobrada > 0 || montoACuenta > 0)) {
+            clienteSeleccionado.saldoDeudor = Math.max(0, (clienteSeleccionado.saldoDeudor || 0) - montoDeudaCobrada + montoACuenta);
+            actualizarUIClienteSeleccionado();
+        }
+
         updateCheckoutStep('step-caja', 'success');
 
         // --- INICIO DE AUTO-FACTURACIÓN ARCA ---
         if (autoFacturar) {
-            updateCheckoutStep('step-afip', 'pending');
-            const result = await facturarEnArca(ventaData.data);
-            if (result.success) {
+            const prodsFacturables = (ventaData.data.productos || []).filter(p => !p.isDeuda);
+            const totalFacturable = Math.max(0, ventaData.data.total - (ventaData.data.montoDeudaCobrada || 0));
+
+            if (prodsFacturables.length === 0 || totalFacturable <= 0) {
+                console.log("Auto-facturación ARCA omitida: El ticket corresponde únicamente a cobranza de cuenta corriente.");
                 updateCheckoutStep('step-afip', 'success');
-                updateCheckoutStep('step-cae', 'pending');
-                await marcarVentaFacturada(ventaData.docId, result.data);
-                ventaData.data.facturadoEnArca = true;
-                ventaData.data.arcaData = result.data;
                 updateCheckoutStep('step-cae', 'success');
             } else {
-                updateCheckoutStep('step-afip', 'error');
-                showToast('La venta se guardó, pero hubo un error en ARCA: ' + result.error, 'fa-times-circle', '#dc3545');
+                updateCheckoutStep('step-afip', 'pending');
+                const result = await facturarEnArca(ventaData.data);
+                if (result.success) {
+                    updateCheckoutStep('step-afip', 'success');
+                    updateCheckoutStep('step-cae', 'pending');
+                    await marcarVentaFacturada(ventaData.docId, result.data);
+                    ventaData.data.facturadoEnArca = true;
+                    ventaData.data.arcaData = result.data;
+                    updateCheckoutStep('step-cae', 'success');
+                } else {
+                    updateCheckoutStep('step-afip', 'error');
+                    showToast('La venta se guardó, pero hubo un error en ARCA: ' + result.error, 'fa-times-circle', '#dc3545');
+                }
             }
         }
         // --- FIN DE AUTO-FACTURACIÓN ARCA ---
@@ -1365,7 +1437,19 @@ function seleccionarCliente(cliente) {
 function actualizarUIClienteSeleccionado() {
     if (!clienteSeleccionadoCard) return;
 
+    // Comprobamos si ya hay un ítem de cobro de deuda en el ticket
+    const itemDeudaEnTicket = ticket.find(i => i.isDeuda);
+
     if (!clienteSeleccionado || clienteSeleccionado.nombre === 'Consumidor Final') {
+        // Si no hay cliente registrado, removemos cualquier ítem de deuda previo del ticket
+        if (itemDeudaEnTicket) {
+            const idx = ticket.indexOf(itemDeudaEnTicket);
+            if (idx > -1) {
+                ticket.splice(idx, 1);
+                renderTicket();
+            }
+        }
+
         if (clienteSearch) clienteSearch.value = '';
         if (btnLimpiarClienteSearch) btnLimpiarClienteSearch.style.display = 'none';
         if (clienteSearchResults) clienteSearchResults.style.display = 'none';
@@ -1382,9 +1466,19 @@ function actualizarUIClienteSeleccionado() {
         if (clienteDetalleExtra) {
             clienteDetalleExtra.innerHTML = '<span>Venta general al público</span>';
         }
+        if (btnAgregarDeudaTicket) btnAgregarDeudaTicket.style.display = 'none';
         if (btnEditarCliente) btnEditarCliente.style.display = 'none';
         if (btnDeseleccionarCliente) btnDeseleccionarCliente.style.display = 'none';
     } else {
+        // Si el cliente cambió y había una deuda cargada de otro cliente distinto, la removemos
+        if (itemDeudaEnTicket && itemDeudaEnTicket.clienteId !== clienteSeleccionado.id) {
+            const idx = ticket.indexOf(itemDeudaEnTicket);
+            if (idx > -1) {
+                ticket.splice(idx, 1);
+                renderTicket();
+            }
+        }
+
         if (clienteSearch) clienteSearch.value = '';
         if (btnLimpiarClienteSearch) btnLimpiarClienteSearch.style.display = 'none';
         if (clienteSearchResults) clienteSearchResults.style.display = 'none';
@@ -1433,9 +1527,118 @@ function actualizarUIClienteSeleccionado() {
             clienteDetalleExtra.textContent = parts.join(' • ') || 'Cliente registrado';
         }
 
+        // Botón para Cobrar Deuda en Ticket
+        if (btnAgregarDeudaTicket) {
+            const deudaEnTicketActual = ticket.find(i => i.isDeuda && i.clienteId === clienteSeleccionado.id);
+            if (saldo > 0 || deudaEnTicketActual) {
+                btnAgregarDeudaTicket.style.display = 'inline-block';
+                if (deudaEnTicketActual) {
+                    btnAgregarDeudaTicket.className = 'btn btn-sm btn-success text-white py-1 px-2 fw-bold shadow-sm';
+                    btnAgregarDeudaTicket.innerHTML = `<i class="fas fa-check-circle me-1"></i>Deuda en Ticket (${formatCurrency(deudaEnTicketActual.total)})`;
+                } else {
+                    btnAgregarDeudaTicket.className = 'btn btn-sm btn-outline-warning text-dark py-1 px-2 fw-bold shadow-sm';
+                    btnAgregarDeudaTicket.innerHTML = `<i class="fas fa-file-invoice-dollar me-1 text-warning-emphasis"></i>Cobrar Deuda`;
+                }
+            } else {
+                btnAgregarDeudaTicket.style.display = 'none';
+            }
+        }
+
         if (btnEditarCliente) btnEditarCliente.style.display = 'inline-block';
         if (btnDeseleccionarCliente) btnDeseleccionarCliente.style.display = 'inline-block';
     }
+}
+
+function abrirCobroDeudaModal() {
+    if (!clienteSeleccionado || clienteSeleccionado.nombre === 'Consumidor Final') {
+        showToast('Debe seleccionar un cliente registrado.', 'fa-exclamation-triangle', '#f6c23e');
+        return;
+    }
+
+    const saldo = parseFloat(clienteSeleccionado.saldoDeudor) || 0;
+    const itemDeuda = ticket.find(i => i.isDeuda && i.clienteId === clienteSeleccionado.id);
+
+    if (saldo <= 0 && !itemDeuda) {
+        showToast(`El cliente ${clienteSeleccionado.nombre} no posee deuda pendiente.`, 'fa-info-circle', '#0dcaf0');
+        return;
+    }
+
+    if (!cobroDeudaModalEl) return;
+    if (!cobroDeudaModal) {
+        cobroDeudaModal = bootstrap.Modal.getOrCreateInstance(cobroDeudaModalEl);
+    }
+
+    if (cobroDeudaClienteNombre) cobroDeudaClienteNombre.textContent = clienteSeleccionado.nombre;
+    if (cobroDeudaSaldoActual) cobroDeudaSaldoActual.textContent = formatCurrency(saldo);
+
+    if (cobroDeudaMontoInput) {
+        if (itemDeuda) {
+            cobroDeudaMontoInput.value = itemDeuda.precio;
+        } else {
+            cobroDeudaMontoInput.value = Math.round(saldo);
+        }
+    }
+
+    cobroDeudaModal.show();
+    setTimeout(() => {
+        if (cobroDeudaMontoInput) {
+            cobroDeudaMontoInput.focus();
+            cobroDeudaMontoInput.select();
+        }
+    }, 300);
+}
+
+function handleConfirmarCobroDeudaTicket() {
+    if (!clienteSeleccionado || clienteSeleccionado.nombre === 'Consumidor Final') {
+        showToast('No hay un cliente válido seleccionado.', 'fa-exclamation-triangle', '#dc3545');
+        return;
+    }
+
+    const monto = parseFloat(cobroDeudaMontoInput?.value) || 0;
+    if (monto <= 0) {
+        showToast('Por favor, ingresa un monto válido mayor a 0.', 'fa-exclamation-triangle', '#f6c23e');
+        cobroDeudaMontoInput?.focus();
+        return;
+    }
+
+    const saldoActual = parseFloat(clienteSeleccionado.saldoDeudor) || 0;
+    if (monto > saldoActual) {
+        showToast(`El monto a cobrar (${formatCurrency(monto)}) no puede superar la deuda actual (${formatCurrency(saldoActual)}).`, 'fa-exclamation-triangle', '#dc3545');
+        cobroDeudaMontoInput?.focus();
+        return;
+    }
+
+    const deudaIndex = ticket.findIndex(i => i.isDeuda);
+    if (deudaIndex > -1) {
+        ticket[deudaIndex].precio = monto;
+        ticket[deudaIndex].costo = monto;
+        ticket[deudaIndex].total = monto;
+        ticket[deudaIndex].nombre = `Cancelación Deuda Cta. Cte. (${clienteSeleccionado.nombre})`;
+        ticket[deudaIndex].clienteId = clienteSeleccionado.id;
+        ticket[deudaIndex].justChanged = true;
+    } else {
+        ticket.push({
+            id: 'deuda_cta_cte_' + clienteSeleccionado.id,
+            nombre: `Cancelación Deuda Cta. Cte. (${clienteSeleccionado.nombre})`,
+            marca: 'Cta. Cte.',
+            precio: monto,
+            costo: monto, // Margen 0 para no alterar ganancia comercial de productos
+            cantidad: 1,
+            total: monto,
+            isGeneric: true, // No descontar inventario
+            isDeuda: true,   // Marcador para cuenta corriente y exclusión de ARCA
+            clienteId: clienteSeleccionado.id,
+            justAdded: true
+        });
+    }
+
+    if (cobroDeudaModal) {
+        cobroDeudaModal.hide();
+    }
+
+    renderTicket();
+    actualizarUIClienteSeleccionado();
+    showToast(`Cobro de deuda por <strong>${formatCurrency(monto)}</strong> agregado al ticket.`, 'fa-file-invoice-dollar', '#198754');
 }
 
 function actualizarEstadoMetodosPago() {
@@ -1829,6 +2032,19 @@ async function init() {
     clienteDetalleExtra = document.getElementById('clienteDetalleExtra');
     clienteAvatarCircle = document.getElementById('clienteAvatarCircle');
     clienteSeleccionadoCard = document.getElementById('clienteSeleccionadoCard');
+    btnAgregarDeudaTicket = document.getElementById('btnAgregarDeudaTicket');
+
+    cobroDeudaModalEl = document.getElementById('cobroDeudaModal');
+    if (cobroDeudaModalEl) {
+        cobroDeudaModal = bootstrap.Modal.getOrCreateInstance(cobroDeudaModalEl);
+        if (cobroDeudaModalEl.parentNode !== document.body) document.body.appendChild(cobroDeudaModalEl);
+    }
+    cobroDeudaClienteNombre = document.getElementById('cobroDeudaClienteNombre');
+    cobroDeudaSaldoActual = document.getElementById('cobroDeudaSaldoActual');
+    btnCobroDeudaTotal = document.getElementById('btnCobroDeudaTotal');
+    btnCobroDeudaMitad = document.getElementById('btnCobroDeudaMitad');
+    cobroDeudaMontoInput = document.getElementById('cobroDeudaMontoInput');
+    btnConfirmarCobroDeudaTicket = document.getElementById('btnConfirmarCobroDeudaTicket');
 
     btnPagoRapidoACuenta = document.getElementById('btnPagoRapidoACuenta');
     badgeACuentaEstado = document.getElementById('badgeACuentaEstado');
@@ -1946,6 +2162,33 @@ async function init() {
     if (btnGuardarCliente) {
         btnGuardarCliente.removeEventListener('click', handleGuardarCliente);
         btnGuardarCliente.addEventListener('click', handleGuardarCliente);
+    }
+
+    if (btnAgregarDeudaTicket) {
+        btnAgregarDeudaTicket.onclick = abrirCobroDeudaModal;
+    }
+    if (btnCobroDeudaTotal) {
+        btnCobroDeudaTotal.onclick = () => {
+            if (!clienteSeleccionado) return;
+            const saldo = Math.round(Number(clienteSeleccionado.saldoDeudor || 0));
+            if (cobroDeudaMontoInput) cobroDeudaMontoInput.value = Math.max(0, saldo);
+        };
+    }
+    if (btnCobroDeudaMitad) {
+        btnCobroDeudaMitad.onclick = () => {
+            if (!clienteSeleccionado) return;
+            const saldo = Math.round(Number(clienteSeleccionado.saldoDeudor || 0));
+            if (cobroDeudaMontoInput) cobroDeudaMontoInput.value = Math.max(0, Math.round(saldo / 2));
+        };
+    }
+    if (btnConfirmarCobroDeudaTicket) {
+        btnConfirmarCobroDeudaTicket.removeEventListener('click', handleConfirmarCobroDeudaTicket);
+        btnConfirmarCobroDeudaTicket.addEventListener('click', handleConfirmarCobroDeudaTicket);
+    }
+    if (cobroDeudaMontoInput) {
+        cobroDeudaMontoInput.onkeyup = (e) => {
+            if (e.key === 'Enter') handleConfirmarCobroDeudaTicket();
+        };
     }
 
     if (btnConfirmGenericPrice) {

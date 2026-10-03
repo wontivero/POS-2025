@@ -282,13 +282,14 @@ function getAfipQrUrl(venta, appConfig, isNotaCredito = false) {
         nroDocRec = parseInt(cleanId) || 0;
     }
 
+    const totalFiscal = Math.max(0, venta.total - (venta.montoDeudaCobrada || 0));
     const qrData = {
         ver: 1,
         fecha: venta.fecha,
         cuit: cuitEmisor,
         tipoCmp: isNotaCredito ? 13 : 11, // 13: Nota de Crédito C, 11: Factura C
         nroCmp: parseInt(arcaInfo.CbteNro) || 0,
-        importe: parseFloat(venta.total.toFixed(2)),
+        importe: parseFloat(totalFiscal.toFixed(2)),
         moneda: "PES",
         ctz: 1,
         tipoDocRec: tipoDocRec,
@@ -543,7 +544,7 @@ export async function generatePDF(ticketId, venta, isNotaCredito = false) {
     if (venta.pagos.debito > 0) { drawText(`- Débito:`, margin + 5, y, 10); drawText(formatCurrency(venta.pagos.debito), pageWidth - margin, y, 10, 'normal', 'right'); y += lineHeight; }
     if (venta.pagos.credito > 0) { drawText(`- Crédito (${venta.pagos.recargoCredito}%):`, margin + 5, y, 10); drawText(formatCurrency(venta.pagos.credito), pageWidth - margin, y, 10, 'normal', 'right'); y += lineHeight; }
     if (venta.pagos.a_cuenta > 0) { drawText(`- A Cuenta (Fiado):`, margin + 5, y, 10); drawText(formatCurrency(venta.pagos.a_cuenta), pageWidth - margin, y, 10, 'normal', 'right'); y += lineHeight; }
-    if (venta.saldoDeudorSnapshot !== undefined && venta.saldoDeudorSnapshot !== null && (venta.pagos.a_cuenta > 0 || venta.saldoDeudorSnapshot > 0)) {
+    if (venta.saldoDeudorSnapshot !== undefined && venta.saldoDeudorSnapshot !== null && (venta.pagos.a_cuenta > 0 || venta.saldoDeudorSnapshot > 0 || (venta.montoDeudaCobrada && venta.montoDeudaCobrada > 0))) {
         y += lineHeight * 0.5;
         drawText(`* Saldo deudor acumulado: ${formatCurrency(venta.saldoDeudorSnapshot)}`, margin + 5, y, 10, 'bold');
         y += lineHeight;
@@ -569,7 +570,11 @@ export async function generatePDF(ticketId, venta, isNotaCredito = false) {
     if (isFacturaAFIP) {
         doc.line(margin, y, pageWidth - margin, y);
         y += lineHeight;
-        drawText('Comprobante Autorizado', pageWidth / 2, y, 11, 'bold', 'center');
+        const totalFiscal = Math.max(0, venta.total - (venta.montoDeudaCobrada || 0));
+        const aclaracionMonto = (venta.montoDeudaCobrada && venta.montoDeudaCobrada > 0)
+            ? ` (Monto Facturado AFIP: ${formatCurrency(totalFiscal)})`
+            : '';
+        drawText(`Comprobante Autorizado por AFIP${aclaracionMonto}`, pageWidth / 2, y, 10, 'bold', 'center');
         y += lineHeight;
         
         const vtoStr = arcaInfo.CAEFchVto || '';
@@ -803,7 +808,7 @@ export async function printThermalTicket(ticketId, venta, isNotaCredito = false)
             const nombreMetodo = metodo === 'a_cuenta' ? 'A Cuenta (Fiado)' : (metodo.charAt(0).toUpperCase() + metodo.slice(1));
             html += `<p>${nombreMetodo}: ${formatCurrency(monto)}</p>`;
         });
-        if (venta.saldoDeudorSnapshot !== undefined && venta.saldoDeudorSnapshot !== null && (venta.pagos.a_cuenta > 0 || venta.saldoDeudorSnapshot > 0)) {
+        if (venta.saldoDeudorSnapshot !== undefined && venta.saldoDeudorSnapshot !== null && (venta.pagos.a_cuenta > 0 || venta.saldoDeudorSnapshot > 0 || (venta.montoDeudaCobrada && venta.montoDeudaCobrada > 0))) {
             html += `<p style="margin-top: 4px; font-weight: bold; border-top: 1px dashed #000; padding-top: 3px;">* Saldo deudor acumulado: ${formatCurrency(venta.saldoDeudorSnapshot)}</p>`;
         }
     }
@@ -817,9 +822,14 @@ export async function printThermalTicket(ticketId, venta, isNotaCredito = false)
     if (isFacturaAFIP) {
         const vtoStr = arcaInfo.CAEFchVto || '';
         const vtoFormat = vtoStr.length === 8 ? `${vtoStr.substring(6,8)}/${vtoStr.substring(4,6)}/${vtoStr.substring(0,4)}` : vtoStr;
+        const totalFiscal = Math.max(0, venta.total - (venta.montoDeudaCobrada || 0));
+        const fiscalInfoHtml = (venta.montoDeudaCobrada && venta.montoDeudaCobrada > 0)
+            ? `<p style="font-size: 0.85em; font-weight: bold; margin-bottom: 2px;">Monto Facturado AFIP: ${formatCurrency(totalFiscal)}</p>`
+            : '';
         
         html += `<hr><div class="center">
-            <p><strong>Comprobante Autorizado</strong></p>
+            <p><strong>Comprobante Autorizado AFIP</strong></p>
+            ${fiscalInfoHtml}
             <p>CAE: ${arcaInfo.CAE}</p>
             <p>Vto CAE: ${vtoFormat}</p>
             ${afipQrBase64 ? `<p><img src="${afipQrBase64}" style="width:120px; height:120px; margin-top:5px;" /></p>` : ''}
@@ -1455,13 +1465,22 @@ export async function facturarEnArca(venta) {
         return { success: false, error: "Faltan configurar las credenciales de ARCA en la pestaña Configuración." };
     }
 
+    // Excluir cobro de deuda previa para no duplicar facturación fiscal (IVA/IIBB)
+    const prodsValidos = (venta.productos || []).filter(p => !p.isDeuda);
+    const montoDeuda = venta.montoDeudaCobrada || 0;
+    const totalFacturable = Math.max(0, venta.total - montoDeuda);
+
+    if (totalFacturable <= 0 || prodsValidos.length === 0) {
+        return { success: false, error: "El ticket solo contiene cobro de deuda previa de cuenta corriente (no corresponde emitir factura ARCA)." };
+    }
+
     const url = `${arcaConfig.baseUrl}/invoices/authorize?cuit=${arcaConfig.cuit}&prod=${arcaConfig.isProd}`;
     const payload = {
         PtoVta: arcaConfig.ptoVta || 6,
         Concepto: 1,
-        ImpTotal: parseFloat(venta.total.toFixed(2)),
-        ImpNeto: parseFloat(venta.total.toFixed(2)),
-        Items: (venta.productos || []).map(p => ({
+        ImpTotal: parseFloat(totalFacturable.toFixed(2)),
+        ImpNeto: parseFloat(totalFacturable.toFixed(2)),
+        Items: prodsValidos.map(p => ({
             Descripcion: p.nombre.substring(0, 100), // AFIP limita los caracteres a veces
             Cantidad: parseFloat(p.cantidad),
             PrecioUnitario: parseFloat(p.precio.toFixed(2)),

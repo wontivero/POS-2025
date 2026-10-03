@@ -230,6 +230,17 @@
                     </div>
                 </div>
 
+                <div class="callout callout-info mt-3 mb-4">
+                    <h6 class="fw-bold mb-1 text-primary"><i class="fas fa-file-invoice-dollar me-2"></i>Cobro Consolidado de Deuda en Ticket</h6>
+                    <p class="small mb-2">Cuando seleccionas un cliente registrado que tiene saldo deudor pendiente, el sistema activa automáticamente el botón <span class="badge bg-warning text-dark"><i class="fas fa-file-invoice-dollar me-1"></i>Cobrar Deuda</span>:</p>
+                    <ul class="small mb-2">
+                        <li><strong>Opciones de Cobro:</strong> Permite ingresar el monto total, el 50% o cualquier suma parcial a convenir.</li>
+                        <li><strong>Cobro Unificado:</strong> Se suma como una fila especial (<code>Cancelación Deuda Cta. Cte.</code>) para cobrar todo junto (mercadería + deuda) en efectivo (<kbd>F1</kbd>), transferencia (<kbd>F2</kbd>), débito (<kbd>F3</kbd>) o crédito (<kbd>F4</kbd>).</li>
+                        <li><strong>Seguridad Fiscal ARCA:</strong> Si la venta se envía a ARCA, el sistema <strong>excluye la deuda</strong> para no duplicar impuestos (IVA/IIBB), facturando legalmente solo los productos físicos.</li>
+                        <li><strong>Auditoría & Saldo Cero:</strong> Disminuye el saldo del cliente en tiempo real, emite el ticket con <code>* Saldo deudor acumulado: $0.00</code> y asienta el movimiento de <code>abono</code> en el extracto de cuenta corriente.</li>
+                    </ul>
+                </div>
+
                 <h5 class="fw-bold mb-3 text-primary"><i class="fas fa-magic me-2"></i>La Tecla `Escape` (ESC) - El Asistente Universal</h5>
                 <p class="text-muted small mb-3">La tecla <kbd>ESC</kbd> es un botón de retroceso inteligente con un comportamiento progresivo de 3 toques:</p>
                 <div class="row g-3 mb-4">
