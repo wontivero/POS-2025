@@ -1,5 +1,5 @@
 // secciones/pedidos-web.js
-import { getFirestore, collection, query, onSnapshot, doc, updateDoc, orderBy } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
+import { getFirestore, collection, query, onSnapshot, doc, getDoc, updateDoc, orderBy } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
 import { formatCurrency, showConfirmationModal, showAlertModal, facturarEnArca, generatePDF, showToast } from '../utils.js';
 import { getAppConfig } from './dataManager.js';
 import { functions } from '../firebase.js';
@@ -67,7 +67,7 @@ async function sincronizarPedidosTN() {
         btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Sincronizando con Tiendanube...';
 
         const sincronizar = httpsCallable(functions, 'sincronizarPedidosTiendanube');
-        const res = await sincronizar({ limit: 15 });
+        const res = await sincronizar({ limit: 25 });
         const data = res.data;
 
         if (data.success) {
@@ -235,11 +235,15 @@ function renderKanban() {
                 ? `<button class="btn btn-sm btn-outline-danger shadow-sm rounded-pill ms-1 btn-pdf-web" data-id="${pedido.id}" title="Descargar Factura PDF"><i class="fas fa-file-pdf"></i></button>`
                 : '';
             
+            const clienteArch = (pedido.cliente?.nombre && pedido.cliente.nombre.trim() !== 'Desconocido') 
+                ? pedido.cliente.nombre 
+                : (pedido.envio?.destinatario || 'Desconocido');
+
             archivadosHtml += `
                 <tr>
                     <td class="ps-4 fw-bold text-dark">#${pedido.numeroOrden}</td>
                     <td class="text-muted small">${fechaStr}</td>
-                    <td class="fw-medium">${pedido.cliente?.nombre || 'Desconocido'}</td>
+                    <td class="fw-medium">${clienteArch}</td>
                     <td class="small"><span class="badge bg-light text-dark border">${pedido.envio?.tipo || 'Envío'}</span></td>
                     <td class="fw-bold text-dark">${formatCurrency(pedido.pagos?.total || 0)}</td>
                     <td>${badgePago}</td>
@@ -406,6 +410,10 @@ function crearTarjetaPedido(pedido) {
 
     const cantidadItems = pedido.productos ? pedido.productos.reduce((acc, p) => acc + p.cantidad, 0) : 0;
 
+    const clienteCard = (pedido.cliente?.nombre && pedido.cliente.nombre.trim() !== 'Desconocido') 
+        ? pedido.cliente.nombre.trim() 
+        : (pedido.envio?.destinatario || 'Desconocido');
+
     div.className = `card shadow-sm mb-3 pedido-card border-0 ${paymentClass}`;
     div.innerHTML = `
         <div class="card-body p-3">
@@ -413,7 +421,7 @@ function crearTarjetaPedido(pedido) {
                 <h5 class="card-title mb-0 fw-bold text-dark">#${pedido.numeroOrden}</h5>
                 ${paymentText}
             </div>
-            <h6 class="card-subtitle mb-2 text-muted fw-bold"><i class="fas fa-user me-2 text-primary"></i>${pedido.cliente?.nombre || 'Desconocido'}</h6>
+            <h6 class="card-subtitle mb-2 text-muted fw-bold"><i class="fas fa-user me-2 text-primary"></i>${clienteCard}</h6>
             
             <div class="d-flex justify-content-between small mb-3 text-secondary">
                 <span><i class="fas fa-box me-1"></i>${cantidadItems} items</span>
@@ -475,10 +483,16 @@ function abrirDetalle(pedido) {
     const tnStoreUrl = appConfig.tiendanube?.storeUrl || 'https://admin.tiendanube.com';
     const adminUrl = `${tnStoreUrl.replace(/\/$/, '')}/admin/orders/${pedido.tnOrderId}`;
     
-    document.getElementById('detalle-titulo').innerHTML = `Orden #${pedido.numeroOrden}
-        <a href="${adminUrl}" target="_blank" class="btn btn-sm btn-outline-primary ms-3 rounded-pill shadow-sm" title="Abrir pedido en Tiendanube">
-            <i class="fas fa-external-link-alt me-1"></i>Ver en TN
-        </a>`;
+    document.getElementById('detalle-titulo').innerHTML = `
+        <div class="d-flex align-items-center flex-wrap gap-2">
+            <span>Orden #${pedido.numeroOrden}</span>
+            <a href="${adminUrl}" target="_blank" class="btn btn-sm btn-outline-primary rounded-pill shadow-sm" title="Abrir pedido en Tiendanube">
+                <i class="fas fa-external-link-alt me-1"></i>Ver en TN
+            </a>
+            <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill shadow-sm" id="btn-re-sync-orden-modal" title="Volver a sincronizar esta orden desde Tiendanube">
+                <i class="fas fa-sync-alt me-1"></i>Actualizar datos
+            </button>
+        </div>`;
     
     let productosHtml = '';
     (pedido.productos || []).forEach(p => {
@@ -572,19 +586,60 @@ function abrirDetalle(pedido) {
         </div>`;
     }
     
+    // Extracción de datos con fallbacks para clientes invitados / órdenes existentes
+    const rawNombre = (pedido.cliente?.nombre && pedido.cliente.nombre.trim() !== 'Desconocido') 
+        ? pedido.cliente.nombre.trim() 
+        : (pedido.envio?.destinatario || '');
+
+    const nombreHtml = rawNombre 
+        ? `<span class="fw-bold text-dark fs-6">${rawNombre}</span>` 
+        : `<span class="badge bg-warning text-dark me-2">Desconocido</span> <button type="button" class="btn btn-xs btn-outline-primary py-0 px-2 rounded-pill shadow-sm" id="btn-sync-inline-cliente" title="Consultar datos a Tiendanube"><i class="fas fa-sync-alt me-1"></i>Traer de TN</button>`;
+
+    const dniCliente = pedido.cliente?.dni || '';
+    const dniHtml = dniCliente 
+        ? `<span class="fw-bold text-dark">${dniCliente}</span>` 
+        : '<span class="text-muted">N/A</span>';
+
+    const emailCliente = pedido.cliente?.email || '';
+    const emailHtml = emailCliente 
+        ? `<a href="mailto:${emailCliente}" class="text-primary text-decoration-none fw-semibold"><i class="fas fa-envelope me-1"></i>${emailCliente}</a>` 
+        : '<span class="text-muted">N/A</span>';
+
+    const telCliente = pedido.cliente?.telefono || pedido.envio?.telefono || '';
+    let telHtml = '<span class="text-muted">N/A</span>';
+    if (telCliente) {
+        const rawDigits = telCliente.replace(/\D/g, '');
+        const waNumber = rawDigits.startsWith('54') ? rawDigits : (rawDigits.length >= 10 ? `549${rawDigits.replace(/^0+/, '')}` : rawDigits);
+        telHtml = `
+            <a href="tel:${telCliente}" class="text-dark fw-bold text-decoration-none me-2">${telCliente}</a>
+            <a href="https://wa.me/${waNumber}" target="_blank" class="btn btn-sm btn-success py-0 px-2 rounded-pill text-decoration-none shadow-sm" title="Enviar WhatsApp al cliente">
+                <i class="fab fa-whatsapp me-1"></i>WhatsApp
+            </a>
+        `;
+    }
+
+    const destinatarioHtml = (pedido.envio?.destinatario && pedido.envio.destinatario !== rawNombre)
+        ? `<p class="mb-1"><strong>Destinatario:</strong> <span class="fw-semibold text-dark">${pedido.envio.destinatario}</span></p>`
+        : '';
+
+    const viaPago = (pedido.pagos?.metodo && pedido.pagos.metodo.toLowerCase() !== 'custom') 
+        ? pedido.pagos.metodo 
+        : 'Personalizado (A convenir / Transferencia)';
+
     document.getElementById('detalle-body').innerHTML = `
         <div class="row">
             <div class="col-md-6 mb-4">
                 <h6 class="fw-bold text-muted border-bottom pb-2"><i class="fas fa-address-card me-2"></i>Datos del Cliente</h6>
-                <p class="mb-1"><strong>Nombre:</strong> ${pedido.cliente?.nombre}</p>
-                <p class="mb-1"><strong>DNI/CUIT:</strong> ${pedido.cliente?.dni || 'N/A'}</p>
-                <p class="mb-1"><strong>Email:</strong> ${pedido.cliente?.email || 'N/A'}</p>
-                <p class="mb-0"><strong>Tel:</strong> ${pedido.cliente?.telefono || 'N/A'}</p>
+                <p class="mb-1"><strong>Nombre:</strong> ${nombreHtml}</p>
+                <p class="mb-1"><strong>DNI/CUIT:</strong> ${dniHtml}</p>
+                <p class="mb-1"><strong>Email:</strong> ${emailHtml}</p>
+                <p class="mb-0"><strong>Tel:</strong> ${telHtml}</p>
             </div>
             <div class="col-md-6 mb-4">
                 <h6 class="fw-bold text-muted border-bottom pb-2"><i class="fas fa-truck me-2"></i>Datos de Envío</h6>
-                <p class="mb-1"><strong>Método:</strong> ${pedido.envio?.tipo}</p>
-                <p class="mb-0"><strong>Dirección:</strong> ${pedido.envio?.direccion}</p>
+                <p class="mb-1"><strong>Método:</strong> ${pedido.envio?.tipo || 'No especificado'}</p>
+                ${destinatarioHtml}
+                <p class="mb-0"><strong>Dirección:</strong> ${pedido.envio?.direccion || 'Retiro en Local'}</p>
                 ${pedido.notas ? `<div class="alert alert-warning mt-3 mb-0 py-2 px-3 small shadow-sm"><i class="fas fa-comment-dots me-2"></i><strong>Nota del cliente:</strong> ${pedido.notas}</div>` : ''}
             </div>
         </div>
@@ -603,7 +658,7 @@ function abrirDetalle(pedido) {
                 <h6 class="text-muted fw-bold mb-1">ESTADO DEL PAGO</h6>
                 ${estadoPagoHtml}
                 ${syncStatusHtml}
-                <div class="small mt-2 text-muted fw-bold">Vía: ${pedido.pagos?.metodo}</div>
+                <div class="small mt-2 text-muted fw-bold">Vía: ${viaPago}</div>
             </div>
         </div>
         ${alertaFaltaTNHtml}
@@ -777,6 +832,57 @@ function abrirDetalle(pedido) {
             showToast('Error al revertir sincronización', 'fa-times-circle', '#dc3545');
         }
     });
+
+    // Listener para Re-sincronizar datos de la orden directamente desde Tiendanube
+    const triggerReSync = async () => {
+        const btnHeader = document.getElementById('btn-re-sync-orden-modal');
+        const btnInline = document.getElementById('btn-sync-inline-cliente');
+        const originalHeaderHtml = btnHeader ? btnHeader.innerHTML : '';
+        
+        try {
+            if (btnHeader) {
+                btnHeader.disabled = true;
+                btnHeader.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Actualizando...';
+            }
+            if (btnInline) {
+                btnInline.disabled = true;
+                btnInline.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>...';
+            }
+
+            const sincronizar = httpsCallable(functions, 'sincronizarPedidosTiendanube');
+            const res = await sincronizar({ orderId: pedido.tnOrderId || pedido.id });
+            
+            if (res.data?.success) {
+                const docSnap = await getDoc(doc(db, 'pedidos_web', String(pedido.tnOrderId || pedido.id)));
+                if (docSnap.exists()) {
+                    const updatedData = { id: docSnap.id, ...docSnap.data() };
+                    const idx = pedidos.findIndex(p => p.id === updatedData.id);
+                    if (idx > -1) pedidos[idx] = updatedData;
+                    abrirDetalle(updatedData);
+                    showToast('¡Datos del pedido actualizados desde Tiendanube!', 'fa-check-circle', '#198754');
+                } else {
+                    showToast('Orden sincronizada con éxito.');
+                }
+            } else {
+                showAlertModal(`No se pudo actualizar la orden: ${res.data?.error || 'Error desconocido'}`);
+            }
+        } catch (err) {
+            console.error('Error al re-sincronizar orden:', err);
+            showAlertModal(`Error al consultar Tiendanube:<br><br><span class="text-danger">${err.message}</span>`);
+        } finally {
+            if (btnHeader) {
+                btnHeader.disabled = false;
+                btnHeader.innerHTML = originalHeaderHtml;
+            }
+            if (btnInline) {
+                btnInline.disabled = false;
+                btnInline.innerHTML = '<i class="fas fa-sync-alt me-1"></i>Traer de TN';
+            }
+        }
+    };
+
+    document.getElementById('btn-re-sync-orden-modal')?.addEventListener('click', triggerReSync);
+    document.getElementById('btn-sync-inline-cliente')?.addEventListener('click', triggerReSync);
 
     document.getElementById('btn-mover-preparacion')?.addEventListener('click', () => cambiarEstado(pedido.id, 'preparacion', modalDetalle));
     document.getElementById('btn-mover-finalizado')?.addEventListener('click', () => cambiarEstado(pedido.id, 'finalizado', modalDetalle));

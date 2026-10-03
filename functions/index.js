@@ -660,34 +660,91 @@ async function procesarYGuardarOrden(order) {
     const pedidoRef = admin.firestore().collection('pedidos_web').doc(String(orderId));
     const pedidoSnap = await pedidoRef.get();
 
+    // Extracción exhaustiva de datos del cliente (soporta cuentas registradas, compras como invitado y envíos)
+    const rawNombre = (order.customer && order.customer.name && order.customer.name.trim())
+        || (order.contact_name && order.contact_name.trim())
+        || (order.billing_name && order.billing_name.trim())
+        || (order.shipping_address && order.shipping_address.name && order.shipping_address.name.trim())
+        || (order.billing_address && order.billing_address.name && order.billing_address.name.trim())
+        || 'Desconocido';
+
+    const rawEmail = (order.customer && order.customer.email && order.customer.email.trim())
+        || (order.contact_email && order.contact_email.trim())
+        || '';
+
+    const rawTelefono = (order.customer && order.customer.phone && String(order.customer.phone).trim())
+        || (order.contact_phone && String(order.contact_phone).trim())
+        || (order.billing_phone && String(order.billing_phone).trim())
+        || (order.shipping_address && order.shipping_address.phone && String(order.shipping_address.phone).trim())
+        || '';
+
+    const rawDni = (order.customer && order.customer.identification && String(order.customer.identification).trim())
+        || (order.contact_identification && String(order.contact_identification).trim())
+        || (order.billing_identification && String(order.billing_identification).trim())
+        || (order.billing_document && String(order.billing_document).trim())
+        || (order.shipping_address && (order.shipping_address.id_number || order.shipping_address.identification) && String(order.shipping_address.id_number || order.shipping_address.identification).trim())
+        || '';
+
+    // Dirección de envío formateada completa y destinatario
+    let direccionEnvio = 'Retiro en Local';
+    let destinatarioEnvio = '';
+    let telefonoEnvio = '';
+
+    if (order.shipping_address) {
+        const sa = order.shipping_address;
+        destinatarioEnvio = sa.name ? sa.name.trim() : '';
+        telefonoEnvio = sa.phone ? String(sa.phone).trim() : '';
+
+        const partes = [];
+        const calleYNum = `${sa.address || ''} ${sa.number || ''}`.trim();
+        if (calleYNum) partes.push(calleYNum);
+        if (sa.floor) partes.push(`Piso/Dpto: ${sa.floor}`);
+        if (sa.locality) partes.push(sa.locality);
+        if (sa.city) partes.push(sa.city);
+        if (sa.province) partes.push(sa.province);
+        if (sa.zipcode) partes.push(`CP ${sa.zipcode}`);
+
+        if (partes.length > 0) {
+            direccionEnvio = partes.join(', ');
+        }
+    }
+
+    // Método de pago descriptivo para el usuario
+    let metodoPago = order.gateway_name || (order.payment_details ? order.payment_details.method : '') || order.gateway || 'Desconocido';
+    if (metodoPago.toLowerCase() === 'custom') {
+        metodoPago = 'Personalizado (A convenir / Transferencia)';
+    }
+
     const pedidoData = {
         tnOrderId: order.id,
         numeroOrden: order.number,
         cliente: {
-            nombre: order.customer ? order.customer.name : 'Desconocido',
-            email: order.customer ? order.customer.email : '',
-            telefono: order.customer ? order.customer.phone : '',
-            dni: order.customer ? order.customer.identification : ''
+            nombre: rawNombre,
+            email: rawEmail,
+            telefono: rawTelefono,
+            dni: rawDni
         },
         envio: {
-            tipo: order.shipping_option || 'No especificado',
-            direccion: order.shipping_address ? `${order.shipping_address.address} ${order.shipping_address.number || ''}, ${order.shipping_address.city || ''}` : 'Retiro en Local',
+            tipo: order.shipping_option || order.shipping || 'No especificado',
+            direccion: direccionEnvio,
+            destinatario: destinatarioEnvio,
+            telefono: telefonoEnvio,
             estado: order.shipping_status || 'unpacked'
         },
         pagos: {
-            metodo: order.payment_details ? order.payment_details.method : 'Desconocido',
+            metodo: metodoPago,
             total: parseFloat(order.total) || 0,
             estado: order.payment_status || 'pending',
             sincronizadoTN: true
         },
-        productos: order.products.map(p => ({
+        productos: (order.products || []).map(p => ({
             id_tn: p.product_id,
             nombre: p.name,
             cantidad: parseInt(p.quantity) || 0,
             precio: parseFloat(p.price) || 0,
             sku: p.sku || ''
         })),
-        notas: order.note || ''
+        notas: order.note || order.owner_note || ''
     };
 
     if (!pedidoSnap.exists) {
@@ -795,7 +852,32 @@ exports.sincronizarPedidosTiendanube = onCall({ timeoutSeconds: 120 }, async (re
         throw new HttpsError("failed-precondition", "Credenciales de Tiendanube no configuradas en el sistema.");
     }
 
-    const limit = parseInt(request.data?.limit) || 15;
+    const targetOrderId = request.data?.orderId;
+    if (targetOrderId) {
+        const apiUrl = `https://api.tiendanube.com/v1/${myStoreId}/orders/${targetOrderId}`;
+        const response = await fetch(apiUrl, {
+            headers: {
+                "Authentication": `bearer ${token}`,
+                "User-Agent": "Sincronizador POS 2025 (wontivero@gmail.com)"
+            }
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            logger.error(`Error al consultar orden individual ${targetOrderId} en TN:`, errorText);
+            throw new HttpsError("internal", `Error de Tiendanube: ${errorText}`);
+        }
+
+        const singleOrder = await response.json();
+        const res = await procesarYGuardarOrden(singleOrder);
+        return {
+            success: true,
+            total: 1,
+            resultados: [res]
+        };
+    }
+
+    const limit = parseInt(request.data?.limit) || 25;
     const apiUrl = `https://api.tiendanube.com/v1/${myStoreId}/orders?per_page=${limit}`;
     const response = await fetch(apiUrl, {
         headers: {

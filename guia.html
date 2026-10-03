@@ -553,11 +553,34 @@
                 <p class="small text-muted mb-2">
                     Si el comprador eligió pagar en efectivo al retirar o por transferencia manual, la orden ingresará con estado <strong>"Pendiente de Pago"</strong>.
                 </p>
-                <div class="callout callout-warning small mb-0">
+                <div class="callout callout-warning small mb-4">
                     <ul class="mb-0">
-                        <li><strong>Registrar Pago Local:</strong> Cuando el cliente te paga en el local, puedes presionar <em>"Cobrar Pedido"</em>. La orden se marcará como pagada en tu POS, pero mostrará la etiqueta amarilla <code>Falta en TN</code>.</li>
+                        <li><strong>Registrar Pago Local:</strong> Cuando el cliente te paga en el local, puedes presionar <em>"Recibí el Pago"</em>. La orden se marcará como pagada en tu POS, pero mostrará la etiqueta amarilla <code>Falta en TN</code>.</li>
                         <li><strong>Switch de Confirmación:</strong> Como Tiendanube exige que los pagos manuales se confirmen en su panel, una vez que marques la orden como pagada en Tiendanube, activas el interruptor <strong>"Ya marqué en TN"</strong> en el modal del pedido para que todo quede en verde sincronizado.</li>
                     </ul>
+                </div>
+
+                <!-- DATOS DEL CLIENTE, WHATSAPP Y RE-SINCRONIZACIÓN -->
+                <h5 class="fw-bold text-dark mb-3"><i class="fas fa-address-card me-2 text-primary"></i>Datos del Cliente, WhatsApp en 1 Clic y Re-sincronización</h5>
+                <div class="row g-3 mb-2">
+                    <div class="col-md-4">
+                        <div class="p-3 border rounded bg-white shadow-sm h-100">
+                            <h6 class="fw-bold text-dark mb-2"><i class="fas fa-user-check me-2 text-success"></i>Soporte de Invitados y Cuentas</h6>
+                            <p class="small text-muted mb-0">El sistema extrae en cascada el <strong>Nombre, DNI/CUIT, Email y Teléfono</strong> del comprador tanto si tiene cuenta registrada como si compró como invitado (<em>guest checkout</em>), además de la dirección completa con piso/depto, localidad y código postal.</p>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="p-3 border rounded bg-white shadow-sm h-100">
+                            <h6 class="fw-bold text-dark mb-2"><i class="fab fa-whatsapp me-2 text-success"></i>Contacto WhatsApp en 1 Clic</h6>
+                            <p class="small text-muted mb-0">Al abrir el pedido en <strong>Gestionar</strong>, dispones de un botón directo de WhatsApp junto al teléfono para coordinar la entrega o envío sin necesidad de agendar el número en tu celular.</p>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="p-3 border rounded bg-white shadow-sm h-100">
+                            <h6 class="fw-bold text-dark mb-2"><i class="fas fa-sync-alt me-2 text-primary"></i>Botón "Actualizar datos"</h6>
+                            <p class="small text-muted mb-0">Permite consultar en vivo la API de Tiendanube para una orden específica desde la cabecera del modal. Actualiza en el acto los datos del cliente sin descontar stock duplicado ni modificar el estado del pedido.</p>
+                        </div>
+                    </div>
                 </div>
 
             </div>
