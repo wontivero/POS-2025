@@ -25,14 +25,14 @@ let sortDirection = 'desc';
 
 // Timers y Flags
 let searchDebounceTimer = null;
-let eventsBound = false;
+let productosUpdatedBound = false;
 let salesCacheTimestamp = 0;
 
 // Elementos DOM
 let tbodyCompras, searchInput, selectDiasVentas, selectUrgencia, selectRubro, selectMarca;
 let kpiAgotados, kpiBajoStock, kpiTopSellers, kpiInversion;
 let drawerEl, drawerBadgeCount, drawerItemsContainer, drawerTotalMonto;
-let selectPageSize, paginationContainer, paginationInfo, infoCacheVentas;
+let selectPageSize, paginationContainer, paginationInfo, infoCacheVentas, checkOcultarStockCero;
 
 export async function init() {
     console.log("Inicializando módulo de Compras y Reposición Inteligente (Optimizado 12h + Paginación)...");
@@ -44,6 +44,7 @@ export async function init() {
     selectUrgencia = document.getElementById('select-urgencia');
     selectRubro = document.getElementById('select-rubro-compras');
     selectMarca = document.getElementById('select-marca-compras');
+    checkOcultarStockCero = document.getElementById('check-ocultar-stock-cero');
 
     kpiAgotados = document.getElementById('kpi-agotados-criticos');
     kpiBajoStock = document.getElementById('kpi-bajo-stock-total');
@@ -67,9 +68,14 @@ export async function init() {
     await ejecutarAnalisisVentas(diasVentas, false);
 
     // Escuchar actualizaciones globales de productos (manteniendo la página actual)
-    document.addEventListener('productos-updated', () => {
-        procesarDatosYRenderizar(false);
-    });
+    if (!productosUpdatedBound) {
+        document.addEventListener('productos-updated', () => {
+            if (document.getElementById('tbody-compras')) {
+                procesarDatosYRenderizar(false);
+            }
+        });
+        productosUpdatedBound = true;
+    }
 }
 
 /**
@@ -108,9 +114,6 @@ function poblarFiltros() {
  * Registra todos los oyentes de eventos usando Delegación de Eventos para máximo rendimiento.
  */
 function configurarEventListeners() {
-    if (eventsBound) return;
-    eventsBound = true;
-
     // Buscador con debounce de 250ms (evita recalcular en cada tecla)
     if (searchInput) {
         searchInput.addEventListener('input', () => {
@@ -215,6 +218,22 @@ function configurarEventListeners() {
         btnCargarSugeridos.addEventListener('click', cargarSugeridosFiltrados);
     }
 
+    // Switch filtro: Ocultar stock 0 con mínimo 0
+    checkOcultarStockCero = document.getElementById('check-ocultar-stock-cero');
+    if (checkOcultarStockCero) {
+        checkOcultarStockCero.onchange = () => {
+            const ocultar = checkOcultarStockCero.checked;
+            const filtroResumen = document.getElementById('filtro-cero-resumen');
+            if (filtroResumen) {
+                filtroResumen.innerHTML = ocultar
+                    ? `<i class="fas fa-filter text-primary me-1"></i>Filtro activo: No se muestran productos sin reposición`
+                    : `<i class="fas fa-eye text-muted me-1"></i>Mostrando todo el catálogo (incluye Stock 0 y Mín 0)`;
+            }
+            paginaActual = 1;
+            procesarDatosYRenderizar(false);
+        };
+    }
+
     // Botón reset filtros
     const btnReset = document.getElementById('btn-reset-filtros-compras');
     if (btnReset) {
@@ -223,6 +242,13 @@ function configurarEventListeners() {
             if (selectUrgencia) selectUrgencia.value = 'todos';
             if (selectRubro) selectRubro.value = 'todos';
             if (selectMarca) selectMarca.value = 'todos';
+            if (checkOcultarStockCero) {
+                checkOcultarStockCero.checked = true;
+                const filtroResumen = document.getElementById('filtro-cero-resumen');
+                if (filtroResumen) {
+                    filtroResumen.innerHTML = `<i class="fas fa-filter text-primary me-1"></i>Filtro activo: No se muestran productos sin reposición`;
+                }
+            }
             quickFilterActual = 'requieren';
 
             // Resetear botones quick filter a 'requieren' activo
@@ -339,25 +365,46 @@ function configurarEventListeners() {
             }
         });
 
+        // Eventos de teclado para ajuste de Stock Mínimo (Enter para guardar, Escape para cancelar)
+        tbodyCompras.addEventListener('keydown', (e) => {
+            const inputMin = e.target.closest('input[data-action="update-stock-min"]');
+            if (inputMin) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    inputMin.blur(); // Dispara el evento 'change'
+                } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    if (inputMin.dataset.current !== undefined) {
+                        inputMin.value = inputMin.dataset.current;
+                    }
+                    inputMin.blur();
+                }
+            }
+        });
+
         // Cambios delegados: Actualizar Stock Mínimo en Firestore
         tbodyCompras.addEventListener('change', async (e) => {
             const inputMin = e.target.closest('input[data-action="update-stock-min"]');
             if (inputMin) {
                 const id = inputMin.dataset.id;
-                const nuevoMin = parseInt(inputMin.value) || 0;
-                try {
-                    const prodRef = doc(db, 'productos', id);
-                    await updateDoc(prodRef, { stockMinimo: nuevoMin });
-                    
-                    // Actualizar en el estado local de productos para evitar recarga pesada
-                    const prod = productosAnalizados.find(p => p.id === id);
-                    if (prod) {
-                        prod.stockMinimo = nuevoMin;
-                    }
-                    showToast("Stock mínimo actualizado", "fa-check", "#198754");
-                } catch (err) {
-                    console.error("Error al actualizar stock mínimo:", err);
-                    showAlertModal("No se pudo guardar el stock mínimo en Firestore.", "Error");
+                const rawVal = inputMin.value.trim();
+                const nuevoMin = Math.max(0, parseInt(rawVal) || 0);
+                const currentVal = parseInt(inputMin.dataset.current) || 0;
+
+                // Si el valor no cambió, no realizar petición
+                if (nuevoMin === currentVal && rawVal !== '') {
+                    return;
+                }
+
+                inputMin.value = nuevoMin;
+                inputMin.dataset.current = nuevoMin;
+                inputMin.disabled = true;
+
+                const ok = await actualizarStockMinimoProducto(id, nuevoMin);
+                if (!ok) {
+                    inputMin.value = currentVal;
+                    inputMin.dataset.current = currentVal;
+                    inputMin.disabled = false;
                 }
                 return;
             }
@@ -529,6 +576,50 @@ function calcularTopSellerThreshold() {
 }
 
 /**
+ * Actualiza el stock mínimo de un producto en Firestore, en el caché local de dataManager y en el estado analizado.
+ * Recalcula automáticamente todas las métricas, KPIs, sugeridos de compra y refresca la vista sin recargar la página.
+ * @param {string} prodId - ID del producto en Firebase.
+ * @param {number|string} nuevoMinimo - Nuevo valor de stock mínimo.
+ * @returns {Promise<boolean>} Retorna true si se guardó con éxito.
+ */
+async function actualizarStockMinimoProducto(prodId, nuevoMinimo) {
+    nuevoMinimo = Math.max(0, parseInt(nuevoMinimo) || 0);
+
+    try {
+        // 1. Guardar en Firestore
+        const prodRef = doc(db, 'productos', prodId);
+        await updateDoc(prodRef, { stockMinimo: nuevoMinimo });
+
+        // 2. Actualizar en el array en memoria de dataManager (para que getProductos() esté sincronizado de inmediato)
+        const prods = getProductos();
+        if (Array.isArray(prods)) {
+            const prodCache = prods.find(p => p.id === prodId);
+            if (prodCache) {
+                prodCache.stockMinimo = nuevoMinimo;
+            }
+        }
+
+        // 3. Actualizar en el estado de productos analizados
+        const prodAnalizado = productosAnalizados.find(p => p.id === prodId);
+        if (prodAnalizado) {
+            prodAnalizado.stockMinimo = nuevoMinimo;
+        }
+
+        // 4. Recalcular métricas, sugeridos, niveles de urgencia, KPIs y volver a renderizar la tabla
+        procesarDatosYRenderizar(false);
+
+        // 5. Toast de confirmación
+        const nombreProd = prodAnalizado ? prodAnalizado.nombre : 'Producto';
+        showToast(`Stock mínimo de "${nombreProd}" actualizado a ${nuevoMinimo} u.`, 'fa-check', '#198754');
+        return true;
+    } catch (err) {
+        console.error("Error al actualizar stock mínimo:", err);
+        showAlertModal("No se pudo guardar el stock mínimo en Firestore: " + (err.message || err), "Error");
+        return false;
+    }
+}
+
+/**
  * Procesa los datos de productos cruzados con las ventas y calcula niveles de urgencia.
  */
 function procesarDatosYRenderizar(resetPage = true) {
@@ -544,9 +635,16 @@ function procesarDatosYRenderizar(resetPage = true) {
     let cBajoMinimo = 0;
     let cTopSellers = 0;
 
+    const checkOcultar = document.getElementById('check-ocultar-stock-cero');
+    const ocultarCeroCero = checkOcultar ? checkOcultar.checked : true;
+
     productosAnalizados = rawProductos.map(prod => {
-        const stockActual = Number(prod.stock) || 0;
-        const stockMinimo = Number(prod.stockMinimo) || 5;
+        const stockActual = (prod.stock !== undefined && prod.stock !== null && prod.stock !== '') 
+            ? Number(prod.stock) 
+            : 0;
+        const stockMinimo = (prod.stockMinimo !== undefined && prod.stockMinimo !== null && prod.stockMinimo !== '') 
+            ? Math.max(0, Number(prod.stockMinimo) || 0) 
+            : 0;
         const costoUnitario = (prod.costo !== undefined && prod.costo !== null && prod.costo !== '') 
             ? Number(prod.costo) 
             : (Number(prod.precioCosto) || 0);
@@ -563,20 +661,26 @@ function procesarDatosYRenderizar(resetPage = true) {
             diasCobertura = Math.round(stockActual / rotacionDiaria);
         }
 
+        const esCeroCero = (stockActual <= 0 && stockMinimo <= 0);
+
         // Sugerido de compra: (Stock Mínimo - Stock Actual) + Ventas proyectadas a 7 días
         let sugeridoCalculado = 0;
         const faltanteMinimo = stockMinimo - stockActual;
         const proyeccion7dias = Math.ceil(rotacionDiaria * 7);
 
-        if (faltanteMinimo > 0 || stockActual <= stockMinimo) {
-            sugeridoCalculado = Math.max(1, faltanteMinimo + proyeccion7dias);
-        } else if (diasCobertura < 7 && isTopSeller) {
-            sugeridoCalculado = proyeccion7dias;
+        if (!esCeroCero) {
+            if (faltanteMinimo > 0 || stockActual <= stockMinimo) {
+                sugeridoCalculado = Math.max(1, faltanteMinimo + proyeccion7dias);
+            } else if (diasCobertura < 7 && isTopSeller) {
+                sugeridoCalculado = proyeccion7dias;
+            }
         }
 
         // Nivel de Urgencia
         let nivelUrgencia = 'saludable';
-        if (stockActual === 0 && isTopSeller) {
+        if (esCeroCero) {
+            nivelUrgencia = 'saludable'; // No requiere reposición activa
+        } else if (stockActual <= 0 && isTopSeller) {
             nivelUrgencia = 'critico';
             cantAgotadosCriticos++;
             cantTopSellersRiesgo++;
@@ -584,7 +688,7 @@ function procesarDatosYRenderizar(resetPage = true) {
             cRequieren++;
             cAgotados++;
             cTopSellers++;
-        } else if (stockActual === 0) {
+        } else if (stockActual <= 0) {
             nivelUrgencia = 'critico';
             cantAgotadosCriticos++;
             cantBajoStockTotal++;
@@ -619,16 +723,23 @@ function procesarDatosYRenderizar(resetPage = true) {
             diasCobertura,
             isTopSeller,
             sugeridoCompra: sugeridoCalculado,
-            nivelUrgencia
+            nivelUrgencia,
+            esCeroCero
         };
     });
 
     // Actualizar contadores de las Pestañas de Filtro Rápido
-    const elReq = document.getElementById('count-requieren'); if (elReq) elReq.textContent = cRequieren;
-    const elAgo = document.getElementById('count-agotados'); if (elAgo) elAgo.textContent = cAgotados;
+    const cAgotadosFinal = ocultarCeroCero ? cAgotados : productosAnalizados.filter(p => p.stockActual <= 0).length;
+    const cRequierenFinal = ocultarCeroCero ? cRequieren : productosAnalizados.filter(p => (p.stockActual <= 0 || p.stockActual <= p.stockMinimo)).length;
+    const totalVisiblesTodos = ocultarCeroCero 
+        ? productosAnalizados.filter(p => !p.esCeroCero).length 
+        : productosAnalizados.length;
+
+    const elReq = document.getElementById('count-requieren'); if (elReq) elReq.textContent = cRequierenFinal;
+    const elAgo = document.getElementById('count-agotados'); if (elAgo) elAgo.textContent = cAgotadosFinal;
     const elBaj = document.getElementById('count-bajo-minimo'); if (elBaj) elBaj.textContent = cBajoMinimo;
     const elTop = document.getElementById('count-top-sellers'); if (elTop) elTop.textContent = cTopSellers;
-    const elTod = document.getElementById('count-todos'); if (elTod) elTod.textContent = productosAnalizados.length;
+    const elTod = document.getElementById('count-todos'); if (elTod) elTod.textContent = totalVisiblesTodos;
 
     // Actualizar KPIs
     if (kpiAgotados) kpiAgotados.textContent = cantAgotadosCriticos;
@@ -659,13 +770,21 @@ function filtrarYRenderizarTabla(resetPage = false) {
     const rubroVal = selectRubro ? selectRubro.value : 'todos';
     const marcaVal = selectMarca ? selectMarca.value : 'todos';
 
+    const checkOcultar = document.getElementById('check-ocultar-stock-cero');
+    const ocultarCeroCero = checkOcultar ? checkOcultar.checked : true;
+
     // 1. Filtrado
     let filtrados = productosAnalizados.filter(p => {
+        // Excluir si stock actual es 0 y stock mínimo es 0 cuando el filtro está activo
+        if (ocultarCeroCero && p.esCeroCero) {
+            return false;
+        }
+
         // Filtro rápido por pestañas (Quick Filter)
         if (quickFilterActual === 'requieren') {
-            if (!(p.stockActual === 0 || p.stockActual <= p.stockMinimo)) return false;
+            if (!(p.stockActual <= 0 || p.stockActual <= p.stockMinimo)) return false;
         } else if (quickFilterActual === 'agotados') {
-            if (p.stockActual !== 0) return false;
+            if (p.stockActual > 0) return false;
         } else if (quickFilterActual === 'bajo_minimo') {
             if (!(p.stockActual > 0 && p.stockActual <= p.stockMinimo)) return false;
         } else if (quickFilterActual === 'top_sellers') {
@@ -768,7 +887,9 @@ function filtrarYRenderizarTabla(resetPage = false) {
 
         // Badge de Urgencia
         let badgeUrgenciaHtml = '';
-        if (p.nivelUrgencia === 'critico') {
+        if (p.esCeroCero) {
+            badgeUrgenciaHtml = `<span class="badge bg-secondary-subtle text-secondary border"><i class="fas fa-pause me-1"></i>Sin Reposición (0/0)</span>`;
+        } else if (p.nivelUrgencia === 'critico') {
             badgeUrgenciaHtml = `<span class="badge badge-urgencia-critica"><i class="fas fa-triangle-exclamation me-1"></i>Agotado</span>`;
         } else if (p.nivelUrgencia === 'bajo') {
             badgeUrgenciaHtml = `<span class="badge badge-urgencia-alta"><i class="fas fa-circle-down me-1"></i>Bajo Stock</span>`;
@@ -796,7 +917,7 @@ function filtrarYRenderizarTabla(resetPage = false) {
         }
 
         html += `
-            <tr data-id="${p.id}" class="${p.nivelUrgencia === 'critico' ? 'table-danger-subtle' : ''}">
+            <tr data-id="${p.id}" class="${p.nivelUrgencia === 'critico' && !p.esCeroCero ? 'table-danger-subtle' : ''}">
                 <td class="ps-4">
                     <div class="d-flex align-items-center">
                         <img src="${imgUrl}" alt="${p.nombre}" width="42" height="42" class="rounded-3 object-fit-cover border me-3 btn-open-detail" data-id="${p.id}" style="cursor: pointer;" title="Ver detalle de ${p.nombre}">
@@ -816,10 +937,11 @@ function filtrarYRenderizarTabla(resetPage = false) {
                 </td>
                 <td class="text-center">
                     <div class="fw-bold ${p.stockActual === 0 ? 'text-danger' : 'text-dark'}">${p.stockActual} u.</div>
-                    <div class="small text-muted d-flex align-items-center justify-content-center gap-1">
-                        Mín: 
-                        <input type="number" min="0" value="${p.stockMinimo}" data-action="update-stock-min" data-id="${p.id}" 
-                               class="form-control form-control-sm input-table-sm py-0 px-1 d-inline-block" title="Ajustar stock mínimo">
+                    <div class="small text-muted d-flex align-items-center justify-content-center gap-1 mt-1">
+                        <span class="text-secondary fw-semibold" style="font-size: 0.8rem;">Mín:</span>
+                        <input type="number" min="0" value="${p.stockMinimo}" data-action="update-stock-min" data-id="${p.id}" data-current="${p.stockMinimo}"
+                               class="form-control form-control-sm input-table-sm py-0 px-1 text-center fw-bold input-stock-minimo" 
+                               style="max-width: 65px; height: 26px; font-size: 0.85rem;" title="Presiona Enter o cambia de celda para guardar">
                     </div>
                 </td>
                 <td class="text-center">
@@ -1354,7 +1476,51 @@ function abrirModalDetalleProducto(id) {
     }
     document.getElementById('md-ganancia').textContent = gananciaText;
 
-    document.getElementById('md-stock-info').textContent = `${prod.stockActual} u. / Mín: ${prod.stockMinimo} u.`;
+    const elActualBadge = document.getElementById('md-stock-actual-badge');
+    if (elActualBadge) elActualBadge.textContent = `Actual: ${prod.stockActual} u.`;
+
+    const inputMinimo = document.getElementById('md-input-stock-minimo');
+    if (inputMinimo) {
+        inputMinimo.value = prod.stockMinimo;
+    }
+
+    const btnGuardarMinimo = document.getElementById('md-btn-guardar-minimo');
+    if (btnGuardarMinimo) {
+        btnGuardarMinimo.onclick = async () => {
+            const val = Math.max(0, parseInt(inputMinimo.value) || 0);
+            btnGuardarMinimo.disabled = true;
+            const originalHtml = btnGuardarMinimo.innerHTML;
+            btnGuardarMinimo.innerHTML = `<i class="fas fa-spinner fa-spin"></i>`;
+
+            const ok = await actualizarStockMinimoProducto(prod.id, val);
+
+            btnGuardarMinimo.disabled = false;
+            btnGuardarMinimo.innerHTML = originalHtml;
+
+            if (ok) {
+                // Actualizar valores visuales dentro del modal abierto
+                const prodActualizado = productosAnalizados.find(p => p.id === prod.id) || prod;
+                const elSugerido = document.getElementById('md-sugerido');
+                if (elSugerido) elSugerido.textContent = `${prodActualizado.sugeridoCompra} u.`;
+
+                const elInputCant = document.getElementById('md-input-cantidad');
+                if (elInputCant && (!ordenCompra.find(i => i.id === prod.id))) {
+                    elInputCant.value = prodActualizado.sugeridoCompra || 1;
+                    actualizarSubtotalModal();
+                }
+            }
+        };
+    }
+
+    if (inputMinimo) {
+        inputMinimo.onkeydown = (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                if (btnGuardarMinimo) btnGuardarMinimo.click();
+            }
+        };
+    }
+
     document.getElementById('md-ventas-info').textContent = `${prod.ventasPeriodo} u. (${(prod.rotacionDiaria).toFixed(1)}/día)`;
 
     const cobText = prod.diasCobertura === Infinity ? 'Sin ventas registradas' : `${prod.diasCobertura} días de stock`;
