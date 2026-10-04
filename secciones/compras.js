@@ -5,7 +5,7 @@ import { getProductos, getRubros, getMarcas } from './dataManager.js';
 import { showAlertModal, showToast, formatMoney } from '../utils.js';
 
 // --- CONFIGURACIÓN DE CACHÉ DE VENTAS (12 HORAS) ---
-const CACHE_KEY_PREFIX = 'pos2025_compras_sales_';
+const CACHE_KEY_PREFIX = 'pos2025_compras_sales_v2_';
 const CACHE_TTL_MS = 12 * 60 * 60 * 1000; // 12 horas para minimizar lecturas en Firebase
 
 // --- ESTADO LOCAL DEL MÓDULO ---
@@ -36,6 +36,17 @@ let selectPageSize, paginationContainer, paginationInfo, infoCacheVentas, checkO
 
 export async function init() {
     console.log("Inicializando módulo de Compras y Reposición Inteligente (Optimizado 12h + Paginación)...");
+    
+    // Limpieza de cachés de compras obsoletas o versiones previas
+    try {
+        Object.keys(localStorage).forEach(key => {
+            if (key.startsWith('pos2025_compras_sales_') && !key.startsWith(CACHE_KEY_PREFIX)) {
+                localStorage.removeItem(key);
+            }
+        });
+    } catch (e) {
+        console.warn("[Compras] Error limpiando caché obsoleta:", e);
+    }
     
     // Vincular elementos DOM
     tbodyCompras = document.getElementById('tbody-compras');
@@ -448,7 +459,9 @@ function getSalesFromLocalStorage(dias) {
         const parsed = JSON.parse(raw);
         const ahora = Date.now();
         if (ahora - parsed.timestamp < CACHE_TTL_MS) {
-            return parsed;
+            if (parsed.salesMap && typeof parsed.salesMap === 'object') {
+                return parsed;
+            }
         }
     } catch (e) {
         console.warn("Error leyendo caché de ventas desde localStorage:", e);
@@ -530,23 +543,74 @@ async function ejecutarAnalisisVentas(dias, forceRefresh = false) {
         salesMap = {};
         const fechaLimite = new Date();
         fechaLimite.setDate(fechaLimite.getDate() - dias);
+        fechaLimite.setHours(0, 0, 0, 0);
+
+        const year = fechaLimite.getFullYear();
+        const month = String(fechaLimite.getMonth() + 1).padStart(2, '0');
+        const day = String(fechaLimite.getDate()).padStart(2, '0');
+        const fechaLimiteStr = `${year}-${month}-${day}`;
 
         const ventasRef = collection(db, 'ventas');
-        const q = query(ventasRef, where('fecha', '>=', fechaLimite));
-        const querySnapshot = await getDocs(q);
 
-        querySnapshot.forEach(docSnap => {
+        // Consultamos tanto por formato String 'YYYY-MM-DD' (usado por ventas.js) como por Date/Timestamp
+        const qString = query(ventasRef, where('fecha', '>=', fechaLimiteStr));
+        const qDate = query(ventasRef, where('fecha', '>=', fechaLimite));
+
+        const [snapString, snapDate] = await Promise.all([
+            getDocs(qString).catch(e => { console.warn("[Compras] Error query ventas string:", e); return { forEach: () => {} }; }),
+            getDocs(qDate).catch(e => { console.warn("[Compras] Error query ventas date:", e); return { forEach: () => {} }; })
+        ]);
+
+        const processedDocIds = new Set();
+        const rawProductos = getProductos() || [];
+
+        // Construir mapa de variantes a producto padre para soporte retrocompatible
+        const variantToParentMap = new Map();
+        rawProductos.forEach(p => {
+            if (p.tieneVariantes && Array.isArray(p.variantes)) {
+                p.variantes.forEach(v => {
+                    if (v.codigo) variantToParentMap.set(String(v.codigo), p.id);
+                    if (v.id) variantToParentMap.set(String(v.id), p.id);
+                });
+            }
+        });
+
+        const processVentaDoc = (docSnap) => {
+            if (!docSnap || !docSnap.id || processedDocIds.has(docSnap.id)) return;
+            processedDocIds.add(docSnap.id);
+
             const venta = docSnap.data();
+            // Descartar ventas canceladas o anuladas
+            if (venta.estado && (venta.estado === 'anulada' || venta.estado === 'cancelada')) return;
+
             if (venta.productos && Array.isArray(venta.productos)) {
                 venta.productos.forEach(item => {
-                    const id = item.id || item.productoId;
-                    const cant = Number(item.cantidad) || 1;
-                    if (id) {
+                    if (item.isDeuda) return; // Cobranza de deuda fiada, no venta de producto físico
+
+                    let id = item.parentId || item.id || item.productoId;
+                    const cant = Number(item.cantidad) || 0;
+
+                    // 1. Si coincide con una variante mapeada a padre
+                    if (id && variantToParentMap.has(String(id))) {
+                        id = variantToParentMap.get(String(id));
+                    }
+                    // 2. Si es un ID compuesto virtual (ej: prodId_varianteCodigo)
+                    else if (id && typeof id === 'string' && id.includes('_') && !rawProductos.some(p => p.id === id)) {
+                        const candidateParentId = id.split('_')[0];
+                        if (rawProductos.some(p => p.id === candidateParentId)) {
+                            id = candidateParentId;
+                        }
+                    }
+
+                    if (id && cant > 0) {
                         salesMap[id] = (salesMap[id] || 0) + cant;
                     }
                 });
             }
-        });
+        };
+
+        snapString.forEach(processVentaDoc);
+        snapDate.forEach(processVentaDoc);
 
         // Guardar en localStorage con TTL de 12 horas
         saveSalesToLocalStorage(dias, salesMap);
