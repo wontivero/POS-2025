@@ -49,9 +49,15 @@
                                     <datalist id="recepcionMarcasList"></datalist>
                                 </div>
                                 <div class="col-6">
-                                    <label class="form-label text-muted small fw-bold mb-1">Rubro: <span id="recepcionRubroActual" class="text-dark"></span></label>
-                                    <input type="text" class="form-control recepcion-input text-dark" id="recepcionRubro" list="recepcionRubrosList">
-                                    <datalist id="recepcionRubrosList"></datalist>
+                                    <label class="form-label text-muted small fw-bold mb-1">Rubro <span class="text-danger">*</span>: <span id="recepcionRubroActual" class="text-dark"></span></label>
+                                    <div class="input-group">
+                                        <select class="form-select recepcion-input text-dark" id="recepcionRubro" required>
+                                            <option value="">-- Seleccionar --</option>
+                                        </select>
+                                        <button class="btn btn-outline-primary px-2" type="button" id="btn-nuevo-rubro-recepcion" title="Crear nuevo rubro oficial">
+                                            <i class="fas fa-plus"></i>
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
 

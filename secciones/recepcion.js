@@ -3,7 +3,7 @@ import { getFirestore, doc, updateDoc, increment, collection, query, orderBy, li
 import { db } from '../firebase.js';
 import { getProductos, getRubros, getMarcas, getAppConfig } from './dataManager.js';
 import { getActiveUserProfile } from '../app.js';
-import { formatCurrency, roundUpToNearest50, showToast, showConfirmationModal, normalizeString, capitalizeFirstLetter } from '../utils.js';
+import { formatCurrency, roundUpToNearest50, showToast, showConfirmationModal, normalizeString, capitalizeFirstLetter, populateRubroSelect, promptCrearNuevoRubro } from '../utils.js';
 
 let productosPlanos = [];
 let activeProduct = null;
@@ -93,10 +93,10 @@ export async function init() {
     productosPlanos = aplanarProductos(getProductos());
     previousProductIds = new Set(getProductos().map(p => p.id));
 
-    // Cargar datalists
+    // Cargar datalists y selector de rubros
     const populateDatalists = () => {
-        if (datalistRubros) {
-            datalistRubros.innerHTML = getRubros().map(r => `<option value="${capitalizeFirstLetter(r)}"></option>`).join('');
+        if (inRubro) {
+            populateRubroSelect(inRubro, { placeholder: '-- Seleccionar Rubro --', preserveValue: true });
         }
         if (datalistMarcas) {
             datalistMarcas.innerHTML = getMarcas().map(m => `<option value="${capitalizeFirstLetter(m)}"></option>`).join('');
@@ -104,7 +104,21 @@ export async function init() {
     };
     populateDatalists();
     document.addEventListener('rubros-updated', populateDatalists);
+    document.addEventListener('productos-updated', populateDatalists);
     document.addEventListener('marcas-updated', populateDatalists);
+
+    const btnNuevoRubroRecepcion = document.getElementById('btn-nuevo-rubro-recepcion');
+    if (btnNuevoRubroRecepcion) {
+        btnNuevoRubroRecepcion.onclick = async () => {
+            await promptCrearNuevoRubro(inRubro);
+            inRubro.classList.remove('is-invalid');
+        };
+    }
+    if (inRubro) {
+        inRubro.onchange = () => {
+            if (inRubro.value) inRubro.classList.remove('is-invalid');
+        };
+    }
 
     // Restaurar historial en pantalla si venimos de otra sección
     initLogsListener();
@@ -456,7 +470,17 @@ function cargarProductoEnTarjeta(producto) {
     inCosto.value = producto.costo || 0;
     inGanancia.value = gananciaActual;
     inVenta.value = producto.venta || 0;
-    inRubro.value = capitalizeFirstLetter(producto.rubro) || '';
+    const normRubroRec = normalizeString(producto.rubro || '');
+    populateRubroSelect(inRubro, { placeholder: '-- Seleccionar Rubro --', preserveValue: false });
+    if (normRubroRec && !Array.from(inRubro.options).some(o => o.value === normRubroRec)) {
+        const opt = document.createElement('option');
+        opt.value = normRubroRec;
+        opt.textContent = capitalizeFirstLetter(normRubroRec);
+        inRubro.appendChild(opt);
+    }
+    inRubro.value = normRubroRec;
+    if (!normRubroRec) inRubro.classList.add('is-invalid');
+    else inRubro.classList.remove('is-invalid');
     inMarca.value = capitalizeFirstLetter(producto.marca) || '';
     inStockSumar.value = 0;
     if (inStockCalculado) {
@@ -469,13 +493,20 @@ function cargarProductoEnTarjeta(producto) {
 
 async function guardarActualizacion() {
     if (!activeProduct) return;
+
+    const nRubro = normalizeString(inRubro.value.trim());
+    if (!nRubro) {
+        showToast('El Rubro es obligatorio. Selecciona un rubro de la lista o crea uno con (+).', 'fa-exclamation-triangle', '#f6c23e');
+        inRubro.classList.add('is-invalid');
+        inRubro.focus();
+        return;
+    }
     
     btnGuardar.disabled = true;
     btnGuardar.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Guardando...';
     
     const nCosto = parseFloat(inCosto.value) || 0;
     const nVenta = parseFloat(inVenta.value) || 0;
-    const nRubro = normalizeString(inRubro.value.trim());
     const nMarca = normalizeString(inMarca.value.trim());
     const sumStock = parseInt(inStockSumar.value) || 0;
     const docRef = doc(db, 'productos', activeProduct.parentId);

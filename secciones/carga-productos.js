@@ -2,7 +2,7 @@
 import { db, functions } from '../firebase.js';
 import { collection, writeBatch, doc, getDocs, query, where, addDoc, orderBy, Timestamp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
 import { httpsCallable } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-functions.js";
-import { showAlertModal, showConfirmationModal, roundUpToNearest50, formatCurrency, normalizeString, capitalizeFirstLetter, showToast, fetchAndSquareImageUrl, showInputModal } from '../utils.js';
+import { showAlertModal, showConfirmationModal, roundUpToNearest50, formatCurrency, normalizeString, capitalizeFirstLetter, showToast, fetchAndSquareImageUrl, showInputModal, populateRubroSelect, promptCrearNuevoRubro, getListaRubrosOficiales } from '../utils.js';
 import { getProductos, getMarcas, getColores, getRubros } from './dataManager.js';
 // --- ESTADO Y ELEMENTOS DEL DOM ---
 let productosEnPreparacion = [];
@@ -79,13 +79,17 @@ export async function init() {
         };
         poblar(datalistMarcas, getMarcas());
         poblar(datalistColores, getColores());
-        poblar(datalistRubros, getRubros());
+        populateRubroSelect(prodRubro, { placeholder: '-- Seleccionar Rubro --', preserveValue: true });
     };
 
     // Suscripción a los eventos de actualización
     document.addEventListener('marcas-updated', actualizarDatalistsCarga);
     document.addEventListener('colores-updated', actualizarDatalistsCarga);
-    document.addEventListener('rubros-updated', actualizarDatalistsCarga);
+    document.addEventListener('rubros-updated', () => {
+        actualizarDatalistsCarga();
+        renderizarGrilla();
+    });
+    document.addEventListener('productos-updated', actualizarDatalistsCarga);
 
     // Carga inicial de datos desde el caché
     actualizarDatalistsCarga();
@@ -144,6 +148,20 @@ function setupEventListeners() {
     btnAgregarYDuplicar.onclick = async () => { await agregarProductoAGrilla(true); };
     btnLimpiarFormulario.onclick = limpiarFormulario;
 
+    const btnNuevoRubroCarga = document.getElementById('btn-nuevo-rubro-carga');
+    if (btnNuevoRubroCarga) {
+        btnNuevoRubroCarga.onclick = async () => {
+            await promptCrearNuevoRubro(prodRubro);
+            prodRubro.classList.remove('is-invalid');
+            renderizarGrilla();
+        };
+    }
+    if (prodRubro) {
+        prodRubro.onchange = () => {
+            if (prodRubro.value) prodRubro.classList.remove('is-invalid');
+        };
+    }
+
     grillaBody.onclick = (e) => {
         const id = e.target.closest('tr')?.dataset.id;
         if (!id) return;
@@ -155,6 +173,7 @@ function setupEventListeners() {
     };
 
     grillaBody.oninput = (e) => { if (e.target.tagName === 'INPUT') handleGridInput(e.target); };
+    grillaBody.onchange = (e) => { if (e.target.tagName === 'SELECT') handleGridInput(e.target); };
     grillaBody.onkeydown = (e) => { handleEnterAsTab(e); restrictToNumericInput(e); };
 
     grillaBody.onfocusout = (e) => {
@@ -666,7 +685,7 @@ function handleEnterAsTab(e) {
     if (e.key !== 'Enter') return;
     e.preventDefault();
     const context = e.currentTarget;
-    const focusableElements = Array.from(context.querySelectorAll('input:not([readonly])'));
+    const focusableElements = Array.from(context.querySelectorAll('input:not([readonly]):not([type="hidden"]):not([type="file"]), select'));
     const currentIndex = focusableElements.indexOf(e.target);
     const nextIndex = (currentIndex + 1) % focusableElements.length;
     const nextElement = focusableElements[nextIndex];
@@ -680,6 +699,7 @@ function handleEnterAsTab(e) {
 // --- LÓGICA DE LA GRILLA (RENDERIZADO) ---
 function renderizarGrilla() {
     grillaBody.innerHTML = '';
+    const listaRubrosGrilla = getListaRubrosOficiales();
     productosEnPreparacion.forEach(p => {
         const row = document.createElement('tr');
         row.dataset.id = p.id;
@@ -740,12 +760,22 @@ function renderizarGrilla() {
         const vStock = p.tieneVariantes ? `<span class="badge bg-info">${p.variantes.reduce((acc, v)=>acc+(parseInt(v.stock)||0),0)}</span>` : `<input type="number" class="form-control form-control-sm" value="${p.stock}" data-field="stock" step="1">`;
         const vStockMin = p.tieneVariantes ? `<span class="badge bg-light text-dark">N/A</span>` : `<input type="number" class="form-control form-control-sm" value="${p.stockMinimo}" data-field="stockMinimo" step="1">`;
 
+        const pRubroNorm = normalizeString(p.rubro || '');
+        const opcionesRubroSet = new Set(listaRubrosGrilla);
+        if (pRubroNorm) opcionesRubroSet.add(pRubroNorm);
+        const opcionesRubroHtml = [
+            `<option value="" ${!pRubroNorm ? 'selected' : ''}>-- Elegir Rubro * --</option>`,
+            ...Array.from(opcionesRubroSet).sort((a, b) => a.localeCompare(b, 'es')).map(r =>
+                `<option value="${r}" ${r === pRubroNorm ? 'selected' : ''}>${capitalizeFirstLetter(r)}</option>`
+            )
+        ].join('');
+
         row.innerHTML = `
             <td class="codigo-cell">${iconoEstado} ${vCodigo}</td>
             <td><input type="text" class="form-control form-control-sm" value="${p.nombre}" data-field="nombre"></td>
             <td><input type="text" class="form-control form-control-sm" value="${p.marca}" data-field="marca"></td>
             <td><input type="text" class="form-control form-control-sm" value="${p.color}" data-field="color"></td>
-            <td><input type="text" class="form-control form-control-sm" value="${p.rubro}" data-field="rubro"></td>
+            <td><select class="form-select form-select-sm ${!pRubroNorm ? 'is-invalid' : ''}" data-field="rubro">${opcionesRubroHtml}</select></td>
             <td>${vCosto}</td>
             <td>${vGanancia}</td>
             <td>${vVenta}</td>
@@ -773,6 +803,10 @@ function handleGridInput(input) {
     const numericValue = parseFloat(value) || 0;
     if (['costo', 'ganancia', 'venta', 'stock', 'stockMinimo'].includes(field)) {
         producto[field] = numericValue;
+    } else if (field === 'rubro') {
+        producto[field] = normalizeString(value);
+        if (producto[field]) input.classList.remove('is-invalid');
+        else input.classList.add('is-invalid');
     } else {
         producto[field] = value;
     }
@@ -817,6 +851,14 @@ async function agregarProductoAGrilla(duplicarDespues = false) {
     
     if (!prodNombre.value.trim()) {
         showToast("El Nombre del producto es obligatorio.", "fa-exclamation-triangle", "#f6c23e");
+        return;
+    }
+    if (!prodRubro || !prodRubro.value.trim()) {
+        showToast("El Rubro es obligatorio. Selecciona un rubro o crea uno con (+).", "fa-exclamation-triangle", "#f6c23e");
+        if (prodRubro) {
+            prodRubro.classList.add('is-invalid');
+            prodRubro.focus();
+        }
         return;
     }
     if (!tieneVariantes && !codigo) {
@@ -970,7 +1012,17 @@ function poblarFormulario(producto, modoDuplicar = false) {
     prodNombre.value = producto.nombre;
     prodMarca.value = producto.marca;
     prodColor.value = producto.color;
-    prodRubro.value = producto.rubro;
+    const normRubroCarga = normalizeString(producto.rubro || '');
+    populateRubroSelect(prodRubro, { placeholder: '-- Seleccionar Rubro --', preserveValue: false });
+    if (normRubroCarga && !Array.from(prodRubro.options).some(o => o.value === normRubroCarga)) {
+        const opt = document.createElement('option');
+        opt.value = normRubroCarga;
+        opt.textContent = capitalizeFirstLetter(normRubroCarga);
+        prodRubro.appendChild(opt);
+    }
+    prodRubro.value = normRubroCarga;
+    if (!normRubroCarga) prodRubro.classList.add('is-invalid');
+    else prodRubro.classList.remove('is-invalid');
     prodCosto.value = producto.costo;
     prodVenta.value = Math.round(producto.venta);
     prodStock.value = producto.stock;
@@ -1144,6 +1196,12 @@ async function guardarTodoEnBD() {
     const hayPendientes = productosEnPreparacion.some(p => p.status === 'pendiente');
     if (hayPendientes) {
         showToast("Confirma o cancela las filas pendientes antes de guardar.", "fa-exclamation-triangle", "#f6c23e");
+        return;
+    }
+    const sinRubro = productosEnPreparacion.find(p => !normalizeString(p.rubro || ''));
+    if (sinRubro) {
+        showToast(`El producto "${sinRubro.nombre || sinRubro.codigo}" no tiene Rubro asignado. Todos los productos deben tener un Rubro obligatorio.`, "fa-exclamation-triangle", "#f6c23e");
+        renderizarGrilla();
         return;
     }
     const aCrear = productosEnPreparacion.filter(p => p.status === 'nuevo').length;

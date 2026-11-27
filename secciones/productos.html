@@ -8,16 +8,18 @@
     </div>
     <h2 class="mb-4">Gestión de Productos</h2>
     <div class="row mb-4">
-        <div class="col-md-6">
+        <div class="col-md-7 d-flex flex-wrap align-items-center gap-2">
             <button class="btn btn-primary" id="btnNuevoProducto"><i class="fas fa-plus-circle me-2"></i>Crear Producto</button>
-            <button class="btn btn-success ms-2" id="btnExportarProductos"><i
-                    class="fas fa-file-excel me-2"></i>Exportar Productos (CSV)</button>
-            <button class="btn btn-info ms-2" id="btnImportarProductos"><i class="fas fa-file-upload me-2"></i>Importar
-                Productos (CSV)</button>
-                <!-- <button class="btn btn-danger ms-2" id="btnNormalizarDatos">Normalizar Datos Antiguos</button> -->
+            <button class="btn btn-outline-primary fw-bold position-relative" id="btnGestionarRubros" title="Centro de Normalización, Fusión y Gestión de Rubros">
+                <i class="fas fa-tags me-1"></i>Gestionar Rubros
+                <span id="badge-alertas-rubros" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger d-none" style="font-size: 0.68rem;">0</span>
+            </button>
+            <button class="btn btn-success" id="btnExportarProductos"><i
+                    class="fas fa-file-excel me-2"></i>Exportar CSV</button>
+            <button class="btn btn-info text-white" id="btnImportarProductos"><i class="fas fa-file-upload me-2"></i>Importar CSV</button>
             <input type="file" id="importarArchivoInput" accept=".csv" style="display: none;">
         </div>
-        <div class="col-md-6">
+        <div class="col-md-5">
             <div class="input-group">
                 <span class="input-group-text"><i class="fas fa-search"></i></span>
                 <input type="text" class="form-control" id="filtro-productos"
@@ -47,9 +49,10 @@
                         <datalist id="colores-list-filtro"></datalist>
                     </div>
                     <div class="col-md-3">
-                        <label for="filtro-rubro" class="form-label">Rubro:</label>
-                        <input type="text" class="form-control" id="filtro-rubro" list="rubros-list-filtro">
-                        <datalist id="rubros-list-filtro"></datalist>
+                        <label for="filtro-rubro" class="form-label fw-semibold">Rubro:</label>
+                        <select class="form-select" id="filtro-rubro">
+                            <option value="">Todos los Rubros</option>
+                        </select>
                     </div>
                     <div class="col-md-3">
                         <label for="filtro-stock-min" class="form-label">Stock:</label>
@@ -126,6 +129,33 @@
                         <div class="col-md-3 d-flex align-items-end">
                             <button id="btnAplicarActualizacionMasiva"
                                 class="btn btn-info w-100 text-white">Actualizar</button>
+                        </div>
+                    </div>
+                </div>
+                <hr>
+                <div class="col-12 mt-3">
+                    <h6 class="mb-2"><i class="fas fa-tags me-2 text-primary"></i>Asignación Masiva de Rubro (para los productos filtrados)</h6>
+                    <div class="row g-2 align-items-end">
+                        <div class="col-md-6">
+                            <label for="mass-rubro-select" class="form-label small text-muted mb-1">Selecciona el Rubro Oficial a asignar a todos los productos de la lista filtrada:</label>
+                            <div class="input-group">
+                                <select id="mass-rubro-select" class="form-select">
+                                    <option value="">-- Seleccionar Rubro Destino --</option>
+                                </select>
+                                <button class="btn btn-outline-primary" type="button" id="btn-nuevo-rubro-masivo" title="Crear nuevo rubro">
+                                    <i class="fas fa-plus"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <button id="btnAplicarRubroMasivo" class="btn btn-primary w-100 fw-bold">
+                                <i class="fas fa-check-double me-1"></i>Asignar Rubro en Lote
+                            </button>
+                        </div>
+                        <div class="col-md-3">
+                            <button id="btnFiltrarSinRubroRapido" class="btn btn-outline-danger w-100 fw-semibold" type="button">
+                                <i class="fas fa-exclamation-triangle me-1"></i>Ver Productos Sin Rubro
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -212,5 +242,112 @@
             </div>
         </div>
     </div>
- 
+
+    <!-- Modal Centro de Normalización, Fusión y Gestión de Rubros -->
+    <div class="modal fade" id="modalGestionRubros" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content border-0 shadow-lg rounded-4">
+                <div class="modal-header bg-primary text-white border-0 py-3 px-4">
+                    <div>
+                        <h5 class="modal-title fw-bold mb-0"><i class="fas fa-tags me-2"></i>Centro de Normalización y Gestión de Rubros</h5>
+                        <small class="text-white-50">Estandariza nombres, corrige errores de escritura en cascada y fusiona rubros duplicados en todo el catálogo.</small>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <!-- KPIs de Diagnóstico del Catálogo -->
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-4">
+                            <div class="card border-0 shadow-sm rounded-4 bg-light h-100">
+                                <div class="card-body d-flex align-items-center justify-content-between p-3">
+                                    <div>
+                                        <span class="text-muted small fw-bold text-uppercase">Rubros en Uso / Oficiales</span>
+                                        <h3 class="fw-bold text-primary mb-0" id="kpi-rubros-total">0</h3>
+                                        <small class="text-muted">Disponibles en selectores</small>
+                                    </div>
+                                    <div class="rounded-circle bg-primary bg-opacity-10 p-3 text-primary">
+                                        <i class="fas fa-layer-group fa-2x"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card border-0 shadow-sm rounded-4 bg-light h-100">
+                                <div class="card-body d-flex align-items-center justify-content-between p-3">
+                                    <div>
+                                        <span class="text-muted small fw-bold text-uppercase">Productos Sin Rubro</span>
+                                        <h3 class="fw-bold text-danger mb-0" id="kpi-productos-sin-rubro">0</h3>
+                                        <button type="button" class="btn btn-link btn-sm p-0 text-danger fw-bold text-decoration-none" id="btn-gestor-filtrar-sin-rubro">
+                                            <i class="fas fa-filter me-1"></i>Filtrar en tabla para corregir
+                                        </button>
+                                    </div>
+                                    <div class="rounded-circle bg-danger bg-opacity-10 p-3 text-danger">
+                                        <i class="fas fa-exclamation-circle fa-2x"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card border-0 shadow-sm rounded-4 bg-light h-100">
+                                <div class="card-body d-flex align-items-center justify-content-between p-3">
+                                    <div>
+                                        <span class="text-muted small fw-bold text-uppercase">Posibles Errores / Duplicados</span>
+                                        <h3 class="fw-bold text-warning-emphasis mb-0" id="kpi-rubros-similares">0</h3>
+                                        <small class="text-muted">Detectados por similitud ortográfica</small>
+                                    </div>
+                                    <div class="rounded-circle bg-warning bg-opacity-10 p-3 text-warning-emphasis">
+                                        <i class="fas fa-spell-check fa-2x"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Contenedor de Sugerencias Inteligentes de Fusión (Fuzzy Matching) -->
+                    <div id="rubros-sugerencias-container" class="mb-4 d-none"></div>
+
+                    <!-- Barra de Creación y Búsqueda de Rubros -->
+                    <div class="row g-2 mb-3 align-items-center">
+                        <div class="col-md-6">
+                            <div class="input-group">
+                                <span class="input-group-text bg-white text-primary"><i class="fas fa-plus-circle"></i></span>
+                                <input type="text" class="form-control" id="input-nuevo-rubro-gestor" placeholder="Nuevo rubro oficial (ej: Librería, Informática, Juguetería)...">
+                                <button class="btn btn-primary fw-bold px-3" type="button" id="btn-crear-rubro-gestor">
+                                    Agregar Rubro
+                                </button>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="input-group">
+                                <span class="input-group-text bg-light border-0"><i class="fas fa-search text-muted"></i></span>
+                                <input type="text" class="form-control bg-light border-0" id="input-buscar-rubro-gestor" placeholder="Buscar rubro en la lista...">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tabla de Rubros con Acciones en Cascada -->
+                    <div class="table-responsive border rounded-4" style="max-height: 420px; overflow-y: auto;">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light sticky-top small text-uppercase text-muted">
+                                <tr>
+                                    <th class="ps-3 py-3">Nombre del Rubro</th>
+                                    <th class="text-center py-3">Productos Asociados</th>
+                                    <th class="text-center py-3">Estado</th>
+                                    <th class="text-end pe-3 py-3">Acciones de Normalización</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tbody-gestion-rubros">
+                                <!-- Renderizado dinámicamente por JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light border-0 px-4 py-3 d-flex justify-content-between">
+                    <small class="text-muted"><i class="fas fa-info-circle me-1"></i>Al renombrar o fusionar un rubro, todos sus productos se actualizan automáticamente en lote.</small>
+                    <button type="button" class="btn btn-secondary rounded-pill px-4 fw-bold" data-bs-dismiss="modal">Cerrar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
 </section>

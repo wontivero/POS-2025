@@ -4,7 +4,7 @@ import {
     collection, addDoc, getDocs, runTransaction, doc, query, orderBy, where, updateDoc, deleteDoc, getDoc, setDoc
 } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
 import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-storage.js";
-import { getAppConfig, getClientes } from './secciones/dataManager.js'; // <-- IMPORTAMOS LOS GETTERS
+import { getAppConfig, getClientes, getRubros, getProductos } from './secciones/dataManager.js'; // <-- IMPORTAMOS LOS GETTERS
 
 /**
  * Obtiene los datos más actualizados del cliente combinando el snapshot de la venta con el caché en vivo.
@@ -2252,3 +2252,229 @@ export function formatMoney(amount) {
     const num = Number(amount) || 0;
     return `$ ${num.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
+
+// =========================================================================
+// --- ESTANDARIZACIÓN Y NORMALIZACIÓN INTELIGENTE DE RUBROS ---
+// =========================================================================
+
+/**
+ * Calcula la distancia de edición (Levenshtein) entre dos textos normalizados
+ * para detectar errores de tipeo como "liberia" / "lireria" vs "libreria".
+ */
+export function levenshteinDistance(a = '', b = '') {
+    const s = normalizeString(a.trim());
+    const t = normalizeString(b.trim());
+    if (s === t) return 0;
+    if (!s.length) return t.length;
+    if (!t.length) return s.length;
+
+    const v0 = new Array(t.length + 1);
+    const v1 = new Array(t.length + 1);
+    for (let i = 0; i <= t.length; i++) v0[i] = i;
+
+    for (let i = 0; i < s.length; i++) {
+        v1[0] = i + 1;
+        for (let j = 0; j < t.length; j++) {
+            const cost = s[i] === t[j] ? 0 : 1;
+            v1[j + 1] = Math.min(v1[j] + 1, v0[j + 1] + 1, v0[j] + cost);
+        }
+        for (let j = 0; j <= t.length; j++) v0[j] = v1[j];
+    }
+    return v1[t.length];
+}
+
+/**
+ * Busca si un nombre de rubro candidato es sospechosamente similar a un rubro existente
+ */
+export function findSimilarRubro(candidate, existingList = []) {
+    const normCand = normalizeString(candidate || '').trim();
+    if (!normCand || normCand.length < 3) return null;
+
+    let bestMatch = null;
+    let bestDist = 99;
+
+    for (const rawItem of existingList) {
+        const normItem = normalizeString(rawItem || '').trim();
+        if (!normItem || normItem === normCand) continue;
+        const dist = levenshteinDistance(normCand, normItem);
+        const maxAllowedDist = Math.min(normCand.length, normItem.length) >= 6 ? 2 : 1;
+        if (dist <= maxAllowedDist && dist < bestDist) {
+            bestDist = dist;
+            bestMatch = normItem;
+        }
+    }
+    return bestMatch;
+}
+
+/**
+ * Obtiene la lista unificada y ordenada de rubros oficiales (de la colección 'rubros')
+ */
+export function getListaRubrosOficiales() {
+    const rawRubros = getRubros() || [];
+    const setNorm = new Set();
+    rawRubros.forEach(r => {
+        const n = normalizeString(String(r || '').trim());
+        if (n) setNorm.add(n);
+    });
+    return [...setNorm].sort((a, b) => a.localeCompare(b, 'es'));
+}
+
+/**
+ * Puebla un elemento <select> con los rubros oficiales estandarizados.
+ * @param {HTMLSelectElement} selectEl Elemento select a poblar
+ * @param {object} [opts] Opciones adicionales
+ */
+export function populateRubroSelect(selectEl, opts = {}) {
+    if (!selectEl) return;
+    const {
+        placeholder = '-- Seleccionar Rubro --',
+        includeTodos = false,
+        includeSinRubro = false,
+        showCounts = false,
+        preserveValue = true
+    } = opts;
+
+    const prevValue = preserveValue ? normalizeString(selectEl.value || '').trim() : '';
+    const rubrosOficiales = getListaRubrosOficiales();
+
+    // Contar productos por rubro si se solicita
+    const countsMap = new Map();
+    let sinRubroCount = 0;
+    if (showCounts || includeSinRubro) {
+        const prods = getProductos() || [];
+        prods.forEach(p => {
+            const r = normalizeString(String(p.rubro || '').trim());
+            if (!r) {
+                sinRubroCount++;
+            } else {
+                countsMap.set(r, (countsMap.get(r) || 0) + 1);
+            }
+        });
+    }
+
+    let html = '';
+    if (includeTodos) {
+        html += `<option value="">${placeholder}</option>`;
+    } else {
+        html += `<option value="">${placeholder}</option>`;
+    }
+
+    if (includeSinRubro) {
+        html += `<option value="__SIN_RUBRO__" class="text-danger fw-bold">⚠️ Sin Rubro / En blanco (${sinRubroCount})</option>`;
+    }
+
+    // Si hay rubros usados en productos que aún no están en la colección 'rubros', también los incluimos en filtros
+    const allRubrosToRender = new Set(rubrosOficiales);
+    if (showCounts) {
+        countsMap.forEach((_, rKey) => allRubrosToRender.add(rKey));
+    }
+
+    const sortedRubros = [...allRubrosToRender].sort((a, b) => a.localeCompare(b, 'es'));
+    sortedRubros.forEach(r => {
+        const label = capitalizeFirstLetter(r);
+        const countSuffix = showCounts ? ` (${countsMap.get(r) || 0})` : '';
+        html += `<option value="${r}">${label}${countSuffix}</option>`;
+    });
+
+    selectEl.innerHTML = html;
+
+    if (prevValue) {
+        if (prevValue === '__sin_rubro__' && includeSinRubro) {
+            selectEl.value = '__SIN_RUBRO__';
+        } else if (sortedRubros.includes(prevValue)) {
+            selectEl.value = prevValue;
+        }
+    }
+}
+
+/**
+ * Abre un diálogo rápido para crear un nuevo rubro oficial con detección inteligente anti-errores de tipeo.
+ * Si se pasa un <select>, lo actualiza y selecciona el rubro creado/elegido automáticamente.
+ */
+export async function promptCrearNuevoRubro(targetSelect = null) {
+    const rawInput = await showInputModal(
+        'Crear Nuevo Rubro Oficial',
+        'Ingresa el nombre del rubro (se normalizará automáticamente para evitar duplicados por mayúsculas o tildes):',
+        {
+            inputType: 'text',
+            placeholder: 'Ej: Librería, Informática, Juguetería...',
+            confirmText: 'Guardar Rubro'
+        }
+    );
+
+    if (!rawInput || !rawInput.trim()) return null;
+
+    const nuevoRubroNorm = normalizeString(rawInput.trim()).replace(/\s+/g, ' ');
+    if (!nuevoRubroNorm) return null;
+
+    const oficiales = getListaRubrosOficiales();
+
+    // 1. Verificar si ya existe exactamente
+    if (oficiales.includes(nuevoRubroNorm)) {
+        showToast(`El rubro <strong>${capitalizeFirstLetter(nuevoRubroNorm)}</strong> ya existe y fue seleccionado.`, 'fa-info-circle', '#0dcaf0');
+        if (targetSelect) {
+            populateRubroSelect(targetSelect, { preserveValue: false });
+            targetSelect.value = nuevoRubroNorm;
+            targetSelect.dispatchEvent(new Event('change'));
+        }
+        return nuevoRubroNorm;
+    }
+
+    // 2. Verificar si es muy parecido a uno existente (anti-"liberia"/"lireria")
+    const similar = findSimilarRubro(nuevoRubroNorm, oficiales);
+    if (similar) {
+        const usarExistente = await showConfirmationModal(
+            `<div class="text-center mb-2">
+                <i class="fas fa-spell-check fa-2x text-warning mb-2"></i>
+                <h6 class="fw-bold">Posible Error de Escritura Detectado</h6>
+            </div>
+            Ingresaste <strong>"${capitalizeFirstLetter(nuevoRubroNorm)}"</strong>, que es muy parecido al rubro existente <strong class="text-primary">"${capitalizeFirstLetter(similar)}"</strong>.<br><br>
+            ¿Deseas usar el rubro existente <strong>"${capitalizeFirstLetter(similar)}"</strong> para evitar duplicados?`,
+            'Prevención de Duplicados',
+            {
+                confirmText: `Sí, usar "${capitalizeFirstLetter(similar)}"`,
+                cancelText: `No, crear "${capitalizeFirstLetter(nuevoRubroNorm)}" igual`
+            }
+        );
+
+        if (usarExistente) {
+            if (targetSelect) {
+                populateRubroSelect(targetSelect, { preserveValue: false });
+                targetSelect.value = similar;
+                targetSelect.dispatchEvent(new Event('change'));
+            }
+            showToast(`Se seleccionó el rubro <strong>${capitalizeFirstLetter(similar)}</strong>.`, 'fa-check-circle', '#198754');
+            return similar;
+        }
+    }
+
+    // 3. Guardar el nuevo rubro oficial en Firestore
+    try {
+        const rubrosRef = collection(db, 'rubros');
+        const q = query(rubrosRef, where('nombre', '==', nuevoRubroNorm));
+        const snap = await getDocs(q);
+        if (snap.empty) {
+            await addDoc(rubrosRef, { nombre: nuevoRubroNorm });
+        }
+
+        if (targetSelect) {
+            // Aseguramos que la opción esté disponible de inmediato incluso antes del snapshot
+            if (!Array.from(targetSelect.options).some(o => o.value === nuevoRubroNorm)) {
+                const opt = document.createElement('option');
+                opt.value = nuevoRubroNorm;
+                opt.textContent = capitalizeFirstLetter(nuevoRubroNorm);
+                targetSelect.appendChild(opt);
+            }
+            targetSelect.value = nuevoRubroNorm;
+            targetSelect.dispatchEvent(new Event('change'));
+        }
+
+        showToast(`Rubro oficial <strong>${capitalizeFirstLetter(nuevoRubroNorm)}</strong> creado con éxito.`, 'fa-check-circle', '#198754');
+        return nuevoRubroNorm;
+    } catch (error) {
+        console.error("Error al crear nuevo rubro:", error);
+        showToast("No se pudo crear el rubro.", "fa-times-circle", "#dc3545");
+        return null;
+    }
+}
+

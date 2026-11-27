@@ -50,11 +50,16 @@
                             </div>
                         </div>
                         <div class="col-md-4 mb-3">
-                            <div class="form-floating">
-                                <input class="form-control" list="rubros-list-carga" id="prod-rubro"
-                                    placeholder="Rubro">
-                                <label for="prod-rubro">Rubro</label>
-                                <datalist id="rubros-list-carga"></datalist>
+                            <div class="input-group">
+                                <div class="form-floating flex-grow-1">
+                                    <select class="form-select" id="prod-rubro" required>
+                                        <option value="">-- Seleccionar Rubro --</option>
+                                    </select>
+                                    <label for="prod-rubro">Rubro <span class="text-danger">*</span></label>
+                                </div>
+                                <button class="btn btn-outline-primary" type="button" id="btn-nuevo-rubro-carga" title="Crear nuevo rubro oficial">
+                                    <i class="fas fa-plus"></i>
+                                </button>
                             </div>
                         </div>
                     </div>

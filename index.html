@@ -451,9 +451,19 @@
                                         <datalist id="marcas-list"></datalist>
                                     </div>
                                     <div class="col-md-4">
-                                        <label for="producto-rubro" class="form-label">Rubro</label>
-                                        <input type="text" class="form-control" id="producto-rubro" list="rubros-list">
-                                        <datalist id="rubros-list"></datalist>
+                                        <label for="producto-rubro" class="form-label fw-bold">Rubro <span class="text-danger">*</span></label>
+                                        <div class="input-group">
+                                            <select class="form-select" id="producto-rubro" required>
+                                                <option value="">-- Seleccionar Rubro --</option>
+                                            </select>
+                                            <button class="btn btn-outline-primary" type="button" id="btn-nuevo-rubro-modal" title="Crear nuevo rubro oficial">
+                                                <i class="fas fa-plus"></i>
+                                            </button>
+                                            <button class="btn btn-outline-secondary" type="button" id="btn-gestionar-rubros-modal" title="Gestionar, renombrar o fusionar rubros">
+                                                <i class="fas fa-sliders-h"></i>
+                                            </button>
+                                        </div>
+                                        <div id="producto-rubro-warning" class="form-text text-danger fw-semibold d-none"></div>
                                     </div>
                                 </div>
 
