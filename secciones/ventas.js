@@ -1,7 +1,7 @@
 // secciones/ventas.js
 import { haySesionActiva, getSesionActivaId, verificarEstadoCaja } from './caja.js';
 import { getFirestore, collection, onSnapshot, query, orderBy, runTransaction, doc, updateDoc, serverTimestamp, getDoc, increment } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
-import { getCollection, saveDocument, formatCurrency, getTodayDate, updateDocument, deleteDocument, getFormattedDateTime, generatePDF, printThermalTicket, showAlertModal, showConfirmationModal, facturarEnArca, marcarVentaFacturada, showToast } from '../utils.js';
+import { getCollection, saveDocument, formatCurrency, getTodayDate, updateDocument, deleteDocument, getFormattedDateTime, generatePDF, printThermalTicket, showAlertModal, showConfirmationModal, facturarEnArca, marcarVentaFacturada, showToast, consultarPadronArca, CONDICIONES_IVA_ARCA } from '../utils.js';
 import { getProductos, getAppConfig, getClientes } from './dataManager.js'; // <-- Importamos getClientes
 import { getActiveUserProfile } from '../userSession.js';
 
@@ -23,7 +23,8 @@ let clienteSearch, clienteSearchResults, btnLimpiarClienteSearch, btnNuevoClient
 let clienteNombreDisplay, clienteSaldoBadge, clienteDetalleExtra, clienteAvatarCircle, clienteSeleccionadoCard;
 let btnAgregarDeudaTicket;
 let cobroDeudaModalEl, cobroDeudaModal, cobroDeudaClienteNombre, cobroDeudaSaldoActual, btnCobroDeudaTotal, btnCobroDeudaMitad, cobroDeudaMontoInput, btnConfirmarCobroDeudaTicket;
-let clienteModal, clienteModalLabel, clienteId, clienteNombre, clienteCuit, clienteDomicilio, clienteEmail, clienteTelefono, clienteLimiteCreditoInput, btnGuardarCliente;
+let clienteModal, clienteModalLabel, clienteId, clienteNombre, clienteCuit, clienteCondicionIva, btnVentasBuscarArca, ventasArcaStatusBox, clienteDomicilio, clienteEmail, clienteTelefono, clienteLimiteCreditoInput, btnGuardarCliente;
+let ventasArcaMeta = null;
 let clienteSeleccionado = null;
 let clienteSelectedIndex = -1;
 let selectedIndex = -1;
@@ -1519,10 +1520,14 @@ function actualizarUIClienteSeleccionado() {
             }
         }
 
-        // Subtítulo con datos de contacto
+        // Subtítulo con datos de contacto y condición IVA
         if (clienteDetalleExtra) {
             const parts = [];
             if (clienteSeleccionado.cuit) parts.push(`DNI/CUIT: ${clienteSeleccionado.cuit}`);
+            if (clienteSeleccionado.condicionIva) {
+                const catStr = clienteSeleccionado.categoriaMonotributo ? ` (${clienteSeleccionado.categoriaMonotributo})` : '';
+                parts.push(`${clienteSeleccionado.condicionIva}${catStr}`);
+            }
             if (clienteSeleccionado.telefono) parts.push(`Tel: ${clienteSeleccionado.telefono}`);
             clienteDetalleExtra.textContent = parts.join(' • ') || 'Cliente registrado';
         }
@@ -1820,24 +1825,213 @@ function handleDeseleccionarCliente() {
     showToast('Se restableció a <strong>Consumidor Final</strong>.');
 }
 
+function renderVentasArcaStatusBox(meta) {
+    if (!ventasArcaStatusBox) return;
+    if (!meta) {
+        ventasArcaStatusBox.classList.add('d-none');
+        ventasArcaStatusBox.innerHTML = '';
+        return;
+    }
+
+    const badges = [];
+    if (meta.condicion_iva || meta.condicionIva) {
+        badges.push(`<span class="badge bg-primary text-white"><i class="fas fa-receipt me-1"></i>${meta.condicion_iva || meta.condicionIva}</span>`);
+    }
+    if (meta.categoria_monotributo || meta.categoriaMonotributo) {
+        badges.push(`<span class="badge bg-info text-dark fw-bold">Cat. ${meta.categoria_monotributo || meta.categoriaMonotributo}</span>`);
+    }
+    if (meta.tipo_persona || meta.tipoPersona) {
+        const tp = (meta.tipo_persona || meta.tipoPersona) === 'JURIDICA' ? 'Persona Jurídica' : 'Persona Física';
+        badges.push(`<span class="badge bg-secondary-subtle text-dark border">${tp}</span>`);
+    }
+    if (meta.origen_padron || meta.origenPadron) {
+        badges.push(`<span class="badge bg-success-subtle text-success border border-success-subtle"><i class="fas fa-check-circle me-1"></i>Padrón ${meta.origen_padron || meta.origenPadron}</span>`);
+    }
+
+    ventasArcaStatusBox.className = 'mt-2 p-2 rounded-3 bg-white border border-info-subtle shadow-sm animate-fade-in';
+    ventasArcaStatusBox.innerHTML = `
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-1">
+            <span class="small fw-bold text-success"><i class="fas fa-shield-check me-1"></i>Verificado en ARCA:</span>
+            <div class="d-flex flex-wrap gap-1">${badges.join('')}</div>
+        </div>
+    `;
+}
+
+function marcarVentasCamposArcaCargados(mostrarChecks = false) {
+    const groupBox = document.getElementById('ventas-arca-group-box');
+    const fields = [
+        { input: clienteCuit, badge: document.getElementById('ventas-check-cuit') },
+        { input: clienteNombre, badge: document.getElementById('ventas-check-nombre') },
+        { input: clienteCondicionIva, badge: document.getElementById('ventas-check-iva') },
+        { input: clienteDomicilio, badge: document.getElementById('ventas-check-domicilio') }
+    ];
+
+    if (groupBox) {
+        groupBox.classList.toggle('arca-verified', Boolean(mostrarChecks));
+    }
+
+    fields.forEach(({ input, badge }) => {
+        if (!input) return;
+        const hasVal = String(input.value || '').trim().length > 0;
+        const active = Boolean(mostrarChecks && hasVal);
+        input.classList.toggle('is-valid', active);
+        if (badge) {
+            badge.classList.toggle('d-none', !active);
+        }
+    });
+}
+
+function actualizarVentasEstadoCamposManuales() {
+    const badgeTel = document.getElementById('ventas-status-telefono');
+    const badgeEmail = document.getElementById('ventas-status-email');
+    const manualBox = document.getElementById('ventas-manual-group-box');
+    const summaryBadge = document.getElementById('ventas-manual-pending-badge');
+
+    const hasTel = Boolean(clienteTelefono && clienteTelefono.value.trim().length > 0);
+    const hasEmail = Boolean(clienteEmail && clienteEmail.value.trim().length > 0);
+
+    if (clienteTelefono) {
+        clienteTelefono.classList.toggle('is-valid', hasTel);
+        clienteTelefono.classList.toggle('manual-empty-input', !hasTel);
+    }
+    if (badgeTel) {
+        if (hasTel) {
+            badgeTel.className = 'badge bg-success-subtle text-success border border-success-subtle';
+            badgeTel.innerHTML = '<i class="fas fa-check-circle me-1"></i>Cargado';
+        } else {
+            badgeTel.className = 'badge bg-warning-subtle text-warning-emphasis border border-warning-subtle';
+            badgeTel.innerHTML = '<i class="fas fa-exclamation-circle me-1"></i>Falta cargar';
+        }
+    }
+
+    if (clienteEmail) {
+        clienteEmail.classList.toggle('is-valid', hasEmail);
+        clienteEmail.classList.toggle('manual-empty-input', !hasEmail);
+    }
+    if (badgeEmail) {
+        if (hasEmail) {
+            badgeEmail.className = 'badge bg-success-subtle text-success border border-success-subtle';
+            badgeEmail.innerHTML = '<i class="fas fa-check-circle me-1"></i>Cargado';
+        } else {
+            badgeEmail.className = 'badge bg-warning-subtle text-warning-emphasis border border-warning-subtle';
+            badgeEmail.innerHTML = '<i class="fas fa-exclamation-circle me-1"></i>Falta cargar';
+        }
+    }
+
+    const faltantes = [];
+    if (!hasTel) faltantes.push('Teléfono');
+    if (!hasEmail) faltantes.push('Email');
+
+    if (manualBox) {
+        manualBox.classList.toggle('manual-highlight-pending', faltantes.length > 0);
+    }
+    if (summaryBadge) {
+        if (faltantes.length === 0) {
+            summaryBadge.className = 'badge bg-success-subtle text-success border border-success-subtle small';
+            summaryBadge.innerHTML = '<i class="fas fa-check-double me-1"></i>Contacto completo';
+        } else {
+            summaryBadge.className = 'badge bg-warning-subtle text-warning-emphasis border border-warning-subtle small';
+            summaryBadge.innerHTML = `<i class="fas fa-pen me-1"></i>Falta completar: ${faltantes.join(' y ')}`;
+        }
+    }
+}
+
+async function handleVentasAutocompletarArca() {
+    if (!clienteCuit) return;
+    const docValue = clienteCuit.value.trim();
+    if (!docValue) {
+        showToast('Ingresa un DNI o CUIT para consultar en ARCA.', 'fa-exclamation-triangle', '#f6c23e');
+        clienteCuit.focus();
+        return;
+    }
+
+    const originalHtml = btnVentasBuscarArca ? btnVentasBuscarArca.innerHTML : '';
+    if (btnVentasBuscarArca) {
+        btnVentasBuscarArca.disabled = true;
+        btnVentasBuscarArca.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Consultando ARCA...';
+    }
+
+    try {
+        const res = await consultarPadronArca(docValue);
+        if (!res.success) {
+            showToast(res.error || 'No se encontraron datos en ARCA.', 'fa-exclamation-circle', '#dc3545');
+            if (ventasArcaStatusBox) {
+                ventasArcaStatusBox.className = 'mt-2 p-2 rounded-3 bg-danger-subtle text-danger border border-danger-subtle small';
+                ventasArcaStatusBox.innerHTML = `<i class="fas fa-times-circle me-1"></i>${res.error}`;
+            }
+            return;
+        }
+
+        const d = res.data;
+        if (d.cuit) clienteCuit.value = d.cuit;
+        if (d.razon_social && clienteNombre) clienteNombre.value = d.razon_social;
+        if (d.domicilio && clienteDomicilio) clienteDomicilio.value = d.domicilio;
+
+        if (clienteCondicionIva && d.condicion_iva_id) {
+            const optionExists = Array.from(clienteCondicionIva.options).some(opt => Number(opt.value) === Number(d.condicion_iva_id));
+            if (!optionExists) {
+                const newOpt = document.createElement('option');
+                newOpt.value = String(d.condicion_iva_id);
+                newOpt.textContent = d.condicion_iva || `Condición IVA (${d.condicion_iva_id})`;
+                clienteCondicionIva.appendChild(newOpt);
+            }
+            clienteCondicionIva.value = String(d.condicion_iva_id);
+        }
+
+        ventasArcaMeta = {
+            condicionIva: d.condicion_iva,
+            condicionIvaId: d.condicion_iva_id,
+            tipoPersona: d.tipo_persona,
+            categoriaMonotributo: d.categoria_monotributo,
+            origenPadron: d.origen_padron
+        };
+
+        renderVentasArcaStatusBox(d);
+        marcarVentasCamposArcaCargados(true);
+        actualizarVentasEstadoCamposManuales();
+        showToast(`Datos cargados de ARCA: <strong>${d.razon_social || d.cuit}</strong>`, 'fa-check-circle', '#198754');
+        if (clienteTelefono && !clienteTelefono.value) {
+            clienteTelefono.focus();
+        }
+    } catch (e) {
+        console.error('Error al consultar ARCA en Ventas:', e);
+        showToast('Error al consultar el padrón de ARCA.', 'fa-times-circle', '#dc3545');
+    } finally {
+        if (btnVentasBuscarArca) {
+            btnVentasBuscarArca.disabled = false;
+            btnVentasBuscarArca.innerHTML = originalHtml;
+        }
+    }
+}
+
 function handleNuevoClienteRapido(prefillName = '') {
     if (!clienteModal) return;
     clienteModalLabel.textContent = 'Nuevo Cliente';
     clienteId.value = '';
-    clienteNombre.value = prefillName || (clienteSearch ? clienteSearch.value.trim() : '');
-    clienteCuit.value = '';
+    const rawTerm = (prefillName || (clienteSearch ? clienteSearch.value.trim() : '')).trim();
+    const isNumericTerm = /^\d{7,11}$/.test(rawTerm.replace(/\D/g, ''));
+
+    clienteNombre.value = isNumericTerm ? '' : rawTerm;
+    clienteCuit.value = isNumericTerm ? rawTerm.replace(/\D/g, '') : '';
+    if (clienteCondicionIva) clienteCondicionIva.value = '5';
+    ventasArcaMeta = null;
+    renderVentasArcaStatusBox(null);
+
     clienteDomicilio.value = '';
     clienteEmail.value = '';
     clienteTelefono.value = '';
     if (clienteLimiteCreditoInput) clienteLimiteCreditoInput.value = '50000';
+    marcarVentasCamposArcaCargados(false);
+    actualizarVentasEstadoCamposManuales();
     handleLimpiarClienteSearch();
     const modal = bootstrap.Modal.getOrCreateInstance(clienteModal);
     modal.show();
     setTimeout(() => {
-        if (clienteNombre.value) {
+        if (clienteCuit.value) {
             clienteCuit.focus();
+            handleVentasAutocompletarArca();
         } else {
-            clienteNombre.focus();
+            clienteCuit.focus();
         }
     }, 400);
 }
@@ -1849,6 +2043,18 @@ function handleEditarCliente() {
     clienteId.value = clienteSeleccionado.id || '';
     clienteNombre.value = clienteSeleccionado.nombre || '';
     clienteCuit.value = clienteSeleccionado.cuit || '';
+    if (clienteCondicionIva) {
+        clienteCondicionIva.value = String(clienteSeleccionado.condicionIvaId || 5);
+    }
+    ventasArcaMeta = {
+        condicionIva: clienteSeleccionado.condicionIva || CONDICIONES_IVA_ARCA[clienteSeleccionado.condicionIvaId || 5] || 'Consumidor Final',
+        condicionIvaId: Number(clienteSeleccionado.condicionIvaId) || 5,
+        tipoPersona: clienteSeleccionado.tipoPersona || null,
+        categoriaMonotributo: clienteSeleccionado.categoriaMonotributo || null,
+        origenPadron: clienteSeleccionado.origenPadron || null
+    };
+    renderVentasArcaStatusBox(clienteSeleccionado.origenPadron ? ventasArcaMeta : null);
+
     clienteDomicilio.value = clienteSeleccionado.domicilio || '';
     clienteEmail.value = clienteSeleccionado.email || '';
     clienteTelefono.value = clienteSeleccionado.telefono || '';
@@ -1857,6 +2063,8 @@ function handleEditarCliente() {
             ? clienteSeleccionado.limiteCredito
             : 50000;
     }
+    marcarVentasCamposArcaCargados(Boolean(clienteSeleccionado.origenPadron));
+    actualizarVentasEstadoCamposManuales();
     handleLimpiarClienteSearch();
     const modal = bootstrap.Modal.getOrCreateInstance(clienteModal);
     modal.show();
@@ -1875,6 +2083,8 @@ async function handleGuardarCliente() {
     const limiteCredito = (clienteLimiteCreditoInput && parseFloat(clienteLimiteCreditoInput.value) >= 0)
         ? parseFloat(clienteLimiteCreditoInput.value)
         : 50000;
+    const condicionIvaId = Number(clienteCondicionIva?.value) || 5;
+    const condicionIva = CONDICIONES_IVA_ARCA[condicionIvaId] || ventasArcaMeta?.condicionIva || 'Consumidor Final';
 
     const clienteData = {
         nombre: nombre,
@@ -1882,7 +2092,12 @@ async function handleGuardarCliente() {
         domicilio: clienteDomicilio.value.trim(),
         email: clienteEmail.value.trim(),
         telefono: clienteTelefono.value.trim(),
-        limiteCredito: limiteCredito
+        limiteCredito: limiteCredito,
+        condicionIvaId,
+        condicionIva,
+        tipoPersona: ventasArcaMeta?.tipoPersona || null,
+        categoriaMonotributo: condicionIvaId === 6 ? (ventasArcaMeta?.categoriaMonotributo || null) : null,
+        origenPadron: ventasArcaMeta?.origenPadron || null
     };
 
     showLoading();
@@ -2057,6 +2272,9 @@ async function init() {
     clienteId = document.getElementById('clienteId');
     clienteNombre = document.getElementById('clienteNombre');
     clienteCuit = document.getElementById('clienteCuit');
+    clienteCondicionIva = document.getElementById('clienteCondicionIva');
+    btnVentasBuscarArca = document.getElementById('btn-ventas-buscar-arca');
+    ventasArcaStatusBox = document.getElementById('ventas-arca-status-box');
     clienteDomicilio = document.getElementById('clienteDomicilio');
     clienteEmail = document.getElementById('clienteEmail');
     clienteTelefono = document.getElementById('clienteTelefono');
@@ -2162,6 +2380,23 @@ async function init() {
     if (btnGuardarCliente) {
         btnGuardarCliente.removeEventListener('click', handleGuardarCliente);
         btnGuardarCliente.addEventListener('click', handleGuardarCliente);
+    }
+    if (btnVentasBuscarArca) {
+        btnVentasBuscarArca.onclick = handleVentasAutocompletarArca;
+    }
+    if (clienteCuit) {
+        clienteCuit.onkeydown = (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                handleVentasAutocompletarArca();
+            }
+        };
+    }
+    if (clienteTelefono) {
+        clienteTelefono.oninput = actualizarVentasEstadoCamposManuales;
+    }
+    if (clienteEmail) {
+        clienteEmail.oninput = actualizarVentasEstadoCamposManuales;
     }
 
     if (btnAgregarDeudaTicket) {

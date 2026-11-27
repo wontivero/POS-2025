@@ -267,134 +267,194 @@ export function capitalizeFirstLetter(str) {
 function getAfipQrUrl(venta, appConfig, isNotaCredito = false) {
     const arcaInfo = isNotaCredito ? venta.arcaData?.notaCredito : venta.arcaData;
     if (!venta.facturadoEnArca || !arcaInfo || !arcaInfo.CAE) return null;
-    const companyInfo = appConfig.companyInfo || {};
-    const cuitEmisor = parseInt((companyInfo.cuit || "0").replace(/\D/g, ''));
-    
-    let tipoDocRec = 99;
-    let nroDocRec = 0;
-    if (venta.cliente && venta.cliente.cuit) {
-        const cleanId = venta.cliente.cuit.replace(/\D/g, '');
-        if (cleanId.length === 11) {
-            tipoDocRec = 80; // CUIT
-        } else if (cleanId.length >= 7) {
-            tipoDocRec = 96; // DNI
-        }
-        nroDocRec = parseInt(cleanId) || 0;
+
+    // Si la API ya devolvió una URL de QR lista, nos aseguramos de que apunte a arca.gob.ar
+    const directQrUrl = arcaInfo.qr_url || arcaInfo.QrUrl || arcaInfo.qrUrl;
+    if (directQrUrl && typeof directQrUrl === 'string' && directQrUrl.includes('/fe/qr/')) {
+        return directQrUrl.replace('afip.gob.ar', 'arca.gob.ar');
     }
 
-    const totalFiscal = Math.max(0, venta.total - (venta.montoDeudaCobrada || 0));
+    const companyInfo = appConfig.companyInfo || {};
+    const arcaConfig = appConfig.arca || {};
+    const rawCuitEmisor = (arcaInfo.Cuit || arcaConfig.cuit || companyInfo.cuit || "0").toString().replace(/\D/g, '');
+    const cuitEmisor = parseInt(rawCuitEmisor, 10) || 0;
+    const ptoVta = parseInt(arcaInfo.PtoVta || arcaConfig.ptoVta || 6, 10) || 1;
+    const tipoCmp = parseInt(arcaInfo.CbteTipo, 10) || (isNotaCredito ? 13 : 11);
+
+    let tipoDocRec = parseInt(arcaInfo.DocTipo, 10) || 99;
+    let nroDocRec = parseInt(arcaInfo.DocNro, 10) || 0;
+    if (tipoDocRec === 99 && venta.cliente && venta.cliente.cuit && venta.cliente.nombre !== 'Consumidor Final') {
+        const cleanId = String(venta.cliente.cuit).replace(/\D/g, '');
+        if (cleanId.length === 11) {
+            tipoDocRec = 80; // CUIT
+            nroDocRec = parseInt(cleanId, 10) || 0;
+        } else if (cleanId.length >= 7) {
+            tipoDocRec = 96; // DNI
+            nroDocRec = parseInt(cleanId, 10) || 0;
+        }
+    }
+
+    // Normalizar fecha a YYYY-MM-DD según especificación RG 4892 de ARCA
+    let fechaFiscal = venta.fecha || getTodayDate();
+    if (arcaInfo.CbteFch && String(arcaInfo.CbteFch).length === 8) {
+        const fStr = String(arcaInfo.CbteFch);
+        fechaFiscal = `${fStr.substring(0, 4)}-${fStr.substring(4, 6)}-${fStr.substring(6, 8)}`;
+    } else if (typeof fechaFiscal === 'string' && fechaFiscal.includes('/')) {
+        const parts = fechaFiscal.split(' ')[0].split('/');
+        if (parts.length === 3) {
+            fechaFiscal = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+        }
+    }
+
+    const totalFiscal = Math.max(0, (Number(venta.total) || 0) - (Number(venta.montoDeudaCobrada) || 0));
     const qrData = {
         ver: 1,
-        fecha: venta.fecha,
+        fecha: fechaFiscal,
         cuit: cuitEmisor,
-        tipoCmp: isNotaCredito ? 13 : 11, // 13: Nota de Crédito C, 11: Factura C
-        nroCmp: parseInt(arcaInfo.CbteNro) || 0,
+        ptoVta: ptoVta,
+        tipoCmp: tipoCmp,
+        nroCmp: parseInt(arcaInfo.CbteNro, 10) || 0,
         importe: parseFloat(totalFiscal.toFixed(2)),
         moneda: "PES",
         ctz: 1,
         tipoDocRec: tipoDocRec,
         nroDocRec: nroDocRec,
         tipoCodAut: "E",
-        codAut: parseInt(arcaInfo.CAE)
+        codAut: parseInt(arcaInfo.CAE, 10) || 0
     };
 
     const qrBase64 = btoa(JSON.stringify(qrData));
-    return `https://www.afip.gob.ar/fe/qr/?p=${qrBase64}`;
+    return `https://www.arca.gob.ar/fe/qr/?p=${qrBase64}`;
 }
 
-// ** FUNCIÓN MODIFICADA PARA EL NUEVO LAYOUT **
-// REEMPLAZAR en utils.js
+let arcaLogoCacheBase64 = null;
+
+/**
+ * Genera en alta resolución (Canvas) el logotipo oficial de ARCA
+ * ("ARCA - AGENCIA DE RECAUDACIÓN Y CONTROL ADUANERO") para incrustar en PDFs sin depender de red/CORS.
+ */
+function getArcaLogoBase64() {
+    if (arcaLogoCacheBase64) return arcaLogoCacheBase64;
+    try {
+        const canvas = document.createElement('canvas');
+        canvas.width = 440;
+        canvas.height = 175;
+        const ctx = canvas.getContext('2d');
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Texto principal "ARCA"
+        ctx.fillStyle = '#3c3c3b';
+        ctx.font = 'bold 104px Arial, Helvetica, sans-serif';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'alphabetic';
+        ctx.fillText('ARCA', 6, 98);
+
+        // Subtítulo oficial en dos líneas centradas bajo ARCA
+        ctx.fillStyle = '#4a4a49';
+        ctx.font = '600 18.5px Arial, Helvetica, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('AGENCIA DE RECAUDACIÓN', 158, 132);
+        ctx.fillText('Y CONTROL ADUANERO', 158, 156);
+
+        arcaLogoCacheBase64 = canvas.toDataURL('image/png');
+        return arcaLogoCacheBase64;
+    } catch (e) {
+        console.warn("No se pudo generar el logo ARCA en canvas:", e);
+        return null;
+    }
+}
+
+/**
+ * Formatea un monto numérico al estilo fiscal de ARCA (ej: 96000,00 o 1.250,50)
+ */
+function formatFiscalNumber(num) {
+    const val = Number(num) || 0;
+    return val.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+/**
+ * Genera el PDF A4 con el diseño reglamentario oficial de Factura Electrónica de ARCA (RG 1415 / RG 4892),
+ * integrando el logo de la empresa (INFOTECH), el logo oficial de ARCA junto al QR y la nota legal de garantía.
+ */
 export async function generatePDF(ticketId, venta, isNotaCredito = false) {
     const { jsPDF } = window.jspdf;
-    // --- INICIO DE LA MODIFICACIÓN: Obtenemos la config dinámicamente ---
     const appConfig = getAppConfig();
-    const companyInfo = appConfig.companyInfo || {}; // Usamos un objeto vacío como fallback
+    const companyInfo = appConfig.companyInfo || {};
+    const arcaConfig = appConfig.arca || {};
     const arcaInfo = isNotaCredito ? venta.arcaData?.notaCredito : venta.arcaData;
-    const doc = new jsPDF();
-    const margin = 10;
-    const lineHeight = 5;
+    const doc = new jsPDF({ unit: 'mm', format: 'a4' });
     const font = 'helvetica';
-    const pageWidth = doc.internal.pageSize.width;
-    let y = margin;
-    
-    const isFacturaAFIP = venta.facturadoEnArca && arcaInfo && arcaInfo.CAE;
-    const cbteTipoStr = isNotaCredito ? 'NOTA DE CRÉDITO' : 'FACTURA';
-    const comprobanteNro = isFacturaAFIP ? `0001-${arcaInfo.CbteNro.toString().padStart(8, '0')}` : ticketId;
+    const pageWidth = doc.internal.pageSize.getWidth(); // 210mm
+    const margin = 10;
+    const contentWidth = pageWidth - (margin * 2); // 190mm
 
-    const drawText = (text, x, yPos, size, style = 'normal', align = 'left') => {
-        doc.setFont(font, style);
-        doc.setFontSize(size);
-        const textWidth = doc.getStringUnitWidth(text) * size / doc.internal.scaleFactor;
-        let xPos = x;
-        if (align === 'center') { xPos = x - textWidth / 2; }
-        else if (align === 'right') { xPos = x - textWidth; }
-        doc.text(text, xPos, yPos);
-    };
+    const isFacturaAFIP = Boolean(venta.facturadoEnArca && arcaInfo && arcaInfo.CAE);
+    const cbteTipoNum = parseInt(arcaInfo?.CbteTipo, 10) || (isNotaCredito ? 13 : 11);
+    const letraCbte = isFacturaAFIP ? ([1, 2, 3].includes(cbteTipoNum) ? 'A' : ([6, 7, 8].includes(cbteTipoNum) ? 'B' : 'C')) : 'X';
+    const codCbteStr = isFacturaAFIP ? `COD. ${String(cbteTipoNum).padStart(3, '0')}` : 'NO FISCAL';
+    const cbteTitulo = isNotaCredito ? 'NOTA DE CRÉDITO' : (isFacturaAFIP ? 'FACTURA' : 'COMPROBANTE');
 
-    const topY = y;
-    let logoHeight = 0;
+    const ptoVta5 = String(arcaInfo?.PtoVta || arcaConfig.ptoVta || 1).padStart(5, '0');
+    const cbteNro8 = isFacturaAFIP
+        ? String(arcaInfo.CbteNro || 0).padStart(8, '0')
+        : String(ticketId || 0).padStart(8, '0');
+
+    // Fecha de emisión en formato DD/MM/YYYY
+    let fechaEmisionStr = '';
+    if (arcaInfo?.CbteFch && String(arcaInfo.CbteFch).length === 8) {
+        const f = String(arcaInfo.CbteFch);
+        fechaEmisionStr = `${f.substring(6, 8)}/${f.substring(4, 6)}/${f.substring(0, 4)}`;
+    } else if (typeof venta.timestamp === 'string' && venta.timestamp.includes('/')) {
+        fechaEmisionStr = venta.timestamp.split(' ')[0];
+    } else if (typeof venta.fecha === 'string' && venta.fecha.includes('-')) {
+        const [yF, mF, dF] = venta.fecha.split('-');
+        fechaEmisionStr = `${dF}/${mF}/${yF}`;
+    } else {
+        fechaEmisionStr = new Date().toLocaleDateString('es-AR');
+    }
+
+    // 1. Cargar Logo Comercial (INFOTECH) con caché
+    let companyLogoData = null;
     if (companyInfo.logoUrl) {
         try {
-            // 1. Verificamos si ya tenemos este logo en caché para usarlo instantáneamente
             if (logoCache.url === companyInfo.logoUrl && logoCache.base64) {
-                const imgWidth = 60;
-                logoHeight = (logoCache.height * imgWidth) / logoCache.width;
-                doc.addImage(logoCache.base64, 'PNG', margin, topY, imgWidth, logoHeight, null, 'FAST');
+                companyLogoData = logoCache;
             } else {
-                // 2. Si no está en caché, lo cargamos
                 await new Promise((resolve) => {
                     const img = new Image();
-                    // Intentamos habilitar CORS para poder convertir a Base64 y cachear
-                    img.crossOrigin = "Anonymous"; 
+                    img.crossOrigin = "Anonymous";
                     img.src = companyInfo.logoUrl;
-
                     img.onload = () => {
-                        const imgWidth = 60;
-                        logoHeight = (img.height * imgWidth) / img.width;
-                        
                         try {
-                            // Creamos un canvas para convertir la imagen a Base64
                             const canvas = document.createElement('canvas');
                             canvas.width = img.width;
                             canvas.height = img.height;
                             const ctx = canvas.getContext('2d');
                             ctx.drawImage(img, 0, 0);
                             const dataURL = canvas.toDataURL('image/png');
-                            
-                            // Guardamos en caché para la próxima vez
                             logoCache = { url: companyInfo.logoUrl, base64: dataURL, width: img.width, height: img.height };
-                            doc.addImage(dataURL, 'PNG', margin, topY, imgWidth, logoHeight, null, 'FAST');
+                            companyLogoData = logoCache;
                         } catch (e) {
-                            // Si falla la conversión (ej. servidor no permite CORS), usamos la imagen normal sin cachear
-                            doc.addImage(img, 'PNG', margin, topY, imgWidth, logoHeight, null, 'FAST');
+                            companyLogoData = { imgElement: img, width: img.width, height: img.height };
                         }
                         resolve();
                     };
-
-                    img.onerror = () => {
-                        // Fallback: Si falla la carga con CORS, intentamos cargarla sin CORS (sin caché)
-                        const imgFallback = new Image();
-                        imgFallback.src = companyInfo.logoUrl;
-                        imgFallback.onload = () => {
-                            const imgWidth = 60;
-                            logoHeight = (imgFallback.height * imgWidth) / imgFallback.width;
-                            doc.addImage(imgFallback, 'PNG', margin, topY, imgWidth, logoHeight, null, 'FAST');
-                            resolve();
-                        };
-                        imgFallback.onerror = () => resolve(); // Si falla todo, seguimos sin logo
-                    };
+                    img.onerror = () => resolve();
                 });
             }
-        } catch (e) { console.error("No se pudo cargar el logo:", e); }
+        } catch (e) {
+            console.error("No se pudo cargar el logo de la empresa:", e);
+        }
     }
 
-    // --- INICIO DE CARGA DE QR AFIP ---
+    // 2. Cargar QR Oficial de ARCA
     let afipQrBase64 = null;
-    if (venta.facturadoEnArca && arcaInfo && arcaInfo.CAE) {
+    if (isFacturaAFIP) {
         try {
             const qrUrl = getAfipQrUrl(venta, appConfig, isNotaCredito);
             if (qrUrl) {
-                const qrImgUrl = `https://quickchart.io/qr?text=${encodeURIComponent(qrUrl)}&size=150`;
+                const qrImgUrl = `https://quickchart.io/qr?text=${encodeURIComponent(qrUrl)}&size=220&margin=1`;
                 await new Promise((resolve) => {
                     const img = new Image();
                     img.crossOrigin = "Anonymous";
@@ -411,194 +471,429 @@ export async function generatePDF(ticketId, venta, isNotaCredito = false) {
                     img.onerror = () => resolve();
                 });
             }
-        } catch (e) { console.error("Error cargando QR AFIP", e); }
-    }
-    // --- FIN DE CARGA DE QR AFIP ---
-
-    const boxSize = 10;
-    const boxX = (pageWidth / 2) - (boxSize / 2);
-    const boxY = topY + (logoHeight > 0 ? logoHeight / 2 : 0) - (boxSize / 2);
-    const textCY = boxY + boxSize / 2;
-    doc.roundedRect(boxX, boxY, boxSize, boxSize, 2, 2);
-    doc.setFont(font, 'bold');
-    doc.setFontSize(16);
-    doc.text('C', pageWidth / 2, textCY, { align: 'center', baseline: 'middle' });
-    
-    if (isFacturaAFIP) {
-        doc.setFontSize(7);
-        doc.text(isNotaCredito ? 'COD. 013' : 'COD. 011', pageWidth / 2, boxY + boxSize + 3, { align: 'center' });
-    }
-
-    const rightY = topY + (logoHeight > 0 ? logoHeight / 2 : 0) - (lineHeight / 2);
-    // --- INICIO DE LA MODIFICACIÓN ---
-    let currentY = rightY;
-    drawText(`Fecha: ${venta.timestamp}`, pageWidth - margin, currentY, 10, 'normal', 'right');
-    currentY += lineHeight * 1.2;
-    if (venta.vendedor && venta.vendedor.nombre) {
-        drawText(`Vendedor: ${venta.vendedor.nombre}`, pageWidth - margin, currentY, 9, 'normal', 'right');
-    }
-    drawText(`${isFacturaAFIP ? cbteTipoStr : (isNotaCredito ? 'NOTA DE CRÉDITO' : 'TICKET')} N°: ${comprobanteNro}`, pageWidth - margin, currentY + lineHeight * 1.5, 12, 'bold', 'right');
-    // --- FIN DE LA MODIFICACIÓN ---
-
-    y = topY + Math.max(logoHeight, lineHeight * 3) + 10;
-
-    const startYCompany = y;
-    drawText(`Dir: ${companyInfo.address}`, margin, startYCompany, 10);
-    y += lineHeight;
-    drawText(`CUIT: ${companyInfo.cuit}`, margin, y, 10);
-    y += lineHeight;
-    if (companyInfo.iibb) {
-        drawText(`IIBB: ${companyInfo.iibb}`, margin, y, 10);
-        y += lineHeight;
-    }
-    if (companyInfo.startDate) {
-        const parts = companyInfo.startDate.split('-');
-        const dateStr = parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : companyInfo.startDate;
-        drawText(`Inicio de Actividades: ${dateStr}`, margin, y, 10);
-        y += lineHeight;
-    }
-    drawText(`IVA: ${companyInfo.ivaCondition}`, margin, y, 10);
-    y += lineHeight;
-    drawText(`Tel: ${companyInfo.phone}`, margin, y, 10);
-    y += lineHeight * 2;
-
-    doc.line(margin, y, pageWidth - margin, y);
-    y += lineHeight * 2;
-
-    if (venta.cliente) {
-        drawText('Datos del Cliente:', margin, y, 10, 'bold');
-        y += lineHeight * 1.5;
-        drawText(`Nombre: ${venta.cliente.nombre}`, margin, y, 10);
-        y += lineHeight;
-        if (venta.cliente.cuit) { drawText(`CUIT/DNI: ${venta.cliente.cuit}`, margin, y, 10); y += lineHeight; }
-        if (venta.cliente.domicilio) { 
-            doc.setFont(font, 'normal');
-            doc.setFontSize(10);
-            const splitDomicilio = doc.splitTextToSize(`Domicilio: ${venta.cliente.domicilio}`, pageWidth - (margin * 2));
-            doc.text(splitDomicilio, margin, y);
-            y += lineHeight * splitDomicilio.length;
+        } catch (e) {
+            console.error("Error cargando QR ARCA:", e);
         }
     }
 
-    y += 10;
-    doc.line(margin, y, pageWidth - margin, y);
-    y += lineHeight * 2;
+    // =========================================================================
+    // SECCIÓN 1: RECUADRO SUPERIOR "ORIGINAL"
+    // =========================================================================
+    doc.setDrawColor(0, 0, 0);
+    doc.setLineWidth(0.35);
+    doc.rect(margin, 10, contentWidth, 9);
+    doc.setFont(font, 'bold');
+    doc.setFontSize(13);
+    doc.text('ORIGINAL', pageWidth / 2, 16, { align: 'center' });
 
-    const startYProducts = y;
-    drawText('Descripción', margin, startYProducts, 12, 'bold');
-    drawText('Cant.', 100, startYProducts, 12, 'bold');
-    drawText('Precio', 130, startYProducts, 12, 'bold');
-    drawText('Total', pageWidth - margin, startYProducts, 12, 'bold', 'right');
-    y += lineHeight;
-    doc.line(margin, y, pageWidth - margin, y);
-    y += lineHeight;
+    // =========================================================================
+    // SECCIÓN 2: ENCABEZADO DIVIDIDO (EMISOR + LETRA CENTRAL + COMPROBANTE)
+    // =========================================================================
+    const headerY = 19;
+    const headerH = 49;
+    doc.rect(margin, headerY, contentWidth, headerH);
 
-    venta.productos.forEach(producto => {
-        // Construimos la descripción completa del producto
-        let descripcionCompleta = producto.nombre;
-        if (producto.marca && producto.marca !== 'Desconocido') {
+    // Caja Central de Letra ("C" / "COD. 011")
+    const letterBoxW = 16;
+    const letterBoxH = 15;
+    const letterBoxX = (pageWidth / 2) - (letterBoxW / 2);
+    doc.setFillColor(255, 255, 255);
+    doc.rect(letterBoxX, headerY, letterBoxW, letterBoxH, 'FD');
+
+    doc.setFont(font, 'bold');
+    doc.setFontSize(22);
+    doc.text(letraCbte, pageWidth / 2, headerY + 9.5, { align: 'center' });
+    doc.setFontSize(6.8);
+    doc.text(codCbteStr, pageWidth / 2, headerY + 13.5, { align: 'center' });
+
+    // Línea vertical divisoria debajo de la caja de la letra
+    doc.line(pageWidth / 2, headerY + letterBoxH, pageWidth / 2, headerY + headerH);
+
+    // --- Mitad Izquierda: Logo INFOTECH y Datos del Emisor ---
+    const leftX = margin + 3;
+    const leftMaxW = (contentWidth / 2) - 14; // ~81mm
+    let leftCursorY = headerY + 4;
+
+    if (companyLogoData && (companyLogoData.base64 || companyLogoData.imgElement)) {
+        const maxLogoW = 46;
+        const maxLogoH = 15.5;
+        const ratio = Math.min(maxLogoW / companyLogoData.width, maxLogoH / companyLogoData.height);
+        const drawW = companyLogoData.width * ratio;
+        const drawH = companyLogoData.height * ratio;
+        const logoX = leftX + ((leftMaxW - drawW) / 2);
+        doc.addImage(companyLogoData.base64 || companyLogoData.imgElement, 'PNG', logoX, headerY + 2.5, drawW, drawH, null, 'FAST');
+        leftCursorY = headerY + 22.5;
+    } else {
+        doc.setFont(font, 'bold');
+        doc.setFontSize(13);
+        const topTitle = companyInfo.name || companyInfo.razonSocial || 'INFOTECH';
+        doc.text(topTitle.toUpperCase(), leftX + (leftMaxW / 2), headerY + 11, { align: 'center' });
+        leftCursorY = headerY + 22.5;
+    }
+
+    const razonSocialEmisor = companyInfo.razonSocial || companyInfo.name || 'INFOTECH';
+    doc.setFontSize(8.5);
+    doc.setFont(font, 'bold');
+    doc.text('Razón Social:', leftX, leftCursorY);
+    doc.setFont(font, 'normal');
+    const splitRazon = doc.splitTextToSize(razonSocialEmisor, leftMaxW - 22);
+    doc.text(splitRazon[0] || '', leftX + 22, leftCursorY);
+    leftCursorY += 6;
+
+    doc.setFont(font, 'bold');
+    doc.text('Domicilio Comercial:', leftX, leftCursorY);
+    doc.setFont(font, 'normal');
+    const domicilioEmisor = companyInfo.address || '-';
+    const splitDomEmisor = doc.splitTextToSize(domicilioEmisor, leftMaxW - 32);
+    doc.text(splitDomEmisor.slice(0, 2), leftX + 32, leftCursorY);
+    leftCursorY += Math.max(6, splitDomEmisor.slice(0, 2).length * 4.2);
+
+    if (companyInfo.phone) {
+        doc.setFont(font, 'bold');
+        doc.text('Teléfono:', leftX, leftCursorY);
+        doc.setFont(font, 'normal');
+        doc.text(String(companyInfo.phone), leftX + 16, leftCursorY);
+    }
+
+    doc.setFont(font, 'bold');
+    doc.setFontSize(8.5);
+    doc.text('Condición frente al IVA:', leftX, headerY + headerH - 3.5);
+    const ivaEmisor = companyInfo.ivaCondition || 'Responsable Monotributo';
+    const ivaEmisorNorm = ivaEmisor.toLowerCase().includes('monotribut') ? 'Responsable Monotributo' : ivaEmisor;
+    doc.text(ivaEmisorNorm, leftX + 37, headerY + headerH - 3.5);
+
+    // --- Mitad Derecha: Datos Fiscales del Comprobante ---
+    const rightX = (pageWidth / 2) + 9;
+    doc.setFont(font, 'bold');
+    doc.setFontSize(17);
+    doc.text(cbteTitulo, rightX, headerY + 10);
+
+    doc.setFontSize(9);
+    doc.text('Punto de Venta:', rightX, headerY + 18);
+    doc.setFontSize(9.5);
+    doc.text(ptoVta5, rightX + 26, headerY + 18);
+
+    doc.setFontSize(9);
+    doc.text('Comp. Nro:', rightX + 43, headerY + 18);
+    doc.setFontSize(9.5);
+    doc.text(cbteNro8, rightX + 62, headerY + 18);
+
+    doc.setFontSize(9);
+    doc.text('Fecha de Emisión:', rightX, headerY + 24);
+    doc.setFontSize(9.5);
+    doc.text(fechaEmisionStr, rightX + 31, headerY + 24);
+
+    const cuitEmisorRaw = String(companyInfo.cuit || arcaConfig.cuit || '').replace(/\D/g, '') || (companyInfo.cuit || '-');
+    const iibbEmisor = companyInfo.iibb || cuitEmisorRaw;
+    let startDateFormatted = '-';
+    if (companyInfo.startDate) {
+        const parts = companyInfo.startDate.split('-');
+        startDateFormatted = parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : companyInfo.startDate;
+    }
+
+    doc.setFontSize(8.5);
+    doc.setFont(font, 'bold');
+    doc.text('CUIT:', rightX, headerY + 34.5);
+    doc.setFont(font, 'normal');
+    doc.text(String(cuitEmisorRaw), rightX + 10, headerY + 34.5);
+
+    doc.setFont(font, 'bold');
+    doc.text('Ingresos Brutos:', rightX, headerY + 40);
+    doc.setFont(font, 'normal');
+    doc.text(String(iibbEmisor), rightX + 26, headerY + 40);
+
+    doc.setFont(font, 'bold');
+    doc.text('Fecha de Inicio de Actividades:', rightX, headerY + 45.5);
+    doc.setFont(font, 'normal');
+    doc.text(String(startDateFormatted), rightX + 47, headerY + 45.5);
+
+    // =========================================================================
+    // SECCIÓN 3: RECUADRO DEL RECEPTOR (CLIENTE)
+    // =========================================================================
+    const clientBoxY = 70;
+    const clientBoxH = 22;
+    doc.rect(margin, clientBoxY, contentWidth, clientBoxH);
+
+    const cli = venta.cliente || { nombre: 'Consumidor Final' };
+    const cleanCliDoc = String(cli.cuit || '').replace(/\D/g, '');
+    const isCuitCli = cleanCliDoc.length === 11 && cleanCliDoc !== '99999999999';
+    const docLabelCli = isCuitCli ? 'CUIT:' : (cleanCliDoc.length >= 7 && cleanCliDoc !== '99999999999' ? 'DNI:' : 'CUIT / DNI:');
+    const docValCli = (cleanCliDoc && cleanCliDoc !== '99999999999') ? cleanCliDoc : '-';
+    const nombreCli = cli.nombre || 'Consumidor Final';
+    const ivaCli = cli.condicionIva || CONDICIONES_IVA_ARCA[cli.condicionIvaId] || 'Consumidor Final';
+    const domCli = cli.domicilio || '-';
+
+    // Determinar Condición de Venta según los pagos registrados
+    const metodosActivos = [];
+    if (venta.pagos?.contado > 0) metodosActivos.push('Contado');
+    if (venta.pagos?.transferencia > 0) metodosActivos.push('Transferencia Bancaria');
+    if (venta.pagos?.debito > 0) metodosActivos.push('Tarjeta de Débito');
+    if (venta.pagos?.credito > 0) metodosActivos.push('Tarjeta de Crédito');
+    if (venta.pagos?.a_cuenta > 0) metodosActivos.push('Cuenta Corriente');
+    const condicionVentaStr = metodosActivos.length > 0 ? metodosActivos.join(' / ') : 'Contado';
+
+    // Fila 1 del Receptor
+    doc.setFontSize(8.5);
+    doc.setFont(font, 'bold');
+    doc.text(docLabelCli, margin + 2.5, clientBoxY + 5.5);
+    doc.setFont(font, 'normal');
+    doc.text(docValCli, margin + 2.5 + (doc.getTextWidth(docLabelCli) + 2), clientBoxY + 5.5);
+
+    doc.setFont(font, 'bold');
+    doc.text('Apellido y Nombre / Razón Social:', margin + 65, clientBoxY + 5.5);
+    doc.setFont(font, 'normal');
+    const splitNomCli = doc.splitTextToSize(nombreCli, contentWidth - 118);
+    doc.text(splitNomCli[0] || '', margin + 117, clientBoxY + 5.5);
+
+    // Fila 2 del Receptor
+    doc.setFont(font, 'bold');
+    doc.text('Condición frente al IVA:', margin + 2.5, clientBoxY + 12.5);
+    doc.setFont(font, 'normal');
+    doc.text(ivaCli, margin + 39, clientBoxY + 12.5);
+
+    doc.setFont(font, 'bold');
+    doc.text('Domicilio:', margin + 95, clientBoxY + 12.5);
+    doc.setFont(font, 'normal');
+    const splitDomCli = doc.splitTextToSize(domCli, contentWidth - 113);
+    doc.text(splitDomCli.slice(0, 2), margin + 111, clientBoxY + 12.5);
+
+    // Fila 3 del Receptor
+    doc.setFont(font, 'bold');
+    doc.text('Condición de venta:', margin + 2.5, clientBoxY + 19);
+    doc.setFont(font, 'normal');
+    doc.text(condicionVentaStr, margin + 34, clientBoxY + 19);
+
+    // =========================================================================
+    // SECCIÓN 4: TABLA DE PRODUCTOS / SERVICIOS (8 COLUMNAS ESTILO ARCA)
+    // =========================================================================
+    const tableY = 94.5;
+    const thH = 7;
+    // Definición de columnas (suma = 190mm)
+    const cols = [
+        { title: 'Código', x: 10, w: 18, align: 'left' },
+        { title: 'Producto / Servicio', x: 28, w: 69, align: 'left' },
+        { title: 'Cantidad', x: 97, w: 18, align: 'right' },
+        { title: 'U. Medida', x: 115, w: 18, align: 'center' },
+        { title: 'Precio Unit.', x: 133, w: 22, align: 'right' },
+        { title: '% Bonif', x: 155, w: 12, align: 'center' },
+        { title: 'Imp. Bonif.', x: 167, w: 13, align: 'right' },
+        { title: 'Subtotal', x: 180, w: 20, align: 'right' }
+    ];
+
+    // Dibujar encabezado gris con celdas individuales
+    doc.setFillColor(212, 212, 212);
+    doc.setLineWidth(0.3);
+    cols.forEach(c => {
+        doc.rect(c.x, tableY, c.w, thH, 'FD');
+    });
+
+    doc.setFont(font, 'bold');
+    doc.setFontSize(7.8);
+    cols.forEach(c => {
+        if (c.align === 'left') {
+            doc.text(c.title, c.x + 1.5, tableY + 4.7);
+        } else {
+            doc.text(c.title, c.x + (c.w / 2), tableY + 4.7, { align: 'center' });
+        }
+    });
+
+    // Productos a listar (si es factura fiscal ARCA, listamos solo los productos facturables excluyendo cobro de deuda previa)
+    const itemsTabla = isFacturaAFIP
+        ? (venta.productos || []).filter(p => !p.isDeuda)
+        : (venta.productos || []);
+
+    let rowY = tableY + thH + 4.5;
+    doc.setFont(font, 'normal');
+    doc.setFontSize(8.2);
+
+    itemsTabla.forEach((producto) => {
+        let descripcionCompleta = producto.nombre || '';
+        if (producto.marca && producto.marca !== 'Desconocido' && producto.marca !== 'Cobro Deuda') {
             descripcionCompleta += ` - ${producto.marca}`;
         }
         if (producto.color && producto.color !== 'N/A') {
             descripcionCompleta += ` - ${producto.color}`;
         }
 
-        // Solución Profesional: Salto de línea automático (Word-wrap)
-        doc.setFont(font, 'normal');
-        doc.setFontSize(10);
-        // La columna 'Cant.' empieza en X=100. Restamos el margen(10) y 5 de padding = 85 de ancho máximo.
-        const splitDesc = doc.splitTextToSize(descripcionCompleta, 85);
-        doc.text(splitDesc, margin, y);
+        const codProd = String(producto.varianteCodigo || producto.codigo || '').substring(0, 11);
+        const cantNum = Number(producto.cantidad) || 1;
+        const precioNum = Number(producto.precio) || 0;
+        const subNum = cantNum * precioNum;
 
-        drawText(producto.cantidad.toString(), 100, y, 10);
-        drawText(formatCurrency(producto.precio), 130, y, 10);
-        drawText(formatCurrency(producto.cantidad * producto.precio), pageWidth - margin, y, 10, 'normal', 'right');
-        
-        // Aumentamos 'y' dinámicamente según cuántas líneas ocupó la descripción
-        y += lineHeight * splitDesc.length;
+        const splitDesc = doc.splitTextToSize(descripcionCompleta, cols[1].w - 3);
+        const rowLines = Math.max(1, splitDesc.length);
+
+        // Si supera el límite antes de la caja de totales, agregamos página
+        if (rowY + (rowLines * 4.2) > 194) {
+            doc.addPage();
+            rowY = 20;
+        }
+
+        doc.text(codProd, cols[0].x + 1.5, rowY);
+        doc.text(splitDesc, cols[1].x + 1.5, rowY);
+        doc.text(formatFiscalNumber(cantNum), cols[2].x + cols[2].w - 1.5, rowY, { align: 'right' });
+        doc.text('unidades', cols[3].x + (cols[3].w / 2), rowY, { align: 'center' });
+        doc.text(formatFiscalNumber(precioNum), cols[4].x + cols[4].w - 1.5, rowY, { align: 'right' });
+        doc.text('0,00', cols[5].x + (cols[5].w / 2), rowY, { align: 'center' });
+        doc.text('0,00', cols[6].x + cols[6].w - 1.5, rowY, { align: 'right' });
+        doc.text(formatFiscalNumber(subNum), cols[7].x + cols[7].w - 1.5, rowY, { align: 'right' });
+
+        rowY += (rowLines * 4.3) + 1.2;
     });
 
-    y += lineHeight;
-    doc.line(margin, y, pageWidth - margin, y);
-    const subtotalVenta = venta.productos.reduce((sum, item) => sum + (item.precio * item.cantidad), 0);
-    const montoCreditoSinRecargo = venta.pagos.credito / (1 + (venta.pagos.recargoCredito / 100));
-    const recargoMonto = venta.pagos.credito - montoCreditoSinRecargo;
-    const totalColumnX = pageWidth - 90;
-    y += lineHeight;
-    drawText('Subtotal:', totalColumnX, y, 12, 'normal');
-    drawText(formatCurrency(subtotalVenta), pageWidth - margin, y, 12, 'bold', 'right');
-    y += lineHeight;
-    if (recargoMonto > 0) {
-        drawText('Recargo Crédito:', totalColumnX, y, 10, 'normal');
-        drawText(formatCurrency(recargoMonto), pageWidth - margin, y, 10, 'normal', 'right');
-        y += lineHeight;
-    }
-    y += lineHeight * 1.5;
-    drawText('TOTAL FINAL:', totalColumnX, y, 14, 'bold');
-    drawText(formatCurrency(venta.total), pageWidth - margin, y, 14, 'bold', 'right');
-    y += lineHeight * 2;
-    drawText('DETALLE DE PAGOS', margin, y, 12, 'bold');
-    y += lineHeight;
-    if (venta.pagos.contado > 0) { drawText(`- Contado:`, margin + 5, y, 10); drawText(formatCurrency(venta.pagos.contado), pageWidth - margin, y, 10, 'normal', 'right'); y += lineHeight; }
-    if (venta.pagos.transferencia > 0) { drawText(`- Transferencia:`, margin + 5, y, 10); drawText(formatCurrency(venta.pagos.transferencia), pageWidth - margin, y, 10, 'normal', 'right'); y += lineHeight; }
-    if (venta.pagos.debito > 0) { drawText(`- Débito:`, margin + 5, y, 10); drawText(formatCurrency(venta.pagos.debito), pageWidth - margin, y, 10, 'normal', 'right'); y += lineHeight; }
-    if (venta.pagos.credito > 0) { drawText(`- Crédito (${venta.pagos.recargoCredito}%):`, margin + 5, y, 10); drawText(formatCurrency(venta.pagos.credito), pageWidth - margin, y, 10, 'normal', 'right'); y += lineHeight; }
-    if (venta.pagos.a_cuenta > 0) { drawText(`- A Cuenta (Fiado):`, margin + 5, y, 10); drawText(formatCurrency(venta.pagos.a_cuenta), pageWidth - margin, y, 10, 'normal', 'right'); y += lineHeight; }
-    if (venta.saldoDeudorSnapshot !== undefined && venta.saldoDeudorSnapshot !== null && (venta.pagos.a_cuenta > 0 || venta.saldoDeudorSnapshot > 0 || (venta.montoDeudaCobrada && venta.montoDeudaCobrada > 0))) {
-        y += lineHeight * 0.5;
-        drawText(`* Saldo deudor acumulado: ${formatCurrency(venta.saldoDeudorSnapshot)}`, margin + 5, y, 10, 'bold');
-        y += lineHeight;
-    }
-    y += lineHeight * 2;
-    doc.line(margin, y, pageWidth - margin, y);
-    y += lineHeight * 2;
-    drawText('¡Gracias por su compra!', pageWidth / 2, y, 12, 'normal', 'center');
-    y += lineHeight;
+    // =========================================================================
+    // SECCIÓN 5: RECUADRO INFERIOR DE TOTALES, OBSERVACIONES Y GARANTÍA
+    // =========================================================================
+    const totalsBoxY = 198;
+    const totalsBoxH = 44;
+    doc.setLineWidth(0.35);
+    doc.rect(margin, totalsBoxY, contentWidth, totalsBoxH);
 
-    // --- SECCIÓN LOYALTY (PUNTOS) ---
-    // Verificamos si la configuración global permite imprimir y si la venta tiene datos de loyalty
+    // Cálculo de montos fiscales
+    const montoDeuda = isFacturaAFIP ? (Number(venta.montoDeudaCobrada) || 0) : 0;
+    const subtotalProductos = itemsTabla.reduce((sum, item) => sum + ((Number(item.precio) || 0) * (Number(item.cantidad) || 1)), 0);
+    const totalFinalComprobante = Math.max(0, (Number(venta.total) || 0) - montoDeuda);
+    const recargoFinanciero = Math.max(0, totalFinalComprobante - subtotalProductos);
+
+    // --- Columna Derecha: Totales Reglamentarios ARCA ---
+    const labelRightX = 166;
+    const valRightX = pageWidth - margin - 3;
+
+    doc.setFont(font, 'bold');
+    doc.setFontSize(9.5);
+    if (recargoFinanciero > 0.5) {
+        doc.text('Subtotal: $', labelRightX, totalsBoxY + 14, { align: 'right' });
+        doc.text(formatFiscalNumber(subtotalProductos), valRightX, totalsBoxY + 14, { align: 'right' });
+
+        doc.text('Recargo Financiero: $', labelRightX, totalsBoxY + 21, { align: 'right' });
+        doc.text(formatFiscalNumber(recargoFinanciero), valRightX, totalsBoxY + 21, { align: 'right' });
+    } else {
+        doc.text('Subtotal: $', labelRightX, totalsBoxY + 19, { align: 'right' });
+        doc.text(formatFiscalNumber(totalFinalComprobante), valRightX, totalsBoxY + 19, { align: 'right' });
+    }
+
+    doc.text('Importe Otros Tributos: $', labelRightX, totalsBoxY + 28, { align: 'right' });
+    doc.text('0,00', valRightX, totalsBoxY + 28, { align: 'right' });
+
+    doc.setFontSize(10.5);
+    doc.text('Importe Total: $', labelRightX, totalsBoxY + 36.5, { align: 'right' });
+    doc.text(formatFiscalNumber(totalFinalComprobante), valRightX, totalsBoxY + 36.5, { align: 'right' });
+
+    // --- Columna Izquierda (Observaciones Comerciales, Loyalty y Nota de Garantía Legal) ---
+    const obsX = margin + 3;
+    const obsMaxW = 112;
+    let obsY = totalsBoxY + 5;
+
+    // Resumen de pagos / cuenta corriente / puntos
+    const pagosResumen = [];
+    if (venta.pagos?.contado > 0) pagosResumen.push(`Contado: ${formatCurrency(venta.pagos.contado)}`);
+    if (venta.pagos?.transferencia > 0) pagosResumen.push(`Transf.: ${formatCurrency(venta.pagos.transferencia)}`);
+    if (venta.pagos?.debito > 0) pagosResumen.push(`Débito: ${formatCurrency(venta.pagos.debito)}`);
+    if (venta.pagos?.credito > 0) pagosResumen.push(`Crédito: ${formatCurrency(venta.pagos.credito)}`);
+    if (venta.pagos?.a_cuenta > 0) pagosResumen.push(`A Cuenta: ${formatCurrency(venta.pagos.a_cuenta)}`);
+
+    doc.setFont(font, 'bold');
+    doc.setFontSize(7.5);
+    doc.text(`Detalle de Pago: ${pagosResumen.join(' | ') || condicionVentaStr}`, obsX, obsY);
+    obsY += 4;
+
+    if (venta.saldoDeudorSnapshot !== undefined && venta.saldoDeudorSnapshot !== null && (venta.pagos?.a_cuenta > 0 || venta.saldoDeudorSnapshot > 0 || venta.montoDeudaCobrada > 0)) {
+        const extraDeuda = (isFacturaAFIP && venta.montoDeudaCobrada > 0)
+            ? ` (Abono Cta. Cte. en ticket: ${formatCurrency(venta.montoDeudaCobrada)})`
+            : '';
+        doc.text(`Saldo Cuenta Corriente Actual: ${formatCurrency(venta.saldoDeudorSnapshot)}${extraDeuda}`, obsX, obsY);
+        obsY += 4;
+    }
+
     const loyaltyConfig = appConfig.loyalty || {};
     if (loyaltyConfig.printOnTicket && venta.loyalty) {
-        doc.line(margin, y, pageWidth - margin, y);
-        y += lineHeight;
-        drawText(`Sumaste: ${venta.loyalty.puntosGanados} pts. Tu saldo actual es: ${venta.loyalty.puntosTotalSnapshot} pts`, pageWidth / 2, y, 10, 'bold', 'center');
-        y += lineHeight;
+        doc.setFont(font, 'bold');
+        doc.text(`Puntos Club INFOTECH: Sumaste +${venta.loyalty.puntosGanados} pts | Saldo acumulado: ${venta.loyalty.puntosTotalSnapshot} pts`, obsX, obsY);
+        obsY += 4;
     }
-    // --------------------------------
 
-    // --- SECCIÓN AFIP (ARCA) ---
-    if (isFacturaAFIP) {
-        doc.line(margin, y, pageWidth - margin, y);
-        y += lineHeight;
-        const totalFiscal = Math.max(0, venta.total - (venta.montoDeudaCobrada || 0));
-        const aclaracionMonto = (venta.montoDeudaCobrada && venta.montoDeudaCobrada > 0)
-            ? ` (Monto Facturado AFIP: ${formatCurrency(totalFiscal)})`
-            : '';
-        drawText(`Comprobante Autorizado por AFIP${aclaracionMonto}`, pageWidth / 2, y, 10, 'bold', 'center');
-        y += lineHeight;
-        
-        const vtoStr = arcaInfo.CAEFchVto || '';
-        const vtoFormat = vtoStr.length === 8 ? `${vtoStr.substring(6,8)}/${vtoStr.substring(4,6)}/${vtoStr.substring(0,4)}` : vtoStr;
-        drawText(`CAE: ${arcaInfo.CAE}  Vto CAE: ${vtoFormat}`, pageWidth / 2, y, 10, 'normal', 'center');
-        y += lineHeight;
+    // Recuadro interno de Condiciones de Garantía y Cambios (100% legal en sector de observaciones)
+    const garBoxY = totalsBoxY + 14.5;
+    const garBoxH = 26.5;
+    doc.setFillColor(249, 250, 251);
+    doc.setDrawColor(200, 200, 200);
+    doc.setLineWidth(0.2);
+    doc.roundedRect(obsX, garBoxY, obsMaxW, garBoxH, 1.5, 1.5, 'FD');
 
-        if (afipQrBase64) {
-            const qrSize = 30;
-            doc.addImage(afipQrBase64, 'PNG', (pageWidth / 2) - (qrSize / 2), y, qrSize, qrSize);
-            y += qrSize + lineHeight;
-        }
-    }
-    // --------------------------------
+    doc.setFont(font, 'bold');
+    doc.setFontSize(6.6);
+    doc.setTextColor(30, 30, 30);
+    doc.text('CONDICIONES DE GARANTÍA Y CAMBIOS (INFOTECH):', obsX + 2, garBoxY + 3.8);
 
-    doc.line(margin, y, pageWidth - margin, y);
-    
-    y += lineHeight;
-    const disclaimer = "CONDICIONES DE GARANTÍA Y CAMBIOS: Plazo para cambios directos: 48 hs desde la compra. Para validar cualquier reclamo es OBLIGATORIO presentar este comprobante. El producto debe encontrarse en perfectas condiciones, con su empaque original sano y la totalidad de sus accesorios (cables, manuales, drivers). Sin el empaque original completo NO se aceptarán cambios. Electrónica: La garantía cubre únicamente fallas de fabricación. No se reconocen garantías por daños físicos, humedad, cables cortados, pines rotos, golpes o sobretensión. La empresa se reserva el derecho de revisión técnica (48/72hs) antes de realizar cualquier cambio o devolución.";
-    
+    const disclaimer = "Plazo para cambios directos: 48 hs desde la compra. Para validar cualquier reclamo es OBLIGATORIO presentar este comprobante. El producto debe encontrarse en perfectas condiciones, con su empaque original sano y la totalidad de sus accesorios (cables, manuales, drivers). Sin el empaque original completo NO se aceptarán cambios. Electrónica: La garantía cubre únicamente fallas de fabricación. No se reconocen garantías por daños físicos, humedad, cables cortados, pines rotos, golpes o sobretensión. La empresa se reserva el derecho de revisión técnica (48/72 hs) antes de realizar cualquier cambio o devolución.";
     doc.setFont(font, 'normal');
-    doc.setFontSize(7); // Letra pequeña para el legal
-    const splitText = doc.splitTextToSize(disclaimer, pageWidth - (margin * 2));
-    doc.text(splitText, margin, y);
+    doc.setFontSize(6.1);
+    const splitDisclaimer = doc.splitTextToSize(disclaimer, obsMaxW - 4);
+    doc.text(splitDisclaimer, obsX + 2, garBoxY + 7.2);
+    doc.setTextColor(0, 0, 0);
+
+    // =========================================================================
+    // SECCIÓN 6: PIE OFICIAL DE AUTORIZACIÓN ARCA (QR + LOGO ARCA + CAE)
+    // =========================================================================
+    const footerY = 247;
+
+    if (isFacturaAFIP) {
+        // 1. Código QR Oficial a la izquierda
+        if (afipQrBase64) {
+            doc.addImage(afipQrBase64, 'PNG', margin + 2, footerY + 1, 31, 31, null, 'FAST');
+        }
+
+        // 2. Logo Oficial de ARCA al lado del QR
+        const arcaLogoX = margin + 36;
+        const arcaLogoImg = getArcaLogoBase64();
+        if (arcaLogoImg) {
+            doc.addImage(arcaLogoImg, 'PNG', arcaLogoX, footerY + 2, 29, 11.5, null, 'FAST');
+        } else {
+            doc.setFont(font, 'bold');
+            doc.setFontSize(18);
+            doc.setTextColor(60, 60, 59);
+            doc.text('ARCA', arcaLogoX, footerY + 9);
+            doc.setTextColor(0, 0, 0);
+        }
+
+        // 3. Leyendas Oficiales obligatorias debajo del logo de ARCA
+        doc.setFont(font, 'bolditalic');
+        doc.setFontSize(9.8);
+        doc.text('Comprobante Autorizado', arcaLogoX, footerY + 19.5);
+
+        doc.setFont(font, 'bolditalic');
+        doc.setFontSize(6.2);
+        doc.text('Esta Agencia no se responsabiliza por los datos ingresados en el detalle de la operación', arcaLogoX, footerY + 25);
+
+        // 4. Numeración de página al centro
+        doc.setFont(font, 'bold');
+        doc.setFontSize(9.2);
+        doc.text('Pág. 1/1', pageWidth / 2, footerY + 6.5, { align: 'center' });
+
+        // 5. CAE N° y Fecha de Vto. de CAE a la derecha
+        const vtoStr = String(arcaInfo.CAEFchVto || '');
+        const vtoFormat = vtoStr.length === 8
+            ? `${vtoStr.substring(6, 8)}/${vtoStr.substring(4, 6)}/${vtoStr.substring(0, 4)}`
+            : vtoStr;
+
+        const caeLabelX = 165;
+        const caeValX = 167;
+        doc.setFont(font, 'bold');
+        doc.setFontSize(9.5);
+        doc.text('CAE N°:', caeLabelX, footerY + 5.5, { align: 'right' });
+        doc.setFont(font, 'normal');
+        doc.text(String(arcaInfo.CAE), caeValX, footerY + 5.5);
+
+        doc.setFont(font, 'bold');
+        doc.text('Fecha de Vto. de CAE:', caeLabelX, footerY + 11.5, { align: 'right' });
+        doc.setFont(font, 'normal');
+        doc.text(vtoFormat, caeValX, footerY + 11.5);
+    } else {
+        // Pie para comprobante interno no fiscal
+        doc.setFont(font, 'italic');
+        doc.setFontSize(9);
+        doc.text('Comprobante interno no válido como factura fiscal — ¡Gracias por su compra!', pageWidth / 2, footerY + 10, { align: 'center' });
+    }
 
     // Crear el PDF asegurando estrictamente el formato application/pdf
     const pdfData = doc.output('arraybuffer');
@@ -618,7 +913,6 @@ export async function generatePDF(ticketId, venta, isNotaCredito = false) {
         `);
         newTab.document.close();
     } else {
-        // Fallback: si el bloqueador de popups no deja abrir la pestaña, forzamos la descarga con el nombre correcto
         const a = document.createElement('a');
         a.href = pdfUrl;
         a.download = `factura-${venta.fecha}-${ticketId}.pdf`;
@@ -635,11 +929,13 @@ export async function generatePDF(ticketId, venta, isNotaCredito = false) {
 export async function printThermalTicket(ticketId, venta, isNotaCredito = false) {
     const appConfig = getAppConfig();
     const companyInfo = appConfig.companyInfo || {};
+    const arcaConfig = appConfig.arca || {};
     const arcaInfo = isNotaCredito ? venta.arcaData?.notaCredito : venta.arcaData;
     
     const isFacturaAFIP = venta.facturadoEnArca && arcaInfo && arcaInfo.CAE;
     const cbteTipoStr = isNotaCredito ? 'Nota de Crédito' : 'Factura';
-    const comprobanteNro = isFacturaAFIP ? `0001-${arcaInfo.CbteNro.toString().padStart(8, '0')}` : ticketId;
+    const ptoVtaStr = String(arcaInfo?.PtoVta || arcaConfig.ptoVta || 1).padStart(4, '0');
+    const comprobanteNro = isFacturaAFIP ? `${ptoVtaStr}-${arcaInfo.CbteNro.toString().padStart(8, '0')}` : ticketId;
 
     // --- INICIO DE CARGA DE QR AFIP ---
     let afipQrBase64 = '';
@@ -753,7 +1049,7 @@ export async function printThermalTicket(ticketId, venta, isNotaCredito = false)
         <p>Fecha: ${venta.timestamp}</p>
         <p>${isFacturaAFIP ? `${cbteTipoStr} Electrónica` : (isNotaCredito ? 'NOTA DE CRÉDITO N°' : 'Ticket N°')}: ${comprobanteNro}</p>
         ${venta.vendedor?.nombre ? `<p>Vendedor: ${venta.vendedor.nombre}</p>` : ''}
-        ${(venta.cliente?.nombre && venta.cliente.nombre !== 'Consumidor Final') ? `<hr><p>Cliente: ${venta.cliente.nombre}</p>${venta.cliente.cuit ? `<p>CUIT/DNI: ${venta.cliente.cuit}</p>` : ''}` : ''}
+        ${(venta.cliente?.nombre && venta.cliente.nombre !== 'Consumidor Final') ? `<hr><p>Cliente: ${venta.cliente.nombre}</p>${venta.cliente.cuit ? `<p>CUIT/DNI: ${venta.cliente.cuit}</p>` : ''}${venta.cliente.condicionIva ? `<p>IVA: ${venta.cliente.condicionIva}${venta.cliente.categoriaMonotributo ? ` (${venta.cliente.categoriaMonotributo})` : ''}</p>` : ''}${venta.cliente.domicilio ? `<p>Dom.: ${venta.cliente.domicilio}</p>` : ''}` : ''}
         <hr>
         <table>
             <thead>
@@ -824,11 +1120,11 @@ export async function printThermalTicket(ticketId, venta, isNotaCredito = false)
         const vtoFormat = vtoStr.length === 8 ? `${vtoStr.substring(6,8)}/${vtoStr.substring(4,6)}/${vtoStr.substring(0,4)}` : vtoStr;
         const totalFiscal = Math.max(0, venta.total - (venta.montoDeudaCobrada || 0));
         const fiscalInfoHtml = (venta.montoDeudaCobrada && venta.montoDeudaCobrada > 0)
-            ? `<p style="font-size: 0.85em; font-weight: bold; margin-bottom: 2px;">Monto Facturado AFIP: ${formatCurrency(totalFiscal)}</p>`
+            ? `<p style="font-size: 0.85em; font-weight: bold; margin-bottom: 2px;">Monto Facturado ARCA: ${formatCurrency(totalFiscal)}</p>`
             : '';
         
         html += `<hr><div class="center">
-            <p><strong>Comprobante Autorizado AFIP</strong></p>
+            <p><strong>Comprobante Autorizado por ARCA</strong></p>
             ${fiscalInfoHtml}
             <p>CAE: ${arcaInfo.CAE}</p>
             <p>Vto CAE: ${vtoFormat}</p>
@@ -865,9 +1161,11 @@ export async function printThermalTicket(ticketId, venta, isNotaCredito = false)
 export async function printReciboCobranzaThermal(cobro) {
     const appConfig = getAppConfig();
     const companyInfo = appConfig.companyInfo || {};
+    const arcaConfig = appConfig.arca || {};
     const arcaInfo = cobro.arcaData;
     const isFacturaAFIP = cobro.facturadoEnArca && arcaInfo && arcaInfo.CAE;
-    const comprobanteNro = isFacturaAFIP ? `0001-${arcaInfo.CbteNro.toString().padStart(8, '0')}` : (cobro.id || 'REC');
+    const ptoVtaStr = String(arcaInfo?.PtoVta || arcaConfig.ptoVta || 1).padStart(4, '0');
+    const comprobanteNro = isFacturaAFIP ? `${ptoVtaStr}-${arcaInfo.CbteNro.toString().padStart(8, '0')}` : (cobro.id || 'REC');
 
     let afipQrBase64 = '';
     if (isFacturaAFIP) {
@@ -1035,8 +1333,40 @@ export async function generateReciboCobranzaPDF(cobro) {
     const doc = new jsPDF({ unit: 'mm', format: 'a5' });
     const appConfig = getAppConfig();
     const companyInfo = appConfig.companyInfo || {};
+    const arcaConfig = appConfig.arca || {};
     const arcaInfo = cobro.arcaData;
     const isFacturaAFIP = cobro.facturadoEnArca && arcaInfo && arcaInfo.CAE;
+
+    let afipQrBase64 = null;
+    if (isFacturaAFIP) {
+        try {
+            const qrUrl = getAfipQrUrl({
+                total: Math.abs(cobro.monto),
+                fecha: cobro.fecha || getTodayDate(),
+                facturadoEnArca: true,
+                arcaData: arcaInfo,
+                cliente: { cuit: cobro.clienteCuit || '', nombre: cobro.clienteNombre || '' }
+            }, appConfig, false);
+            if (qrUrl) {
+                const qrImgUrl = `https://quickchart.io/qr?text=${encodeURIComponent(qrUrl)}&size=150`;
+                await new Promise((resolve) => {
+                    const img = new Image();
+                    img.crossOrigin = "Anonymous";
+                    img.src = qrImgUrl;
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        canvas.width = img.width;
+                        canvas.height = img.height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0);
+                        afipQrBase64 = canvas.toDataURL('image/png');
+                        resolve();
+                    };
+                    img.onerror = () => resolve();
+                });
+            }
+        } catch (e) { console.error("Error cargando QR ARCA en recibo PDF", e); }
+    }
 
     const pageWidth = doc.internal.pageSize.getWidth();
     const margin = 12;
@@ -1062,19 +1392,20 @@ export async function generateReciboCobranzaPDF(cobro) {
     // Título Recibo
     doc.setFont("helvetica", "bold");
     doc.setFontSize(12);
-    const titulo = isFacturaAFIP ? "FACTURA B ELECTRÓNICA" : "RECIBO DE COBRANZA";
+    const titulo = isFacturaAFIP ? "FACTURA ELECTRÓNICA" : "RECIBO DE COBRANZA";
     doc.text(titulo, pageWidth / 2, y, { align: "center" });
     y += 4;
 
     doc.setFontSize(8);
     doc.setFont("helvetica", "italic");
-    doc.text(isFacturaAFIP ? "DOCUMENTO FISCAL AUTORIZADO" : "COMPROBANTE NO FISCAL - TIPO X", pageWidth / 2, y, { align: "center" });
+    doc.text(isFacturaAFIP ? "DOCUMENTO FISCAL AUTORIZADO POR ARCA" : "COMPROBANTE NO FISCAL - TIPO X", pageWidth / 2, y, { align: "center" });
     y += 7;
 
     // Info Cliente y Comprobante
     doc.setFont("helvetica", "normal");
     doc.setFontSize(9);
-    const nroCbte = isFacturaAFIP ? `0001-${arcaInfo.CbteNro.toString().padStart(8, '0')}` : (cobro.id || 'X-0001');
+    const ptoVtaStr = String(arcaInfo?.PtoVta || arcaConfig.ptoVta || 1).padStart(4, '0');
+    const nroCbte = isFacturaAFIP ? `${ptoVtaStr}-${arcaInfo.CbteNro.toString().padStart(8, '0')}` : (cobro.id || 'X-0001');
     const fechaStr = cobro.timestamp || (cobro.fecha ? new Date(cobro.fecha).toLocaleString('es-AR') : new Date().toLocaleString('es-AR'));
 
     doc.text(`Comprobante N°: ${nroCbte}`, margin, y);
@@ -1128,14 +1459,21 @@ export async function generateReciboCobranzaPDF(cobro) {
         y += 5;
     }
 
-    // Pie AFIP si corresponde
+    // Pie ARCA si corresponde
     if (isFacturaAFIP) {
         doc.line(margin, y, pageWidth - margin, y);
         y += 5;
         doc.setFont("helvetica", "bold");
         doc.setFontSize(9);
-        doc.text(`CAE: ${arcaInfo.CAE}    Vto CAE: ${arcaInfo.CAEFchVto || ''}`, pageWidth / 2, y, { align: "center" });
-        y += 6;
+        const vtoStr = arcaInfo.CAEFchVto || '';
+        const vtoFormat = vtoStr.length === 8 ? `${vtoStr.substring(6,8)}/${vtoStr.substring(4,6)}/${vtoStr.substring(0,4)}` : vtoStr;
+        doc.text(`CAE: ${arcaInfo.CAE}    Vto CAE: ${vtoFormat}`, pageWidth / 2, y, { align: "center" });
+        y += 4;
+        if (afipQrBase64) {
+            const qrSize = 24;
+            doc.addImage(afipQrBase64, 'PNG', (pageWidth / 2) - (qrSize / 2), y, qrSize, qrSize);
+            y += qrSize + 2;
+        }
     }
 
     doc.setFont("helvetica", "italic");
@@ -1455,8 +1793,137 @@ export function normalizeString(str) {
 }
 
 // =========================================================================
-// --- INTEGRACIÓN ARCA (FACTURACIÓN ELECTRÓNICA) ---
+// --- INTEGRACIÓN ARCA (PADRÓN A5/A13 Y FACTURACIÓN ELECTRÓNICA) ---
 // =========================================================================
+
+export const CONDICIONES_IVA_ARCA = {
+    1: "IVA Responsable Inscripto",
+    4: "IVA Sujeto Exento",
+    5: "Consumidor Final",
+    6: "Responsable Monotributo",
+    7: "Sujeto No Categorizado",
+    13: "Monotributista Social",
+    15: "IVA No Alcanzado"
+};
+
+/**
+ * Decodifica entidades HTML devueltas por el padrón de ARCA (ej: AV. REVOLUCI&#211;N -> AV. REVOLUCIÓN)
+ */
+export function decodeHtmlEntities(str) {
+    if (!str || typeof str !== 'string') return '';
+    const txt = document.createElement('textarea');
+    txt.innerHTML = str;
+    return txt.value.replace(/\s+/g, ' ').trim();
+}
+
+let cachedWorkingPadronCuit = null;
+
+/**
+ * Consulta datos de un contribuyente en el Padrón Oficial de ARCA (A5 + A13) vía ApiFactura (/padron/consult)
+ * @param {string} documento DNI (7-8 dígitos) o CUIT/CUIL (11 dígitos)
+ */
+export async function consultarPadronArca(documento) {
+    const cleanDoc = String(documento || '').replace(/\D/g, '');
+    if (!cleanDoc || cleanDoc.length < 7 || cleanDoc.length > 11) {
+        return {
+            success: false,
+            error: "Ingresa un DNI (7 u 8 dígitos) o un CUIT/CUIL (11 dígitos) válido sin letras."
+        };
+    }
+
+    const appConfig = getAppConfig();
+    const arcaConfig = appConfig.arca || {};
+    const companyInfo = appConfig.companyInfo || {};
+
+    const baseUrl = (arcaConfig.baseUrl || 'https://apifactura.com.ar').replace(/\/+$/, '');
+    const cleanCuitCompany = String(companyInfo.cuit || '').replace(/\D/g, '');
+    const cleanCuitArca = String(arcaConfig.cuit || '').replace(/\D/g, '');
+
+    // Priorizamos el CUIT que ya sabemos que coincide con la API Key, luego el de Datos de la Empresa, luego ARCA, y 20308436609 como respaldo
+    const candidateCuits = [...new Set([cachedWorkingPadronCuit, cleanCuitCompany, cleanCuitArca, '20308436609'].filter(c => c && c.length === 11))];
+
+    if (candidateCuits.length === 0) {
+        return {
+            success: false,
+            error: "Falta configurar el CUIT de la empresa en la sección Configuración."
+        };
+    }
+
+    const headers = {
+        'Accept': 'application/json'
+    };
+    if (arcaConfig.apiKey) {
+        headers['X-API-Key'] = arcaConfig.apiKey.trim();
+    }
+
+    try {
+        let response = null;
+        let textData = '';
+        let parsed = {};
+
+        for (const cuitCandidate of candidateCuits) {
+            const url = `${baseUrl}/padron/consult?cuit_receptor=${cleanDoc}&cuit=${cuitCandidate}&prod=true`;
+            response = await fetch(url, {
+                method: 'GET',
+                headers
+            });
+
+            textData = await response.text();
+            try {
+                parsed = textData ? JSON.parse(textData) : {};
+            } catch (e) {
+                parsed = { rawResponse: textData };
+            }
+
+            if (response.ok) {
+                cachedWorkingPadronCuit = cuitCandidate;
+                break;
+            }
+            if (response.status !== 403) {
+                break;
+            }
+            console.warn(`[Padrón ARCA] El CUIT configurado (${cuitCandidate}) no coincide con la API Key actual. Reintentando con CUIT alternativo...`);
+        }
+
+        if (!response.ok) {
+            let errMsg = 'No se encontraron datos para el DNI/CUIT consultado en el padrón de ARCA.';
+            if (parsed.detail) {
+                if (typeof parsed.detail === 'string') {
+                    errMsg = parsed.detail;
+                } else if (Array.isArray(parsed.detail) && parsed.detail[0]?.msg) {
+                    errMsg = parsed.detail.map(d => d.msg).join(', ');
+                }
+            } else if (parsed.message || parsed.error) {
+                errMsg = parsed.message || parsed.error;
+            }
+            return { success: false, error: errMsg };
+        }
+
+        const condicionIvaId = Number(parsed.condicion_iva_id) || 5;
+        const condicionIvaNombre = decodeHtmlEntities(parsed.condicion_iva || CONDICIONES_IVA_ARCA[condicionIvaId] || 'Consumidor Final');
+
+        return {
+            success: true,
+            data: {
+                cuit: String(parsed.cuit || cleanDoc).replace(/\D/g, ''),
+                razon_social: decodeHtmlEntities(parsed.razon_social || ''),
+                domicilio: decodeHtmlEntities(parsed.domicilio || ''),
+                condicion_iva: condicionIvaNombre,
+                condicion_iva_id: condicionIvaId,
+                condicion_iva_inferida: Boolean(parsed.condicion_iva_inferida),
+                origen_padron: parsed.origen_padron || null,
+                tipo_persona: parsed.tipo_persona || null,
+                categoria_monotributo: parsed.categoria_monotributo || null
+            }
+        };
+    } catch (error) {
+        console.error("Error consultando padrón ARCA:", error);
+        return {
+            success: false,
+            error: `No se pudo conectar con el servicio de Padrón ARCA (${error.message}).`
+        };
+    }
+}
 
 export async function facturarEnArca(venta) {
     const appConfig = getAppConfig();
@@ -1474,14 +1941,19 @@ export async function facturarEnArca(venta) {
         return { success: false, error: "El ticket solo contiene cobro de deuda previa de cuenta corriente (no corresponde emitir factura ARCA)." };
     }
 
-    const url = `${arcaConfig.baseUrl}/invoices/authorize?cuit=${arcaConfig.cuit}&prod=${arcaConfig.isProd}`;
+    const baseUrl = arcaConfig.baseUrl.replace(/\/+$/, '');
+    const cleanCuitEmisor = String(arcaConfig.cuit).replace(/\D/g, '');
+    const url = `${baseUrl}/invoices/authorize?cuit=${cleanCuitEmisor}&prod=${arcaConfig.isProd}`;
     const payload = {
         PtoVta: arcaConfig.ptoVta || 6,
         Concepto: 1,
+        DocTipo: 99,
+        DocNro: 0,
+        CondicionIVAReceptorId: 5,
         ImpTotal: parseFloat(totalFacturable.toFixed(2)),
         ImpNeto: parseFloat(totalFacturable.toFixed(2)),
         Items: prodsValidos.map(p => ({
-            Descripcion: p.nombre.substring(0, 100), // AFIP limita los caracteres a veces
+            Descripcion: p.nombre.substring(0, 100), // ARCA limita los caracteres a veces
             Cantidad: parseFloat(p.cantidad),
             PrecioUnitario: parseFloat(p.precio.toFixed(2)),
             Subtotal: parseFloat((p.precio * p.cantidad).toFixed(2))
@@ -1489,13 +1961,16 @@ export async function facturarEnArca(venta) {
     };
 
     // Si hay un cliente asignado y no es el Consumidor Final genérico
-    if (venta.cliente && venta.cliente.cuit && venta.cliente.nombre !== 'Consumidor Final') {
-        const cleanId = venta.cliente.cuit.replace(/\D/g, '');
-        if (cleanId.length > 0) {
-            payload.DocNro = parseInt(cleanId);
+    if (venta.cliente && venta.cliente.nombre !== 'Consumidor Final') {
+        const cleanId = String(venta.cliente.cuit || '').replace(/\D/g, '');
+        if (cleanId.length > 0 && cleanId !== '99999999999') {
+            payload.DocNro = parseInt(cleanId, 10);
             payload.DocTipo = cleanId.length === 11 ? 80 : 96; // 80: CUIT, 96: DNI
-            payload.ReceptorNombre = venta.cliente.nombre.substring(0, 50);
-            payload.CondicionIVAReceptorId = 5; // 5: Consumidor Final (ajustar si manejas otros IVAs)
+            payload.ReceptorNombre = (venta.cliente.nombre || '').substring(0, 100);
+            payload.CondicionIVAReceptorId = Number(venta.cliente.condicionIvaId) || 5;
+            if (venta.cliente.domicilio) {
+                payload.ReceptorDomicilio = String(venta.cliente.domicilio).substring(0, 150);
+            }
         }
     }
 

@@ -13,7 +13,7 @@ let commissionInput;
 let saveCommissionButton;
 
 // --- INICIO DE LA MODIFICACIÓN: Nuevos elementos del DOM ---
-let companyNameInput, companyAddressInput, companyCuitInput, companyIibbInput, companyStartDateInput, companyPhoneInput, companyIvaInput, companyEmailInput, companyLogoInput, userEmailInput, userRoleSelect, btnAddUser, usersTableBody;
+let companyNameInput, companyRazonSocialInput, companyAddressInput, companyCuitInput, companyIibbInput, companyStartDateInput, companyPhoneInput, companyIvaInput, companyEmailInput, companyLogoInput, userEmailInput, userRoleSelect, btnAddUser, usersTableBody;
 let saveCompanyButton;
 let autoPrintTicketCheck, savePrintingButton;
 let loyaltyPercentageInput, loyaltyPrintCheck, loyaltyExpirationCheck, loyaltyExpirationDaysInput, btnSaveLoyalty;
@@ -87,6 +87,7 @@ async function loadConfiguration() {
             // Cargar configuración de la empresa
             if (configData.companyInfo) {
                 companyNameInput.value = configData.companyInfo.name || '';
+                if (companyRazonSocialInput) companyRazonSocialInput.value = configData.companyInfo.razonSocial || '';
                 companyAddressInput.value = configData.companyInfo.address || '';
                 companyCuitInput.value = configData.companyInfo.cuit || '';
                 companyIibbInput.value = configData.companyInfo.iibb || '';
@@ -349,15 +350,16 @@ async function saveLoyaltyConfig() {
  */
 async function saveCompanyInfo() {
     const companyData = {
-        name: companyNameInput.value,
-        address: companyAddressInput.value,
-        cuit: companyCuitInput.value,
-        iibb: companyIibbInput.value,
+        name: companyNameInput.value.trim(),
+        razonSocial: companyRazonSocialInput ? companyRazonSocialInput.value.trim() : '',
+        address: companyAddressInput.value.trim(),
+        cuit: companyCuitInput.value.trim(),
+        iibb: companyIibbInput.value.trim(),
         startDate: companyStartDateInput.value,
-        phone: companyPhoneInput.value,
-        ivaCondition: companyIvaInput.value,
-        email: companyEmailInput.value,
-        logoUrl: companyLogoInput.value,
+        phone: companyPhoneInput.value.trim(),
+        ivaCondition: companyIvaInput.value.trim(),
+        email: companyEmailInput.value.trim(),
+        logoUrl: companyLogoInput.value.trim(),
     };
 
     const originalHtml = saveCompanyButton.innerHTML;
@@ -661,6 +663,7 @@ export async function init() {
 
     // --- INICIO DE LA MODIFICACIÓN: Obtener nuevos elementos y añadir listeners ---
     companyNameInput = document.getElementById('config-company-name');
+    companyRazonSocialInput = document.getElementById('config-company-razon-social');
     companyAddressInput = document.getElementById('config-company-address');
     companyCuitInput = document.getElementById('config-company-cuit');
     companyIibbInput = document.getElementById('config-company-iibb');

@@ -143,9 +143,10 @@
                             C
                         </div>
                         <div>
-                            <div class="d-flex align-items-center gap-2">
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
                                 <h4 class="modal-title mb-0 fw-bold" id="ficha-cliente-nombre">Cliente</h4>
                                 <span class="badge" id="ficha-cliente-estado-badge">Al día</span>
+                                <span class="badge bg-info text-dark rounded-pill d-none" id="ficha-cliente-iva-badge"></span>
                             </div>
                             <small class="text-white-50" id="ficha-cliente-cuit">DNI: -</small>
                         </div>
@@ -258,44 +259,122 @@
                         <!-- TAB 3: DATOS PERSONALES -->
                         <div class="tab-pane fade" id="tab-datos-pane" role="tabpanel">
                             <div class="row justify-content-center">
-                                <div class="col-lg-8">
+                                <div class="col-lg-9">
                                     <div class="card border-0 shadow-sm rounded-4 p-4">
-                                        <h5 class="fw-bold mb-3"><i class="fas fa-user-edit me-2 text-primary"></i>Editar Datos del Cliente</h5>
+                                        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+                                            <h5 class="fw-bold mb-0"><i class="fas fa-user-edit me-2 text-primary"></i>Editar Datos del Cliente</h5>
+                                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill px-3 py-1">
+                                                <i class="fas fa-building-columns me-1"></i>Integración Padrón ARCA
+                                            </span>
+                                        </div>
                                         <form id="form-editar-cliente-ficha">
                                             <input type="hidden" id="ficha-cliente-id">
-                                            <div class="mb-3">
-                                                <label class="form-label small fw-bold">Nombre Completo <span class="text-danger">*</span></label>
-                                                <input type="text" class="form-control" id="ficha-nombre" required>
-                                            </div>
-                                            <div class="row">
-                                                <div class="col-md-6 mb-3">
-                                                    <label class="form-label small fw-bold">DNI / CUIT</label>
-                                                    <input type="text" class="form-control" id="ficha-cuit" placeholder="Sin guiones">
+
+                                            <!-- BLOQUE 1: DATOS FISCALES AUTOCOMPLETABLES CON ARCA -->
+                                            <div class="arca-group-box mb-3" id="ficha-arca-group-box">
+                                                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                                                    <span class="small fw-bold text-uppercase text-primary">
+                                                        <i class="fas fa-bolt me-1"></i>1. Datos Fiscales (Autocompletables con ARCA)
+                                                    </span>
+                                                    <span class="badge bg-white text-primary border border-primary-subtle fw-normal">Padrón Oficial A5 + A13</span>
                                                 </div>
-                                                <div class="col-md-6 mb-3">
-                                                    <label class="form-label small fw-bold">Teléfono (WhatsApp)</label>
-                                                    <input type="text" class="form-control" id="ficha-telefono" placeholder="Ej: 1123456789">
+
+                                                <!-- DNI / CUIT + Botón ARCA -->
+                                                <div class="mb-3">
+                                                    <label class="form-label small fw-bold d-flex align-items-center justify-content-between">
+                                                        <span>
+                                                            DNI o CUIT
+                                                            <span id="ficha-check-cuit" class="badge bg-success-subtle text-success border border-success-subtle ms-1 d-none"><i class="fas fa-check-circle me-1"></i>ARCA</span>
+                                                        </span>
+                                                        <small class="text-muted fw-normal">Presiona Enter o el botón para consultar</small>
+                                                    </label>
+                                                    <div class="input-group">
+                                                        <span class="input-group-text bg-white"><i class="fas fa-id-card text-primary"></i></span>
+                                                        <input type="text" class="form-control fw-bold" id="ficha-cuit" placeholder="Ingresa DNI o CUIT sin guiones">
+                                                        <button class="btn btn-info text-white fw-bold px-3 shadow-sm" type="button" id="btn-ficha-buscar-arca" title="Consultar Padrón Oficial de ARCA (A5 + A13)">
+                                                            <i class="fas fa-bolt me-1"></i>Autocompletar con ARCA
+                                                        </button>
+                                                    </div>
+                                                    <div id="ficha-arca-status-box" class="mt-2 d-none"></div>
+                                                </div>
+
+                                                <!-- Nombre / Razón Social + Condición IVA -->
+                                                <div class="row">
+                                                    <div class="col-md-7 mb-3">
+                                                        <label class="form-label small fw-bold">
+                                                            Nombre Completo / Razón Social <span class="text-danger">*</span>
+                                                            <span id="ficha-check-nombre" class="badge bg-success-subtle text-success border border-success-subtle ms-1 d-none"><i class="fas fa-check-circle me-1"></i>ARCA</span>
+                                                        </label>
+                                                        <input type="text" class="form-control" id="ficha-nombre" required>
+                                                    </div>
+                                                    <div class="col-md-5 mb-3">
+                                                        <label class="form-label small fw-bold">
+                                                            Condición frente al IVA
+                                                            <span id="ficha-check-iva" class="badge bg-success-subtle text-success border border-success-subtle ms-1 d-none"><i class="fas fa-check-circle me-1"></i>ARCA</span>
+                                                        </label>
+                                                        <select class="form-select" id="ficha-condicion-iva">
+                                                            <option value="5">Consumidor Final</option>
+                                                            <option value="6">Responsable Monotributo</option>
+                                                            <option value="1">IVA Responsable Inscripto</option>
+                                                            <option value="4">IVA Sujeto Exento</option>
+                                                            <option value="7">Sujeto No Categorizado</option>
+                                                            <option value="13">Monotributista Social</option>
+                                                            <option value="15">IVA No Alcanzado</option>
+                                                        </select>
+                                                    </div>
+                                                </div>
+
+                                                <!-- Domicilio Fiscal (También provisto por ARCA) -->
+                                                <div class="mb-0">
+                                                    <label class="form-label small fw-bold">
+                                                        Domicilio Fiscal / Comercial
+                                                        <span id="ficha-check-domicilio" class="badge bg-success-subtle text-success border border-success-subtle ms-1 d-none"><i class="fas fa-check-circle me-1"></i>ARCA</span>
+                                                    </label>
+                                                    <input type="text" class="form-control" id="ficha-domicilio" placeholder="Calle, Número, Barrio, Ciudad">
                                                 </div>
                                             </div>
-                                            <div class="mb-3">
-                                                <label class="form-label small fw-bold">Correo Electrónico</label>
-                                                <input type="email" class="form-control" id="ficha-email" placeholder="cliente@correo.com">
-                                            </div>
-                                            <div class="mb-3">
-                                                <label class="form-label small fw-bold">Domicilio</label>
-                                                <input type="text" class="form-control" id="ficha-domicilio" placeholder="Calle, Número, Ciudad">
-                                            </div>
-                                            <div class="mb-4">
-                                                <label class="form-label small fw-bold d-flex justify-content-between align-items-center">
-                                                    <span><i class="fas fa-hand-holding-usd text-primary me-1"></i>Límite de Crédito / Fiado ($)</span>
-                                                    <small class="text-muted fw-normal">Por defecto: $50.000</small>
-                                                </label>
-                                                <div class="input-group">
-                                                    <span class="input-group-text bg-light">$</span>
-                                                    <input type="number" class="form-control" id="ficha-limite-credito" value="50000" step="1000" min="0" placeholder="50000">
+
+                                            <!-- BLOQUE 2: DATOS DE CONTACTO Y CUENTA CORRIENTE (CARGA MANUAL) -->
+                                            <div class="manual-group-box mb-4" id="ficha-manual-group-box">
+                                                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+                                                    <span class="small fw-bold text-uppercase text-secondary">
+                                                        <i class="fas fa-address-book me-1 text-warning"></i>2. Contacto y Cuenta Corriente (Completar Manualmente)
+                                                    </span>
+                                                    <span id="ficha-manual-pending-badge" class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle small">
+                                                        Verificar datos de contacto
+                                                    </span>
                                                 </div>
-                                                <div class="form-text small">Tope máximo de deuda fiada autorizado para este cliente.</div>
+
+                                                <div class="row">
+                                                    <div class="col-md-6 mb-3">
+                                                        <label class="form-label small fw-bold d-flex justify-content-between align-items-center">
+                                                            <span>Teléfono (WhatsApp)</span>
+                                                            <span id="ficha-status-telefono" class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle" style="font-size: 0.7rem;">Falta cargar</span>
+                                                        </label>
+                                                        <input type="text" class="form-control" id="ficha-telefono" placeholder="Ej: 3511234567 (En blanco)">
+                                                    </div>
+                                                    <div class="col-md-6 mb-3">
+                                                        <label class="form-label small fw-bold d-flex justify-content-between align-items-center">
+                                                            <span>Correo Electrónico</span>
+                                                            <span id="ficha-status-email" class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle" style="font-size: 0.7rem;">Falta cargar</span>
+                                                        </label>
+                                                        <input type="email" class="form-control" id="ficha-email" placeholder="cliente@correo.com (En blanco)">
+                                                    </div>
+                                                </div>
+
+                                                <div class="mb-0">
+                                                    <label class="form-label small fw-bold d-flex justify-content-between align-items-center">
+                                                        <span><i class="fas fa-hand-holding-usd text-primary me-1"></i>Límite de Crédito / Fiado ($)</span>
+                                                        <small class="text-muted fw-normal">Por defecto: $50.000</small>
+                                                    </label>
+                                                    <div class="input-group">
+                                                        <span class="input-group-text bg-light">$</span>
+                                                        <input type="number" class="form-control" id="ficha-limite-credito" value="50000" step="1000" min="0" placeholder="50000">
+                                                    </div>
+                                                    <div class="form-text small">Tope máximo de deuda fiada autorizado para este cliente.</div>
+                                                </div>
                                             </div>
+
                                             <button type="submit" class="btn btn-primary rounded-pill px-4 fw-bold">
                                                 <i class="fas fa-save me-2"></i>Guardar Modificaciones
                                             </button>
@@ -439,47 +518,122 @@
 
     <!-- Modal ABM Cliente (Nuevo / Editar) -->
     <div class="modal fade" id="modalClienteABM" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
             <div class="modal-content rounded-4 border-0 shadow-lg">
                 <div class="modal-header bg-primary text-white border-0 py-3 px-4">
-                    <h5 class="modal-title fw-bold" id="modalClienteABMLabel">Nuevo Cliente</h5>
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="fas fa-user-check fs-5"></i>
+                        <h5 class="modal-title fw-bold mb-0" id="modalClienteABMLabel">Nuevo Cliente</h5>
+                    </div>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body p-4">
                     <form id="formClienteABM">
                         <input type="hidden" id="abm-cliente-id">
-                        <div class="mb-3">
-                            <label for="abm-cliente-nombre" class="form-label small fw-bold">Nombre Completo <span class="text-danger">*</span></label>
-                            <input type="text" class="form-control" id="abm-cliente-nombre" placeholder="Ej: Maria Gonzalez" required>
-                        </div>
-                        <div class="row">
-                            <div class="col-md-6 mb-3">
-                                <label for="abm-cliente-cuit" class="form-label small fw-bold">DNI / CUIT</label>
-                                <input type="text" class="form-control" id="abm-cliente-cuit" placeholder="Sin guiones">
+
+                        <!-- BLOQUE 1: DATOS FISCALES AUTOCOMPLETABLES CON ARCA -->
+                        <div class="arca-group-box mb-3" id="abm-arca-group-box">
+                            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                                <span class="small fw-bold text-uppercase text-primary">
+                                    <i class="fas fa-bolt me-1"></i>1. Datos Fiscales (Autocompletables con ARCA)
+                                </span>
+                                <span class="badge bg-white text-primary border border-primary-subtle fw-normal">Padrón Oficial ARCA (A5 + A13)</span>
                             </div>
-                            <div class="col-md-6 mb-3">
-                                <label for="abm-cliente-telefono" class="form-label small fw-bold">Teléfono (WhatsApp)</label>
-                                <input type="text" class="form-control" id="abm-cliente-telefono" placeholder="Ej: 1123456789">
+
+                            <!-- DNI o CUIT + Botón -->
+                            <div class="mb-3">
+                                <label for="abm-cliente-cuit" class="form-label small fw-bold mb-1 d-flex justify-content-between align-items-center">
+                                    <span>
+                                        DNI o CUIT del Cliente
+                                        <span id="abm-check-cuit" class="badge bg-success-subtle text-success border border-success-subtle ms-1 d-none"><i class="fas fa-check-circle me-1"></i>Cargado ARCA</span>
+                                    </span>
+                                    <small class="text-muted fw-normal">Presiona <code>Enter</code> o el botón para buscar</small>
+                                </label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-white"><i class="fas fa-id-card text-primary"></i></span>
+                                    <input type="text" class="form-control fw-bold" id="abm-cliente-cuit" placeholder="Ingresa DNI (8 dígitos) o CUIT (11 dígitos) sin guiones">
+                                    <button class="btn btn-info text-white fw-bold px-3 shadow-sm" type="button" id="btn-abm-buscar-arca">
+                                        <i class="fas fa-bolt me-1"></i>Autocompletar con ARCA
+                                    </button>
+                                </div>
+                                <div id="abm-arca-status-box" class="mt-2 d-none"></div>
+                            </div>
+
+                            <!-- Nombre / Razón Social + Condición IVA -->
+                            <div class="row">
+                                <div class="col-md-7 mb-3">
+                                    <label for="abm-cliente-nombre" class="form-label small fw-bold">
+                                        Nombre Completo / Razón Social <span class="text-danger">*</span>
+                                        <span id="abm-check-nombre" class="badge bg-success-subtle text-success border border-success-subtle ms-1 d-none"><i class="fas fa-check-circle me-1"></i>Cargado ARCA</span>
+                                    </label>
+                                    <input type="text" class="form-control" id="abm-cliente-nombre" placeholder="Se autocompleta con ARCA o escribe manual" required>
+                                </div>
+                                <div class="col-md-5 mb-3">
+                                    <label for="abm-cliente-condicion-iva" class="form-label small fw-bold">
+                                        Condición frente al IVA
+                                        <span id="abm-check-iva" class="badge bg-success-subtle text-success border border-success-subtle ms-1 d-none"><i class="fas fa-check-circle me-1"></i>Cargado ARCA</span>
+                                    </label>
+                                    <select class="form-select" id="abm-cliente-condicion-iva">
+                                        <option value="5">Consumidor Final</option>
+                                        <option value="6">Responsable Monotributo</option>
+                                        <option value="1">IVA Responsable Inscripto</option>
+                                        <option value="4">IVA Sujeto Exento</option>
+                                        <option value="7">Sujeto No Categorizado</option>
+                                        <option value="13">Monotributista Social</option>
+                                        <option value="15">IVA No Alcanzado</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <!-- Domicilio Fiscal (También provisto por ARCA) -->
+                            <div class="mb-0">
+                                <label for="abm-cliente-domicilio" class="form-label small fw-bold">
+                                    Domicilio Fiscal / Comercial
+                                    <span id="abm-check-domicilio" class="badge bg-success-subtle text-success border border-success-subtle ms-1 d-none"><i class="fas fa-check-circle me-1"></i>Cargado ARCA</span>
+                                </label>
+                                <input type="text" class="form-control" id="abm-cliente-domicilio" placeholder="Calle, Número, Barrio, Ciudad (Autocompletable con ARCA)">
                             </div>
                         </div>
-                        <div class="mb-3">
-                            <label for="abm-cliente-email" class="form-label small fw-bold">Correo Electrónico</label>
-                            <input type="email" class="form-control" id="abm-cliente-email" placeholder="cliente@email.com">
-                        </div>
-                        <div class="mb-3">
-                            <label for="abm-cliente-domicilio" class="form-label small fw-bold">Domicilio</label>
-                            <input type="text" class="form-control" id="abm-cliente-domicilio" placeholder="Calle, Número, Ciudad">
-                        </div>
-                        <div class="mb-3">
-                            <label for="abm-cliente-limite-credito" class="form-label small fw-bold d-flex justify-content-between align-items-center">
-                                <span><i class="fas fa-hand-holding-usd text-primary me-1"></i>Límite de Crédito / Fiado ($)</span>
-                                <small class="text-muted fw-normal">Por defecto: $50.000</small>
-                            </label>
-                            <div class="input-group">
-                                <span class="input-group-text bg-light">$</span>
-                                <input type="number" class="form-control" id="abm-cliente-limite-credito" value="50000" step="1000" min="0" placeholder="50000">
+
+                        <!-- BLOQUE 2: DATOS DE CONTACTO Y CUENTA CORRIENTE (COMPLETAR MANUALMENTE) -->
+                        <div class="manual-group-box" id="abm-manual-group-box">
+                            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+                                <span class="small fw-bold text-uppercase text-secondary">
+                                    <i class="fas fa-address-book me-1 text-warning"></i>2. Contacto y Cuenta Corriente (Completar Manualmente)
+                                </span>
+                                <span id="abm-manual-pending-badge" class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle small">
+                                    <i class="fas fa-pen me-1"></i>Campos manuales pendientes
+                                </span>
                             </div>
-                            <div class="form-text small">Tope máximo de deuda fiada acumulable. Si se supera en ventas, el sistema avisará.</div>
+
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="abm-cliente-telefono" class="form-label small fw-bold d-flex justify-content-between align-items-center">
+                                        <span>Teléfono (WhatsApp)</span>
+                                        <span id="abm-status-telefono" class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle" style="font-size: 0.7rem;">Sin cargar</span>
+                                    </label>
+                                    <input type="text" class="form-control manual-empty-input" id="abm-cliente-telefono" placeholder="Ej: 3511234567 (Completar)">
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="abm-cliente-email" class="form-label small fw-bold d-flex justify-content-between align-items-center">
+                                        <span>Correo Electrónico</span>
+                                        <span id="abm-status-email" class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle" style="font-size: 0.7rem;">Sin cargar</span>
+                                    </label>
+                                    <input type="email" class="form-control manual-empty-input" id="abm-cliente-email" placeholder="cliente@email.com (Completar)">
+                                </div>
+                            </div>
+
+                            <div class="mb-0">
+                                <label for="abm-cliente-limite-credito" class="form-label small fw-bold d-flex justify-content-between align-items-center">
+                                    <span><i class="fas fa-hand-holding-usd text-primary me-1"></i>Límite de Crédito / Fiado ($)</span>
+                                    <small class="text-muted fw-normal">Por defecto: $50.000</small>
+                                </label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-light">$</span>
+                                    <input type="number" class="form-control" id="abm-cliente-limite-credito" value="50000" step="1000" min="0" placeholder="50000">
+                                </div>
+                                <div class="form-text small">Tope máximo de deuda fiada acumulable. Si se supera en ventas, el sistema avisará.</div>
+                            </div>
                         </div>
                     </form>
                 </div>

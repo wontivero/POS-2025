@@ -270,50 +270,124 @@
     </div>
 
     <div class="modal fade" id="clienteModal" tabindex="-1" aria-labelledby="clienteModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="clienteModalLabel">Agregar Cliente</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content rounded-4 border-0 shadow-lg">
+                <div class="modal-header bg-primary text-white border-0 py-3 px-4">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="fas fa-user-check fs-5"></i>
+                        <h5 class="modal-title fw-bold mb-0" id="clienteModalLabel">Agregar Cliente</h5>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <div class="modal-body">
+                <div class="modal-body p-4">
                     <form id="clienteForm">
                         <input type="hidden" id="clienteId">
-                        <div class="mb-3">
-                            <label for="clienteNombre" class="form-label">Nombre</label>
-                            <input type="text" class="form-control" id="clienteNombre" required>
+
+                        <!-- BLOQUE 1: DATOS FISCALES AUTOCOMPLETABLES CON ARCA -->
+                        <div class="arca-group-box mb-3" id="ventas-arca-group-box">
+                            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                                <span class="small fw-bold text-uppercase text-primary">
+                                    <i class="fas fa-bolt me-1"></i>1. Datos Fiscales (Autocompletables con ARCA)
+                                </span>
+                                <span class="badge bg-white text-primary border border-primary-subtle fw-normal">Padrón Oficial ARCA (A5 + A13)</span>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="clienteCuit" class="form-label small fw-bold mb-1 d-flex justify-content-between align-items-center">
+                                    <span>
+                                        CUIT / CUIL / DNI
+                                        <span id="ventas-check-cuit" class="badge bg-success-subtle text-success border border-success-subtle ms-1 d-none"><i class="fas fa-check-circle me-1"></i>Cargado ARCA</span>
+                                    </span>
+                                    <small class="text-muted fw-normal">Presiona <code>Enter</code> o el botón para buscar</small>
+                                </label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-white"><i class="fas fa-id-card text-primary"></i></span>
+                                    <input type="text" class="form-control fw-bold" id="clienteCuit" placeholder="Ingresa DNI o CUIT sin guiones">
+                                    <button class="btn btn-info text-white fw-bold px-3 shadow-sm" type="button" id="btn-ventas-buscar-arca">
+                                        <i class="fas fa-bolt me-1"></i>Autocompletar con ARCA
+                                    </button>
+                                </div>
+                                <div id="ventas-arca-status-box" class="mt-2 d-none"></div>
+                            </div>
+
+                            <div class="row">
+                                <div class="col-md-7 mb-3">
+                                    <label for="clienteNombre" class="form-label small fw-bold">
+                                        Nombre Completo / Razón Social <span class="text-danger">*</span>
+                                        <span id="ventas-check-nombre" class="badge bg-success-subtle text-success border border-success-subtle ms-1 d-none"><i class="fas fa-check-circle me-1"></i>Cargado ARCA</span>
+                                    </label>
+                                    <input type="text" class="form-control" id="clienteNombre" placeholder="Se autocompleta con ARCA o escribe manual" required>
+                                </div>
+                                <div class="col-md-5 mb-3">
+                                    <label for="clienteCondicionIva" class="form-label small fw-bold">
+                                        Condición frente al IVA
+                                        <span id="ventas-check-iva" class="badge bg-success-subtle text-success border border-success-subtle ms-1 d-none"><i class="fas fa-check-circle me-1"></i>Cargado ARCA</span>
+                                    </label>
+                                    <select class="form-select" id="clienteCondicionIva">
+                                        <option value="5">Consumidor Final</option>
+                                        <option value="6">Responsable Monotributo</option>
+                                        <option value="1">IVA Responsable Inscripto</option>
+                                        <option value="4">IVA Sujeto Exento</option>
+                                        <option value="7">Sujeto No Categorizado</option>
+                                        <option value="13">Monotributista Social</option>
+                                        <option value="15">IVA No Alcanzado</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="mb-0">
+                                <label for="clienteDomicilio" class="form-label small fw-bold">
+                                    Domicilio Fiscal / Comercial
+                                    <span id="ventas-check-domicilio" class="badge bg-success-subtle text-success border border-success-subtle ms-1 d-none"><i class="fas fa-check-circle me-1"></i>Cargado ARCA</span>
+                                </label>
+                                <input type="text" class="form-control" id="clienteDomicilio" placeholder="Calle, Número, Barrio, Ciudad (Autocompletable con ARCA)">
+                            </div>
                         </div>
-                        <div class="mb-3">
-                            <label for="clienteCuit" class="form-label">CUIT / CUIL / DNI</label>
-                            <input type="text" class="form-control" id="clienteCuit">
-                        </div>
-                        <div class="mb-3">
-                            <label for="clienteDomicilio" class="form-label">Domicilio</label>
-                            <input type="text" class="form-control" id="clienteDomicilio">
-                        </div>
-                        <div class="mb-3">
-                            <label for="clienteEmail" class="form-label">Email</label>
-                            <input type="email" class="form-control" id="clienteEmail">
-                        </div>
-                        <div class="mb-3">
-                            <label for="clienteTelefono" class="form-label">Teléfono</label>
-                            <input type="text" class="form-control" id="clienteTelefono">
-                        </div>
-                        <div class="mb-3">
-                            <label for="clienteLimiteCredito" class="form-label d-flex justify-content-between align-items-center">
-                                <span><i class="fas fa-hand-holding-usd text-primary me-1"></i>Límite de Crédito / Fiado ($)</span>
-                                <small class="text-muted">Por defecto: $50.000</small>
-                            </label>
-                            <div class="input-group">
-                                <span class="input-group-text">$</span>
-                                <input type="number" class="form-control" id="clienteLimiteCredito" value="50000" step="1000" min="0">
+
+                        <!-- BLOQUE 2: DATOS DE CONTACTO Y CUENTA CORRIENTE (COMPLETAR MANUALMENTE) -->
+                        <div class="manual-group-box" id="ventas-manual-group-box">
+                            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+                                <span class="small fw-bold text-uppercase text-secondary">
+                                    <i class="fas fa-address-book me-1 text-warning"></i>2. Contacto y Cuenta Corriente (Completar Manualmente)
+                                </span>
+                                <span id="ventas-manual-pending-badge" class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle small">
+                                    <i class="fas fa-pen me-1"></i>Campos manuales pendientes
+                                </span>
+                            </div>
+
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="clienteTelefono" class="form-label small fw-bold d-flex justify-content-between align-items-center">
+                                        <span>Teléfono (WhatsApp)</span>
+                                        <span id="ventas-status-telefono" class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle" style="font-size: 0.7rem;">Sin cargar</span>
+                                    </label>
+                                    <input type="text" class="form-control manual-empty-input" id="clienteTelefono" placeholder="Ej: 3511234567 (Completar)">
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="clienteEmail" class="form-label small fw-bold d-flex justify-content-between align-items-center">
+                                        <span>Email</span>
+                                        <span id="ventas-status-email" class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle" style="font-size: 0.7rem;">Sin cargar</span>
+                                    </label>
+                                    <input type="email" class="form-control manual-empty-input" id="clienteEmail" placeholder="cliente@correo.com (Completar)">
+                                </div>
+                            </div>
+
+                            <div class="mb-0">
+                                <label for="clienteLimiteCredito" class="form-label small fw-bold d-flex justify-content-between align-items-center">
+                                    <span><i class="fas fa-hand-holding-usd text-primary me-1"></i>Límite de Crédito / Fiado ($)</span>
+                                    <small class="text-muted">Por defecto: $50.000</small>
+                                </label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-light">$</span>
+                                    <input type="number" class="form-control" id="clienteLimiteCredito" value="50000" step="1000" min="0">
+                                </div>
                             </div>
                         </div>
                     </form>
                 </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="button" class="btn btn-primary" id="btnGuardarCliente">Guardar</button>
+                <div class="modal-footer bg-light border-0 px-4 py-3">
+                    <button type="button" class="btn btn-secondary rounded-pill px-3" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-primary rounded-pill px-4 fw-bold shadow-sm" id="btnGuardarCliente">Guardar Cliente</button>
                 </div>
             </div>
         </div>
