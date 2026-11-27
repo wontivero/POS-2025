@@ -4,7 +4,22 @@ import {
     collection, addDoc, getDocs, runTransaction, doc, query, orderBy, where, updateDoc, deleteDoc, getDoc, setDoc
 } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
 import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-storage.js";
-import { getAppConfig } from './secciones/dataManager.js'; // <-- IMPORTAMOS EL GETTER
+import { getAppConfig, getClientes } from './secciones/dataManager.js'; // <-- IMPORTAMOS LOS GETTERS
+
+/**
+ * Obtiene los datos más actualizados del cliente combinando el snapshot de la venta con el caché en vivo.
+ */
+function resolveLiveCliente(ventaCliente) {
+    if (!ventaCliente) return null;
+    if (ventaCliente.id) {
+        const lista = getClientes() || [];
+        const live = lista.find(c => c.id === ventaCliente.id);
+        if (live) {
+            return { ...ventaCliente, ...live };
+        }
+    }
+    return ventaCliente;
+}
  /**
  * Variable global para cachear el logo y evitar recargas de red en cada ticket.
  */
@@ -283,8 +298,9 @@ function getAfipQrUrl(venta, appConfig, isNotaCredito = false) {
 
     let tipoDocRec = parseInt(arcaInfo.DocTipo, 10) || 99;
     let nroDocRec = parseInt(arcaInfo.DocNro, 10) || 0;
-    if (tipoDocRec === 99 && venta.cliente && venta.cliente.cuit && venta.cliente.nombre !== 'Consumidor Final') {
-        const cleanId = String(venta.cliente.cuit).replace(/\D/g, '');
+    const cliQr = resolveLiveCliente(venta.cliente);
+    if (tipoDocRec === 99 && cliQr && cliQr.cuit && cliQr.nombre !== 'Consumidor Final') {
+        const cleanId = String(cliQr.cuit).replace(/\D/g, '');
         if (cleanId.length === 11) {
             tipoDocRec = 80; // CUIT
             nroDocRec = parseInt(cleanId, 10) || 0;
@@ -614,7 +630,7 @@ export async function generatePDF(ticketId, venta, isNotaCredito = false) {
     const clientBoxH = 22;
     doc.rect(margin, clientBoxY, contentWidth, clientBoxH);
 
-    const cli = venta.cliente || { nombre: 'Consumidor Final' };
+    const cli = resolveLiveCliente(venta.cliente) || { nombre: 'Consumidor Final' };
     const cleanCliDoc = String(cli.cuit || '').replace(/\D/g, '');
     const isCuitCli = cleanCliDoc.length === 11 && cleanCliDoc !== '99999999999';
     const docLabelCli = isCuitCli ? 'CUIT:' : (cleanCliDoc.length >= 7 && cleanCliDoc !== '99999999999' ? 'DNI:' : 'CUIT / DNI:');
@@ -702,6 +718,14 @@ export async function generatePDF(ticketId, venta, isNotaCredito = false) {
         ? (venta.productos || []).filter(p => !p.isDeuda)
         : (venta.productos || []);
 
+    // Cálculo de montos fiscales y prorrateo en precio unitario (para que la suma de ítems coincida con el total facturado sin exponer renglón de recargo)
+    const montoDeuda = isFacturaAFIP ? (Number(venta.montoDeudaCobrada) || 0) : 0;
+    const subtotalProductos = itemsTabla.reduce((sum, item) => sum + ((Number(item.precio) || 0) * (Number(item.cantidad) || 1)), 0);
+    const totalFinalComprobante = Math.max(0, (Number(venta.total) || 0) - montoDeuda);
+    const factorAjustePrecio = (subtotalProductos > 0 && totalFinalComprobante > subtotalProductos)
+        ? (totalFinalComprobante / subtotalProductos)
+        : 1;
+
     let rowY = tableY + thH + 4.5;
     doc.setFont(font, 'normal');
     doc.setFontSize(8.2);
@@ -717,7 +741,7 @@ export async function generatePDF(ticketId, venta, isNotaCredito = false) {
 
         const codProd = String(producto.varianteCodigo || producto.codigo || '').substring(0, 11);
         const cantNum = Number(producto.cantidad) || 1;
-        const precioNum = Number(producto.precio) || 0;
+        const precioNum = (Number(producto.precio) || 0) * factorAjustePrecio;
         const subNum = cantNum * precioNum;
 
         const splitDesc = doc.splitTextToSize(descripcionCompleta, cols[1].w - 3);
@@ -749,28 +773,14 @@ export async function generatePDF(ticketId, venta, isNotaCredito = false) {
     doc.setLineWidth(0.35);
     doc.rect(margin, totalsBoxY, contentWidth, totalsBoxH);
 
-    // Cálculo de montos fiscales
-    const montoDeuda = isFacturaAFIP ? (Number(venta.montoDeudaCobrada) || 0) : 0;
-    const subtotalProductos = itemsTabla.reduce((sum, item) => sum + ((Number(item.precio) || 0) * (Number(item.cantidad) || 1)), 0);
-    const totalFinalComprobante = Math.max(0, (Number(venta.total) || 0) - montoDeuda);
-    const recargoFinanciero = Math.max(0, totalFinalComprobante - subtotalProductos);
-
-    // --- Columna Derecha: Totales Reglamentarios ARCA ---
+    // --- Columna Derecha: 3 Renglones Oficiales Reglamentarios de ARCA ---
     const labelRightX = 166;
     const valRightX = pageWidth - margin - 3;
 
     doc.setFont(font, 'bold');
     doc.setFontSize(9.5);
-    if (recargoFinanciero > 0.5) {
-        doc.text('Subtotal: $', labelRightX, totalsBoxY + 14, { align: 'right' });
-        doc.text(formatFiscalNumber(subtotalProductos), valRightX, totalsBoxY + 14, { align: 'right' });
-
-        doc.text('Recargo Financiero: $', labelRightX, totalsBoxY + 21, { align: 'right' });
-        doc.text(formatFiscalNumber(recargoFinanciero), valRightX, totalsBoxY + 21, { align: 'right' });
-    } else {
-        doc.text('Subtotal: $', labelRightX, totalsBoxY + 19, { align: 'right' });
-        doc.text(formatFiscalNumber(totalFinalComprobante), valRightX, totalsBoxY + 19, { align: 'right' });
-    }
+    doc.text('Subtotal: $', labelRightX, totalsBoxY + 19, { align: 'right' });
+    doc.text(formatFiscalNumber(totalFinalComprobante), valRightX, totalsBoxY + 19, { align: 'right' });
 
     doc.text('Importe Otros Tributos: $', labelRightX, totalsBoxY + 28, { align: 'right' });
     doc.text('0,00', valRightX, totalsBoxY + 28, { align: 'right' });
@@ -1062,6 +1072,11 @@ export async function printThermalTicket(ticketId, venta, isNotaCredito = false)
             <tbody>
     `;
 
+    const subThermal = (venta.productos || []).reduce((sum, item) => sum + ((Number(item.precio) || 0) * (Number(item.cantidad) || 1)), 0);
+    const factorThermal = (subThermal > 0 && Number(venta.total) > subThermal)
+        ? (Number(venta.total) / subThermal)
+        : 1;
+
     venta.productos.forEach(p => {
         let descripcionCompleta = p.nombre;
         if (p.marca && p.marca !== 'Desconocido') {
@@ -1070,14 +1085,15 @@ export async function printThermalTicket(ticketId, venta, isNotaCredito = false)
         if (p.color && p.color !== 'N/A') {
             descripcionCompleta += ` ${p.color}`;
         }
+        const precioUnitThermal = (Number(p.precio) || 0) * (p.isDeuda ? 1 : factorThermal);
         html += `
             <tr>
                 <td colspan="3" class="left item-desc">${descripcionCompleta}</td>
             </tr>
             <tr class="item-line">
-                <td class="left">${formatCurrency(p.precio)}</td>
+                <td class="left">${formatCurrency(precioUnitThermal)}</td>
                 <td class="right">x${p.cantidad}</td>
-                <td class="right">${formatCurrency(p.cantidad * p.precio)}</td>
+                <td class="right">${formatCurrency(p.cantidad * precioUnitThermal)}</td>
             </tr>
         `;
     });
@@ -1941,6 +1957,11 @@ export async function facturarEnArca(venta) {
         return { success: false, error: "El ticket solo contiene cobro de deuda previa de cuenta corriente (no corresponde emitir factura ARCA)." };
     }
 
+    const subtotalProdsValidos = prodsValidos.reduce((sum, p) => sum + ((Number(p.precio) || 0) * (Number(p.cantidad) || 1)), 0);
+    const factorAjusteArca = (subtotalProdsValidos > 0 && totalFacturable > subtotalProdsValidos)
+        ? (totalFacturable / subtotalProdsValidos)
+        : 1;
+
     const baseUrl = arcaConfig.baseUrl.replace(/\/+$/, '');
     const cleanCuitEmisor = String(arcaConfig.cuit).replace(/\D/g, '');
     const url = `${baseUrl}/invoices/authorize?cuit=${cleanCuitEmisor}&prod=${arcaConfig.isProd}`;
@@ -1952,24 +1973,29 @@ export async function facturarEnArca(venta) {
         CondicionIVAReceptorId: 5,
         ImpTotal: parseFloat(totalFacturable.toFixed(2)),
         ImpNeto: parseFloat(totalFacturable.toFixed(2)),
-        Items: prodsValidos.map(p => ({
-            Descripcion: p.nombre.substring(0, 100), // ARCA limita los caracteres a veces
-            Cantidad: parseFloat(p.cantidad),
-            PrecioUnitario: parseFloat(p.precio.toFixed(2)),
-            Subtotal: parseFloat((p.precio * p.cantidad).toFixed(2))
-        }))
+        Items: prodsValidos.map(p => {
+            const cant = parseFloat(p.cantidad) || 1;
+            const precioAjustado = (Number(p.precio) || 0) * factorAjusteArca;
+            return {
+                Descripcion: p.nombre.substring(0, 100), // ARCA limita los caracteres a veces
+                Cantidad: cant,
+                PrecioUnitario: parseFloat(precioAjustado.toFixed(2)),
+                Subtotal: parseFloat((precioAjustado * cant).toFixed(2))
+            };
+        })
     };
 
     // Si hay un cliente asignado y no es el Consumidor Final genérico
-    if (venta.cliente && venta.cliente.nombre !== 'Consumidor Final') {
-        const cleanId = String(venta.cliente.cuit || '').replace(/\D/g, '');
+    const clienteFiscal = resolveLiveCliente(venta.cliente);
+    if (clienteFiscal && clienteFiscal.nombre !== 'Consumidor Final') {
+        const cleanId = String(clienteFiscal.cuit || '').replace(/\D/g, '');
         if (cleanId.length > 0 && cleanId !== '99999999999') {
             payload.DocNro = parseInt(cleanId, 10);
             payload.DocTipo = cleanId.length === 11 ? 80 : 96; // 80: CUIT, 96: DNI
-            payload.ReceptorNombre = (venta.cliente.nombre || '').substring(0, 100);
-            payload.CondicionIVAReceptorId = Number(venta.cliente.condicionIvaId) || 5;
-            if (venta.cliente.domicilio) {
-                payload.ReceptorDomicilio = String(venta.cliente.domicilio).substring(0, 150);
+            payload.ReceptorNombre = (clienteFiscal.nombre || '').substring(0, 100);
+            payload.CondicionIVAReceptorId = Number(clienteFiscal.condicionIvaId) || 5;
+            if (clienteFiscal.domicilio) {
+                payload.ReceptorDomicilio = String(clienteFiscal.domicilio).substring(0, 150);
             }
         }
     }
