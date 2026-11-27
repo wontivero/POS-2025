@@ -2772,6 +2772,33 @@ function init() {
 
 let activeCatalogEntity = 'rubros'; // 'rubros' | 'marcas'
 
+const VALIDATED_PAIRS_STORAGE_KEY = 'pos2025_catalogo_pares_validados';
+
+function getParesValidadosSet() {
+    try {
+        const raw = localStorage.getItem(VALIDATED_PAIRS_STORAGE_KEY);
+        const arr = raw ? JSON.parse(raw) : [];
+        return new Set(Array.isArray(arr) ? arr : []);
+    } catch {
+        return new Set();
+    }
+}
+
+function getParKey(entity, a, b) {
+    const sorted = [normalizeString(a), normalizeString(b)].sort();
+    return `${entity}:${sorted[0]}|${sorted[1]}`;
+}
+
+function marcarParComoValido(entity, a, b) {
+    const set = getParesValidadosSet();
+    set.add(getParKey(entity, a, b));
+    try {
+        localStorage.setItem(VALIDATED_PAIRS_STORAGE_KEY, JSON.stringify([...set]));
+    } catch (e) {
+        console.warn('No se pudo guardar validación en localStorage', e);
+    }
+}
+
 function getEntityMeta(entity = activeCatalogEntity) {
     if (entity === 'marcas') {
         return {
@@ -2828,12 +2855,14 @@ function analizarCatalogoEntidad(entity = activeCatalogEntity) {
     const todosLosItems = Array.from(conteoPorItem.keys()).sort((a, b) => a.localeCompare(b, 'es'));
 
     // Detectar posibles errores tipográficos (ej. "liberia" vs "libreria" o "logitec" vs "logitech")
+    const paresValidados = getParesValidadosSet();
     const sugerenciasMap = new Map();
     for (let i = 0; i < todosLosItems.length; i++) {
         for (let j = i + 1; j < todosLosItems.length; j++) {
             const rA = todosLosItems[i];
             const rB = todosLosItems[j];
             if (rA.length < 3 || rB.length < 3) continue;
+            if (paresValidados.has(getParKey(entity, rA, rB))) continue;
             const dist = levenshteinDistance(rA, rB);
             const maxLen = Math.max(rA.length, rB.length);
             const isSimilar = (maxLen >= 5 && dist <= 2) || (maxLen >= 4 && dist === 1);
@@ -3265,7 +3294,7 @@ function renderTablaGestionRubros() {
         if (sugerencias.length > 0) {
             sugContainer.classList.remove('d-none');
             sugList.innerHTML = sugerencias.map(s => `
-                <div class="d-flex align-items-center justify-content-between bg-white border border-warning rounded-3 px-3 py-2 shadow-sm">
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 bg-white border border-warning rounded-3 px-3 py-2 shadow-sm">
                     <div class="small">
                         <span class="badge bg-warning text-dark me-1">${capitalizeFirstLetter(s.typo)}</span>
                         <span class="text-muted">(${s.countTypo} prod.)</span>
@@ -3274,10 +3303,16 @@ function renderTablaGestionRubros() {
                         <span class="badge bg-primary ms-1">${capitalizeFirstLetter(s.target)}</span>
                         <span class="text-muted">(${s.countTarget} prod.)</span>
                     </div>
-                    <button type="button" class="btn btn-sm btn-primary rounded-pill fw-bold btn-unificar-sugerencia"
-                        data-typo="${s.typo}" data-target="${s.target}">
-                        <i class="fas fa-compress-arrows-alt me-1"></i>Unificar en "${capitalizeFirstLetter(s.target)}"
-                    </button>
+                    <div class="d-flex align-items-center gap-2">
+                        <button type="button" class="btn btn-sm btn-outline-success rounded-pill fw-bold btn-validar-sugerencia"
+                            data-typo="${s.typo}" data-target="${s.target}" title="Marcar ambos nombres como válidos y distintos (no es un error)">
+                            <i class="fas fa-check me-1"></i>Es válida
+                        </button>
+                        <button type="button" class="btn btn-sm btn-primary rounded-pill fw-bold btn-unificar-sugerencia"
+                            data-typo="${s.typo}" data-target="${s.target}">
+                            <i class="fas fa-compress-arrows-alt me-1"></i>Unificar en "${capitalizeFirstLetter(s.target)}"
+                        </button>
+                    </div>
                 </div>
             `).join('');
         } else {
@@ -3309,6 +3344,10 @@ function renderTablaGestionRubros() {
             estadoBadge = `<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary" title="Presente en productos pero aún no registrado en la lista oficial"><i class="fas fa-database me-1"></i>En productos</span>`;
         }
 
+        const btnValidarFila = sug
+            ? `<button type="button" class="btn btn-sm btn-outline-success btn-gestor-validar-par" data-typo="${r}" data-target="${sug.target}" title="Validar: '${capitalizeFirstLetter(r)}' y '${capitalizeFirstLetter(sug.target)}' son distintos y están bien escritos"><i class="fas fa-check-double"></i></button>`
+            : '';
+
         const btnOficializar = !esOficial
             ? `<button type="button" class="btn btn-sm btn-outline-success btn-gestor-oficializar" data-rubro="${r}" title="Guardar en catálogo oficial"><i class="fas fa-check"></i></button>`
             : '';
@@ -3322,6 +3361,7 @@ function renderTablaGestionRubros() {
                 <td class="text-center">${estadoBadge}</td>
                 <td class="text-end pe-3">
                     <div class="btn-group btn-group-sm">
+                        ${btnValidarFila}
                         ${btnOficializar}
                         <button type="button" class="btn btn-outline-secondary btn-gestor-ver" data-rubro="${r}" title="Filtrar y ver estos ${count} productos en la tabla">
                             <i class="fas fa-filter"></i>
@@ -3461,6 +3501,20 @@ function setupGestorRubrosListeners() {
     const sugList = document.getElementById('rubros-sugerencias-list');
     if (sugList) {
         sugList.onclick = async (e) => {
+            const btnValidar = e.target.closest('.btn-validar-sugerencia');
+            if (btnValidar) {
+                const typo = btnValidar.dataset.typo;
+                const target = btnValidar.dataset.target;
+                const meta = getEntityMeta(activeCatalogEntity);
+                marcarParComoValido(activeCatalogEntity, typo, target);
+                await addUniqueItem(meta.collection, typo);
+                renderTablaGestionRubros();
+                actualizarBadgeAlertasRubros();
+                actualizarBadgeAlertasMarcas();
+                showToast(`Validado: "${capitalizeFirstLetter(typo)}" y "${capitalizeFirstLetter(target)}" se mantendrán separados.`, 'fa-check-circle', '#1cc88a');
+                return;
+            }
+
             const btn = e.target.closest('.btn-unificar-sugerencia');
             if (!btn) return;
             const meta = getEntityMeta(activeCatalogEntity);
@@ -3481,6 +3535,19 @@ function setupGestorRubrosListeners() {
     if (tbody) {
         tbody.onclick = async (e) => {
             const meta = getEntityMeta(activeCatalogEntity);
+
+            const btnValidarPar = e.target.closest('.btn-gestor-validar-par');
+            if (btnValidarPar) {
+                const typo = btnValidarPar.dataset.typo;
+                const target = btnValidarPar.dataset.target;
+                marcarParComoValido(activeCatalogEntity, typo, target);
+                await addUniqueItem(meta.collection, typo);
+                renderTablaGestionRubros();
+                actualizarBadgeAlertasRubros();
+                actualizarBadgeAlertasMarcas();
+                showToast(`Validado: "${capitalizeFirstLetter(typo)}" marcada como correcta.`, 'fa-check-circle', '#1cc88a');
+                return;
+            }
 
             const btnOficializar = e.target.closest('.btn-gestor-oficializar');
             if (btnOficializar) {
@@ -3520,25 +3587,12 @@ function setupGestorRubrosListeners() {
             if (btnRenombrar) {
                 const oldItem = btnRenombrar.dataset.rubro;
                 const count = parseInt(btnRenombrar.dataset.count) || 0;
-                const nuevoRaw = await showInputModal(
-                    `Renombrar ${meta.singularCap} "${capitalizeFirstLetter(oldItem)}"`,
-                    `Ingresa el nuevo nombre corregido. Se actualizarán automáticamente los ${count} productos asociados:`,
-                    {
-                        defaultValue: capitalizeFirstLetter(oldItem),
-                        confirmText: 'Renombrar en Cascada'
-                    }
-                );
+                const nuevoRaw = await promptRenombrarEntidad(activeCatalogEntity, oldItem, count);
                 if (!nuevoRaw) return;
                 const nuevoNorm = normalizeString(nuevoRaw);
                 if (!nuevoNorm || nuevoNorm === oldItem) return;
 
-                const confirmado = await showConfirmationModal(
-                    `¿Confirmas cambiar ${meta.articulo} ${meta.singular} <strong>"${capitalizeFirstLetter(oldItem)}"</strong> por <strong class="text-primary">"${capitalizeFirstLetter(nuevoNorm)}"</strong> en <strong>${count}</strong> productos?`,
-                    'Confirmar Cambio de Nombre'
-                );
-                if (confirmado) {
-                    await unificarORenombrarEntidad(activeCatalogEntity, oldItem, nuevoNorm, `Renombrando "${capitalizeFirstLetter(oldItem)}" a "${capitalizeFirstLetter(nuevoNorm)}"`);
-                }
+                await unificarORenombrarEntidad(activeCatalogEntity, oldItem, nuevoNorm, `Renombrando "${capitalizeFirstLetter(oldItem)}" a "${capitalizeFirstLetter(nuevoNorm)}"`);
                 return;
             }
 
@@ -3604,6 +3658,82 @@ function setupGestorRubrosListeners() {
             }
         };
     }
+}
+
+function promptRenombrarEntidad(entity, oldItemNorm, count) {
+    const meta = getEntityMeta(entity);
+    return new Promise((resolve) => {
+        let modalEl = document.getElementById('renombrarEntidadModal');
+        if (modalEl) modalEl.remove();
+
+        const modalHtml = `
+            <div class="modal fade" id="renombrarEntidadModal" tabindex="-1" aria-hidden="true" style="z-index: 1090 !important;">
+              <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content shadow-lg border-0" style="border-radius: 1rem;">
+                  <div class="modal-header bg-primary text-white" style="border-top-left-radius: 1rem; border-top-right-radius: 1rem;">
+                    <h5 class="modal-title fw-bold"><i class="fas fa-pen me-2"></i>Renombrar ${meta.singularCap}</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                  </div>
+                  <div class="modal-body p-4">
+                    <p class="mb-3">Estás renombrando ${meta.articulo} ${meta.singular} <span class="badge bg-secondary">${capitalizeFirstLetter(oldItemNorm)}</span>.<br>
+                    Se actualizarán automáticamente <strong>${count} productos</strong> asociados.</p>
+                    <label class="form-label fw-bold small text-muted">Nuevo nombre corregido:</label>
+                    <input type="text" class="form-control form-control-lg" id="input-renombrar-entidad" value="${capitalizeFirstLetter(oldItemNorm)}" autocomplete="off">
+                  </div>
+                  <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-secondary rounded-pill px-4" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-primary rounded-pill px-4 fw-bold" id="btn-confirmar-renombrar-entidad">Renombrar en Cascada</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+        `;
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        modalEl = document.getElementById('renombrarEntidadModal');
+        const inputEl = document.getElementById('input-renombrar-entidad');
+        const btnConfirm = document.getElementById('btn-confirmar-renombrar-entidad');
+
+        const bsModal = new bootstrap.Modal(modalEl);
+        let resolved = false;
+
+        const confirmar = () => {
+            const val = inputEl.value.trim();
+            if (!val) {
+                inputEl.classList.add('is-invalid');
+                inputEl.focus();
+                return;
+            }
+            resolved = true;
+            bsModal.hide();
+            resolve(val);
+        };
+
+        btnConfirm.onclick = confirmar;
+        inputEl.onkeydown = (ev) => {
+            if (ev.key === 'Enter') {
+                ev.preventDefault();
+                confirmar();
+            }
+        };
+
+        modalEl.addEventListener('shown.bs.modal', () => {
+            inputEl.focus();
+            inputEl.select();
+        }, { once: true });
+
+        modalEl.addEventListener('hidden.bs.modal', () => {
+            if (!resolved) resolve(null);
+            modalEl.remove();
+        }, { once: true });
+
+        bsModal.show();
+        setTimeout(() => {
+            const backdrops = document.querySelectorAll('.modal-backdrop');
+            if (backdrops.length > 1) {
+                backdrops[backdrops.length - 1].style.setProperty('z-index', '1085', 'important');
+            }
+        }, 30);
+    });
 }
 
 function promptSeleccionarDestinoEntidad(entity, oldItemNorm, count, opciones) {

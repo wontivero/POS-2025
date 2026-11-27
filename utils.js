@@ -1675,7 +1675,14 @@ export function showConfirmationModal(message, title = 'Confirmación', options 
         genericModalEl.addEventListener('hidden.bs.modal', hideListener, { once: true });
 
         setTimeout(() => {
+            genericModalEl.style.setProperty('z-index', '1095', 'important');
             genericModal.show();
+            setTimeout(() => {
+                const backdrops = document.querySelectorAll('.modal-backdrop');
+                if (backdrops.length > 1) {
+                    backdrops[backdrops.length - 1].style.setProperty('z-index', '1090', 'important');
+                }
+            }, 30);
         }, 50);
     });
 }
@@ -1687,6 +1694,7 @@ export function showConfirmationModal(message, title = 'Confirmación', options 
  * @param {object} [options] Opciones para personalizar.
  * @param {string} [options.inputType='text'] Tipo de input (text, url, number, etc.).
  * @param {string} [options.placeholder=''] Placeholder para el campo de entrada.
+ * @param {string} [options.defaultValue=''] Valor inicial del input.
  * @param {string} [options.confirmText='Aceptar'] Texto para el botón de confirmación.
  * @returns {Promise<string|null>} Resuelve con el valor del input si el usuario confirma, o null si cancela.
  */
@@ -1694,6 +1702,7 @@ export function showInputModal(title, message, options = {}) {
     const {
         inputType = 'text',
         placeholder = '',
+        defaultValue = '',
         confirmText = 'Aceptar'
     } = options;
 
@@ -1723,6 +1732,9 @@ export function showInputModal(title, message, options = {}) {
         const confirmButton = document.getElementById('btn-generic-confirm');
         const cancelButton = document.getElementById('btn-generic-cancel');
         const inputField = document.getElementById('genericModalInput');
+        if (inputField && defaultValue) {
+            inputField.value = defaultValue;
+        }
 
         confirmButton.textContent = confirmText;
         cancelButton.style.display = 'inline-block';
@@ -1750,8 +1762,19 @@ export function showInputModal(title, message, options = {}) {
         inputField.addEventListener('keyup', keyupListener);
         genericModalEl.addEventListener('hidden.bs.modal', hideListener, { once: true });
 
-        genericModalEl.addEventListener('shown.bs.modal', () => inputField.focus(), { once: true });
+        genericModalEl.addEventListener('shown.bs.modal', () => {
+            inputField.focus();
+            if (inputField.select) inputField.select();
+        }, { once: true });
+
+        genericModalEl.style.setProperty('z-index', '1095', 'important');
         genericModal.show();
+        setTimeout(() => {
+            const backdrops = document.querySelectorAll('.modal-backdrop');
+            if (backdrops.length > 1) {
+                backdrops[backdrops.length - 1].style.setProperty('z-index', '1090', 'important');
+            }
+        }, 30);
     });
 }
 
