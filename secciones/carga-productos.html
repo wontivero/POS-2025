@@ -1,5 +1,10 @@
 <section id="seccion-carga-productos">
-    <h2 class="mb-4">Carga y Preparación de Productos</h2>
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+        <h2 class="mb-0">Carga y Preparación de Productos</h2>
+        <button type="button" class="btn btn-outline-primary rounded-pill shadow-sm fw-bold" id="btn-gestionar-rubros-carga-header" title="Crear, renombrar o fusionar rubros oficiales">
+            <i class="fas fa-tags me-2"></i>Gestionar Rubros
+        </button>
+    </div>
 
     <div class="card shadow-sm mb-4">
         <div class="card-header d-flex justify-content-between align-items-center bg-info text-white"
@@ -60,7 +65,11 @@
                                 <button class="btn btn-outline-primary" type="button" id="btn-nuevo-rubro-carga" title="Crear nuevo rubro oficial">
                                     <i class="fas fa-plus"></i>
                                 </button>
+                                <button class="btn btn-outline-secondary" type="button" id="btn-gestionar-rubros-carga" title="Gestionar, renombrar o fusionar rubros">
+                                    <i class="fas fa-sliders-h"></i>
+                                </button>
                             </div>
+                            <div id="prod-rubro-warning" class="form-text text-danger fw-semibold d-none"></div>
                         </div>
                     </div>
 

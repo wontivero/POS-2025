@@ -458,8 +458,8 @@ async function loadSection(section) {
 
     try {
         // --- INICIO DE LA MODIFICACIÓN: Carga condicional de HTML ---
-        // Cargamos el HTML de la sección.
-        const response = await fetch(`secciones/${section}.html`);
+        // Cargamos el HTML de la sección evitando el caché del navegador.
+        const response = await fetch(`secciones/${section}.html?v=${Date.now()}`, { cache: 'no-store' });
         if (!response.ok) {
             // Si el HTML no existe, mostramos un error claro y no intentamos cargar el JS.
             throw new Error(`El archivo ${section}.html no se encontró o no se pudo cargar.`);

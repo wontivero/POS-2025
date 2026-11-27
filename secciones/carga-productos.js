@@ -153,12 +153,30 @@ function setupEventListeners() {
         btnNuevoRubroCarga.onclick = async () => {
             await promptCrearNuevoRubro(prodRubro);
             prodRubro.classList.remove('is-invalid');
+            const warnEl = document.getElementById('prod-rubro-warning');
+            if (warnEl) warnEl.classList.add('d-none');
             renderizarGrilla();
         };
     }
+
+    const abrirGestorDesdeCarga = async () => {
+        const productosModule = await import('./productos.js');
+        if (productosModule.abrirModalGestionRubros) {
+            productosModule.abrirModalGestionRubros();
+        }
+    };
+    const btnGestionarRubrosCarga = document.getElementById('btn-gestionar-rubros-carga');
+    if (btnGestionarRubrosCarga) btnGestionarRubrosCarga.onclick = abrirGestorDesdeCarga;
+    const btnGestionarRubrosCargaHeader = document.getElementById('btn-gestionar-rubros-carga-header');
+    if (btnGestionarRubrosCargaHeader) btnGestionarRubrosCargaHeader.onclick = abrirGestorDesdeCarga;
+
     if (prodRubro) {
         prodRubro.onchange = () => {
-            if (prodRubro.value) prodRubro.classList.remove('is-invalid');
+            if (prodRubro.value) {
+                prodRubro.classList.remove('is-invalid');
+                const warnEl = document.getElementById('prod-rubro-warning');
+                if (warnEl) warnEl.classList.add('d-none');
+            }
         };
     }
 
@@ -1003,6 +1021,9 @@ function limpiarFormulario() {
     if (prodGanancia) {
         prodGanancia.value = '75';
     }
+    const warnEl = document.getElementById('prod-rubro-warning');
+    if (warnEl) warnEl.classList.add('d-none');
+    if (prodRubro) prodRubro.classList.remove('is-invalid');
     // --- FIN DE LA MODIFICACIÓN ---
     prodCodigo.focus();
 }
@@ -1013,16 +1034,32 @@ function poblarFormulario(producto, modoDuplicar = false) {
     prodMarca.value = producto.marca;
     prodColor.value = producto.color;
     const normRubroCarga = normalizeString(producto.rubro || '');
+    const warnEl = document.getElementById('prod-rubro-warning');
     populateRubroSelect(prodRubro, { placeholder: '-- Seleccionar Rubro --', preserveValue: false });
-    if (normRubroCarga && !Array.from(prodRubro.options).some(o => o.value === normRubroCarga)) {
-        const opt = document.createElement('option');
-        opt.value = normRubroCarga;
-        opt.textContent = capitalizeFirstLetter(normRubroCarga);
-        prodRubro.appendChild(opt);
+    if (!normRubroCarga) {
+        prodRubro.value = '';
+        prodRubro.classList.add('is-invalid');
+        if (warnEl) {
+            warnEl.textContent = '⚠️ Este producto no tiene rubro asignado. Selecciona uno obligatorio.';
+            warnEl.classList.remove('d-none');
+        }
+    } else {
+        const optExists = Array.from(prodRubro.options).some(o => o.value === normRubroCarga);
+        if (!optExists) {
+            const opt = document.createElement('option');
+            opt.value = normRubroCarga;
+            opt.textContent = `⚠️ ${capitalizeFirstLetter(normRubroCarga)} (No estandarizado)`;
+            prodRubro.appendChild(opt);
+            if (warnEl) {
+                warnEl.textContent = `⚠️ El rubro "${capitalizeFirstLetter(normRubroCarga)}" no está en el catálogo oficial. Te sugerimos elegir uno estandarizado.`;
+                warnEl.classList.remove('d-none');
+            }
+        } else if (warnEl) {
+            warnEl.classList.add('d-none');
+        }
+        prodRubro.value = normRubroCarga;
+        prodRubro.classList.remove('is-invalid');
     }
-    prodRubro.value = normRubroCarga;
-    if (!normRubroCarga) prodRubro.classList.add('is-invalid');
-    else prodRubro.classList.remove('is-invalid');
     prodCosto.value = producto.costo;
     prodVenta.value = Math.round(producto.venta);
     prodStock.value = producto.stock;

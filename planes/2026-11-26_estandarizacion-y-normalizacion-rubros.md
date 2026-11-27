@@ -36,35 +36,14 @@ flowchart TD
 
 ---
 
-## Decisiones de Diseño Destacadas
+## Cambios en "Agregar Productos" (`carga-productos`) y Acceso Global al Gestor de Rubros
 
-> [!IMPORTANT]
-> **1. Combo Box Obligatorio con Creación y Gestión In-Place (`+` y `⚙️`)**
-> * En lugar de un campo de texto libre con `<datalist>`, todos los formularios de producto usarán un `<select class="form-select" required>` alimentado en tiempo real por los rubros oficiales normalizados.
-> * Al lado del selector habrá un botón **`+`** para dar de alta un nuevo rubro oficial al instante (con validación anti-duplicados y normalización automática) y un botón **`⚙️`** para abrir el gestor de rubros.
-> * **Campo 100% Obligatorio**: Ningún producto podrá crearse ni guardarse con el rubro en blanco.
-
-> [!TIP]
-> **2. Detector Automático de Errores Ortográficos (Similitud / Levenshtein) y Fusión en 1 Clic**
-> * Con más de 4.500 productos, buscar errores a ojo es tedioso. El nuevo **Centro de Gestión y Normalización de Rubros** analizará en memoria los 4.500 productos al instante (sin lecturas extra a Firebase) y agrupará todos los rubros en uso.
-> * Si detecta nombres muy parecidos (ej. `liberia` con 3 productos y `lireria` con 1 producto frente a `libreria` con 950 productos), mostrará una **Sugerencia Inteligente de Fusión**: con un solo clic en **"Unificar en Libreria"**, actualizará los productos afectados en lotes (`writeBatch` de Firestore con barra de progreso) y eliminará el rubro mal escrito.
-
-> [!NOTE]
-> **3. Edición Rápida "En Línea" (Inline) y Asignación Masiva para Productos en Blanco**
-> * En el filtro de Rubro de **Gestión de Productos**, se agregará la opción **`⚠️ SIN RUBRO / EN BLANCO (N productos)`** además del contador de productos por cada rubro.
-> * En la tabla de productos, hacer clic sobre el badge de Rubro de cualquier fila (o sobre el badge rojo `⚠️ Sin Rubro`) permitirá **cambiarle el rubro directamente desde la tabla con un mini-selector** sin necesidad de abrir todo el modal del producto.
-> * También podrás filtrar varios productos (por ejemplo, buscar `"cuaderno"`) y usar la nueva acción masiva **"Asignar Rubro a Filtrados"** para ponerles `Libreria` a todos juntos.
-
----
-
-## Cambios Implementados por Componente
-
-1. **Modal Global de Producto y Utilidades** ([index.html](file:///d:/Curso/POS%202025/index.html) y [utils.js](file:///d:/Curso/POS%202025/utils.js)):
-   - `#producto-rubro` convertido en `<select required>` con botones `+` y `⚙️`.
-   - Funciones globales `levenshteinDistance`, `findSimilarRubro`, `getListaRubrosOficiales`, `populateRubroSelect` y `promptCrearNuevoRubro`.
-2. **Sección Gestión de Productos y Centro de Normalización** ([productos.html](file:///d:/Curso/POS%202025/secciones/productos.html) y [productos.js](file:///d:/Curso/POS%202025/secciones/productos.js)):
-   - Botón **"Gestionar Rubros"** (`#btnGestionarRubros`) con badge de alertas.
-   - Modal `#modalGestionRubros` con KPIs, sugerencias inteligentes de unificación en 1 clic, renombrado en cascada, fusión y eliminación por lotes de 400 documentos.
-   - Filtro `⚠️ Sin Rubro / En blanco (N)`, edición inline haciendo clic sobre el badge de rubro en la tabla y asignación masiva de rubro en `#collapseFiltros`.
-3. **Carga de Productos e Ingreso Rápido** ([carga-productos.html](file:///d:/Curso/POS%202025/secciones/carga-productos.html), [carga-productos.js](file:///d:/Curso/POS%202025/secciones/carga-productos.js), [recepcion.html](file:///d:/Curso/POS%202025/secciones/recepcion.html), [recepcion.js](file:///d:/Curso/POS%202025/secciones/recepcion.js)):
-   - Selector obligatorio de Rubro con botón `+` en formulario, grilla de preparación e ingreso rápido.
+1. **Caché de Secciones HTML (`app.js`)**:
+   - `loadSection(section)` ahora utiliza `cache: 'no-store'` con bust de versión para que el navegador nunca sirva HTML antiguo en caché al cambiar a **Agregar Productos**.
+2. **Modal Global `#modalGestionRubros` en `index.html`**:
+   - Se mueve `#modalGestionRubros` (con `#rubros-sugerencias-list` incluido) a `index.html` y se exporta `abrirModalGestionRubros()` desde `productos.js`, permitiendo abrir el Centro de Normalización de Rubros desde **Productos**, **Agregar Productos**, **Ingreso Rápido** o **Ventas**.
+3. **Interfaz Completa de Rubros en `secciones/carga-productos.html` y `secciones/carga-productos.js`**:
+   - Botón **"Gestionar Rubros"** en la cabecera de **Carga y Preparación de Productos**.
+   - Selector obligatorio **`Rubro *`** acompañado de ambos botones: **`+`** (crear nuevo rubro) y **`⚙️`** (abrir el gestor para editar/renombrar/fusionar rubros).
+   - Alerta visual `#prod-rubro-warning` cuando se escanea/edita un producto existente en la base de datos que no tenía rubro o tenía un rubro mal escrito.
+   - Combo Box de Rubro en cada fila de la tabla **"Productos en Preparación"**.

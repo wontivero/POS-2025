@@ -3043,9 +3043,21 @@ function renderTablaGestionRubros() {
 function abrirModalGestionRubros() {
     const modalEl = document.getElementById('modalGestionRubros');
     if (!modalEl) return;
+    // Aseguramos que viva directo bajo <body> para no heredar display:none ni z-index de otros contenedores
+    if (modalEl.parentElement !== document.body) {
+        document.body.appendChild(modalEl);
+    }
+    setupGestorRubrosListeners();
     renderTablaGestionRubros();
     const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
     modal.show();
+    // Si se abrió encima de otro modal (ej. #productoModal), ajustamos el z-index del último backdrop
+    setTimeout(() => {
+        const backdrops = document.querySelectorAll('.modal-backdrop');
+        if (backdrops.length > 1) {
+            backdrops[backdrops.length - 1].style.zIndex = '1060';
+        }
+    }, 20);
 }
 
 function setupGestorRubrosListeners() {
@@ -3102,9 +3114,21 @@ function setupGestorRubrosListeners() {
         btnGestorSinRubro.onclick = () => {
             const modalEl = document.getElementById('modalGestionRubros');
             if (modalEl) bootstrap.Modal.getInstance(modalEl)?.hide();
-            if (filtroRubro) {
+            if (filtroRubro && document.body.contains(filtroRubro)) {
                 filtroRubro.value = '__SIN_RUBRO__';
                 aplicarFiltrosYRenderizar();
+            } else {
+                const navProductos = document.querySelector('a[data-section="productos"]');
+                if (navProductos) {
+                    navProductos.click();
+                    setTimeout(() => {
+                        const fr = document.getElementById('filtro-rubro');
+                        if (fr) {
+                            fr.value = '__SIN_RUBRO__';
+                            fr.dispatchEvent(new Event('change'));
+                        }
+                    }, 350);
+                }
             }
         };
     }
@@ -3144,9 +3168,21 @@ function setupGestorRubrosListeners() {
                 const rubro = btnVer.dataset.rubro;
                 const modalEl = document.getElementById('modalGestionRubros');
                 if (modalEl) bootstrap.Modal.getInstance(modalEl)?.hide();
-                if (filtroRubro) {
+                if (filtroRubro && document.body.contains(filtroRubro)) {
                     filtroRubro.value = rubro;
                     aplicarFiltrosYRenderizar();
+                } else {
+                    const navProductos = document.querySelector('a[data-section="productos"]');
+                    if (navProductos) {
+                        navProductos.click();
+                        setTimeout(() => {
+                            const fr = document.getElementById('filtro-rubro');
+                            if (fr) {
+                                fr.value = rubro;
+                                fr.dispatchEvent(new Event('change'));
+                            }
+                        }, 350);
+                    }
                 }
                 return;
             }
@@ -3290,4 +3326,4 @@ function promptSeleccionarRubroDestino(oldRubroNorm, count, opcionesRubros) {
     });
 }
 
-export { init, abrirProductoModal };
+export { init, abrirProductoModal, abrirModalGestionRubros };
