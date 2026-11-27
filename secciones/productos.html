@@ -14,6 +14,10 @@
                 <i class="fas fa-tags me-1"></i>Gestionar Rubros
                 <span id="badge-alertas-rubros" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger d-none" style="font-size: 0.68rem;">0</span>
             </button>
+            <button class="btn btn-outline-secondary fw-bold position-relative" id="btnGestionarMarcas" title="Centro de Normalización, Fusión y Gestión de Marcas">
+                <i class="fas fa-copyright me-1"></i>Gestionar Marcas
+                <span id="badge-alertas-marcas" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark d-none" style="font-size: 0.68rem;">0</span>
+            </button>
             <button class="btn btn-success" id="btnExportarProductos"><i
                     class="fas fa-file-excel me-2"></i>Exportar CSV</button>
             <button class="btn btn-info text-white" id="btnImportarProductos"><i class="fas fa-file-upload me-2"></i>Importar CSV</button>
@@ -39,9 +43,10 @@
             <div class="card-body">
                 <div class="row g-3">
                     <div class="col-md-3">
-                        <label for="filtro-marca" class="form-label">Marca:</label>
-                        <input type="text" class="form-control" id="filtro-marca" list="marcas-list-filtro">
-                        <datalist id="marcas-list-filtro"></datalist>
+                        <label for="filtro-marca" class="form-label fw-semibold">Marca:</label>
+                        <select class="form-select" id="filtro-marca">
+                            <option value="">Todas las Marcas</option>
+                        </select>
                     </div>
                     <div class="col-md-3">
                         <label for="filtro-color" class="form-label">Color:</label>
@@ -134,10 +139,10 @@
                 </div>
                 <hr>
                 <div class="col-12 mt-3">
-                    <h6 class="mb-2"><i class="fas fa-tags me-2 text-primary"></i>Asignación Masiva de Rubro (para los productos filtrados)</h6>
-                    <div class="row g-2 align-items-end">
+                    <h6 class="mb-2"><i class="fas fa-tags me-2 text-primary"></i>Asignación Masiva de Rubro y Marca (para los productos filtrados)</h6>
+                    <div class="row g-2 align-items-end mb-3">
                         <div class="col-md-6">
-                            <label for="mass-rubro-select" class="form-label small text-muted mb-1">Selecciona el Rubro Oficial a asignar a todos los productos de la lista filtrada:</label>
+                            <label for="mass-rubro-select" class="form-label small text-muted mb-1">Rubro Oficial a asignar en lote:</label>
                             <div class="input-group">
                                 <select id="mass-rubro-select" class="form-select">
                                     <option value="">-- Seleccionar Rubro Destino --</option>
@@ -155,6 +160,29 @@
                         <div class="col-md-3">
                             <button id="btnFiltrarSinRubroRapido" class="btn btn-outline-danger w-100 fw-semibold" type="button">
                                 <i class="fas fa-exclamation-triangle me-1"></i>Ver Productos Sin Rubro
+                            </button>
+                        </div>
+                    </div>
+                    <div class="row g-2 align-items-end">
+                        <div class="col-md-6">
+                            <label for="mass-marca-select" class="form-label small text-muted mb-1">Marca Oficial a asignar en lote:</label>
+                            <div class="input-group">
+                                <select id="mass-marca-select" class="form-select">
+                                    <option value="">-- Seleccionar Marca Destino --</option>
+                                </select>
+                                <button class="btn btn-outline-primary" type="button" id="btn-nueva-marca-masiva" title="Crear nueva marca">
+                                    <i class="fas fa-plus"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <button id="btnAplicarMarcaMasiva" class="btn btn-secondary w-100 fw-bold">
+                                <i class="fas fa-check-double me-1"></i>Asignar Marca en Lote
+                            </button>
+                        </div>
+                        <div class="col-md-3">
+                            <button id="btnFiltrarSinMarcaRapido" class="btn btn-outline-warning text-dark w-100 fw-semibold" type="button">
+                                <i class="fas fa-copyright me-1"></i>Ver Productos Sin Marca
                             </button>
                         </div>
                     </div>

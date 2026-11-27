@@ -1,5 +1,5 @@
 // secciones/productos.js
-import { getCollection, saveDocument, deleteDocument, formatCurrency, getTodayDate, updateDocument, capitalizeFirstLetter, showAlertModal, showConfirmationModal, roundUpToNearest50, normalizeString, showToast, fetchAndSquareImageUrl, showProgressModal, showInputModal, populateRubroSelect, promptCrearNuevoRubro, findSimilarRubro, levenshteinDistance, getListaRubrosOficiales } from '../utils.js';
+import { getCollection, saveDocument, deleteDocument, formatCurrency, getTodayDate, updateDocument, capitalizeFirstLetter, showAlertModal, showConfirmationModal, roundUpToNearest50, normalizeString, showToast, fetchAndSquareImageUrl, showProgressModal, showInputModal, populateRubroSelect, promptCrearNuevoRubro, populateMarcaSelect, promptCrearNuevaMarca, findSimilarRubro, levenshteinDistance, getListaRubrosOficiales, getListaMarcasOficiales } from '../utils.js';
 import { getFirestore, collection, onSnapshot, query, orderBy, getDocs, writeBatch, Timestamp, doc, where, addDoc, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
 import { functions } from '../firebase.js';
 import { httpsCallable } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-functions.js";
@@ -230,6 +230,11 @@ function renderProductRows(productos) {
         const isExpanded = expandedProducts.has(p.id);
         const toggleIcon = p.tieneVariantes ? `<button class="btn btn-sm btn-light p-0 me-2 toggle-variants-btn" data-product-id="${p.id}" style="width: 20px; height: 20px;"><i class="fas ${isExpanded ? 'fa-chevron-down' : 'fa-chevron-right'}"></i></button>` : '<span class="me-2" style="display: inline-block; width: 20px;"></span>';
 
+        const normMarcaRow = normalizeString(p.marca || '');
+        const marcaBadgeHtml = normMarcaRow
+            ? `<span class="badge bg-light text-dark border btn-inline-marca" style="cursor: pointer;" data-id="${p.id}" data-marca="${normMarcaRow}" title="Clic para cambiar la marca">${capitalizeFirstLetter(normMarcaRow)} <i class="fas fa-pen fa-2xs ms-1 opacity-50"></i></span>`
+            : `<span class="badge bg-light text-muted border border-dashed btn-inline-marca" style="cursor: pointer;" data-id="${p.id}" data-marca="" title="Sin marca asignada - Clic para asignar">Sin Marca <i class="fas fa-plus fa-2xs ms-1 opacity-50"></i></span>`;
+
         const normRubroRow = normalizeString(p.rubro || '');
         const rubroBadgeHtml = normRubroRow
             ? `<span class="badge bg-secondary btn-inline-rubro" style="cursor: pointer;" data-id="${p.id}" data-rubro="${normRubroRow}" title="Clic para cambiar el rubro">${capitalizeFirstLetter(normRubroRow)} <i class="fas fa-pen fa-2xs ms-1 opacity-50"></i></span>`
@@ -238,7 +243,7 @@ function renderProductRows(productos) {
         rowsHtml += `<tr class="${c} parent-product" data-id="${p.id}">
             <td><div class="d-flex align-items-center">${toggleIcon} ${p.nombre || 'N/A'}${cloudIcon}</div></td>
             <td>${vCodigo}</td>
-            <td>${capitalizeFirstLetter(p.marca) || 'N/A'}</td>
+            <td>${marcaBadgeHtml}</td>
             <td>${capitalizeFirstLetter(p.color) || 'N/A'}</td>
             <td>${rubroBadgeHtml}</td>
             <td>${vCosto}</td>
@@ -380,8 +385,13 @@ function aplicarFiltrosYRenderizar() {
     }
 
     if (filtroMarca && filtroMarca.value.trim() !== '') {
-        const marca = filtroMarca.value.toLowerCase().trim();
-        productosFiltrados = productosFiltrados.filter(p => (p.marca || '').toLowerCase().includes(marca));
+        const marcaVal = filtroMarca.value.trim();
+        if (marcaVal === '__SIN_MARCA__') {
+            productosFiltrados = productosFiltrados.filter(p => !normalizeString(p.marca || ''));
+        } else {
+            const marcaNorm = normalizeString(marcaVal);
+            productosFiltrados = productosFiltrados.filter(p => normalizeString(p.marca || '') === marcaNorm);
+        }
     }
     if (filtroColor && filtroColor.value.trim() !== '') {
         const color = filtroColor.value.toLowerCase().trim();
@@ -1516,7 +1526,22 @@ function abrirProductoModal(modo, producto = null) {
 
     if (modo === 'editar' || modo === 'duplicar') {
         productoNombre.value = producto.nombre ?? '';
-        productoMarca.value = producto.marca ?? '';
+        const marcaWarningEl = document.getElementById('producto-marca-warning');
+        const normMarcaProd = normalizeString(producto.marca ?? '');
+        populateMarcaSelect(productoMarca, { preserveValue: false });
+        if (normMarcaProd && !Array.from(productoMarca.options).some(o => o.value === normMarcaProd)) {
+            const optM = document.createElement('option');
+            optM.value = normMarcaProd;
+            optM.textContent = `⚠️ ${capitalizeFirstLetter(normMarcaProd)} (No estandarizada)`;
+            productoMarca.appendChild(optM);
+            if (marcaWarningEl) {
+                marcaWarningEl.textContent = `⚠️ La marca "${capitalizeFirstLetter(normMarcaProd)}" no está en el catálogo oficial.`;
+                marcaWarningEl.classList.remove('d-none');
+            }
+        } else if (marcaWarningEl) {
+            marcaWarningEl.classList.add('d-none');
+        }
+        productoMarca.value = normMarcaProd;
         productoColor.value = producto.color ?? '';
         const rubroWarningEl = document.getElementById('producto-rubro-warning');
         const normRubroProd = normalizeString(producto.rubro ?? '');
@@ -1679,6 +1704,12 @@ function resetProductoModal() {
         productoRubro.value = '';
         productoRubro.classList.remove('is-invalid');
     }
+    if (productoMarca) {
+        populateMarcaSelect(productoMarca, { preserveValue: false });
+        productoMarca.value = '';
+    }
+    const marcaWarningEl = document.getElementById('producto-marca-warning');
+    if (marcaWarningEl) marcaWarningEl.classList.add('d-none');
     const rubroWarningEl = document.getElementById('producto-rubro-warning');
     if (rubroWarningEl) rubroWarningEl.classList.add('d-none');
     
@@ -2274,15 +2305,21 @@ function init() {
 
     const actualizarDatalists = () => {
         const poblar = (el, lista) => { if (el) el.innerHTML = lista.map(item => `<option value="${capitalizeFirstLetter(item)}"></option>`).join(''); };
-        poblar(datalistMarcasFiltro, getMarcas());
-        poblar(datalistMarcasModal, getMarcas());
         poblar(datalistColoresFiltro, getColores());
         poblar(datalistColoresModal, getColores());
         populateRubroSelect(productoRubro, { preserveValue: true });
+        populateMarcaSelect(productoMarca, { preserveValue: true });
         populateRubroSelect(filtroRubro, {
             placeholder: 'Todos los Rubros',
             includeTodos: true,
             includeSinRubro: true,
+            showCounts: true,
+            preserveValue: true
+        });
+        populateMarcaSelect(filtroMarca, {
+            placeholder: 'Todas las Marcas',
+            includeTodos: true,
+            includeSinMarca: true,
             showCounts: true,
             preserveValue: true
         });
@@ -2293,7 +2330,15 @@ function init() {
                 preserveValue: true
             });
         }
+        const massMarcaSelect = document.getElementById('mass-marca-select');
+        if (massMarcaSelect) {
+            populateMarcaSelect(massMarcaSelect, {
+                placeholder: '-- Seleccionar Marca Destino --',
+                preserveValue: true
+            });
+        }
         actualizarBadgeAlertasRubros();
+        actualizarBadgeAlertasMarcas();
     };
     const actualizarTablaProductos = () => {
         listaCompletaProductos = getProductos();
@@ -2471,6 +2516,10 @@ function init() {
                 handleInlineRubroEdit(e.target.closest('.btn-inline-rubro'));
                 return;
             }
+            if (e.target.closest('.btn-inline-marca')) {
+                handleInlineMarcaEdit(e.target.closest('.btn-inline-marca'));
+                return;
+            }
             if (e.target.closest('.btn-social-post')) {
                 const id = e.target.closest('.btn-social-post').dataset.id;
                 // Forzamos selección inicial en Instagram al abrir
@@ -2495,7 +2544,7 @@ function init() {
     }
     if (tablaProductosHead) tablaProductosHead.addEventListener('click', handleSort);
     if (filtroProductos) filtroProductos.addEventListener('input', aplicarFiltrosYRenderizar);
-    if (filtroMarca) filtroMarca.addEventListener('input', aplicarFiltrosYRenderizar);
+    if (filtroMarca) filtroMarca.addEventListener('change', aplicarFiltrosYRenderizar);
     if (filtroColor) filtroColor.addEventListener('input', aplicarFiltrosYRenderizar);
     if (filtroRubro) filtroRubro.addEventListener('change', aplicarFiltrosYRenderizar);
     if (filtroWeb) filtroWeb.addEventListener('change', aplicarFiltrosYRenderizar);
@@ -2556,17 +2605,56 @@ function init() {
 
     const btnGestionarRubrosModal = document.getElementById('btn-gestionar-rubros-modal');
     if (btnGestionarRubrosModal) {
-        btnGestionarRubrosModal.onclick = () => abrirModalGestionRubros();
+        btnGestionarRubrosModal.onclick = () => abrirModalGestionRubros('rubros');
     }
 
     const btnGestionarRubros = document.getElementById('btnGestionarRubros');
     if (btnGestionarRubros) {
-        btnGestionarRubros.onclick = () => abrirModalGestionRubros();
+        btnGestionarRubros.onclick = () => abrirModalGestionRubros('rubros');
+    }
+
+    const btnGestionarMarcas = document.getElementById('btnGestionarMarcas');
+    if (btnGestionarMarcas) {
+        btnGestionarMarcas.onclick = () => abrirModalGestionRubros('marcas');
+    }
+
+    const btnGestionarMarcasModal = document.getElementById('btn-gestionar-marcas-modal');
+    if (btnGestionarMarcasModal) {
+        btnGestionarMarcasModal.onclick = () => abrirModalGestionRubros('marcas');
+    }
+
+    const btnNuevaMarcaModal = document.getElementById('btn-nueva-marca-modal');
+    if (btnNuevaMarcaModal) {
+        btnNuevaMarcaModal.onclick = async () => {
+            await promptCrearNuevaMarca(productoMarca);
+            actualizarDatalists();
+        };
+    }
+
+    if (productoMarca) {
+        productoMarca.onchange = () => {
+            const marcaWarningEl = document.getElementById('producto-marca-warning');
+            if (marcaWarningEl) marcaWarningEl.classList.add('d-none');
+        };
+    }
+
+    const btnNuevaMarcaMasiva = document.getElementById('btn-nueva-marca-masiva');
+    if (btnNuevaMarcaMasiva) {
+        btnNuevaMarcaMasiva.onclick = async () => {
+            const massMarcaSelect = document.getElementById('mass-marca-select');
+            await promptCrearNuevaMarca(massMarcaSelect);
+            actualizarDatalists();
+        };
     }
 
     const btnAplicarRubroMasivo = document.getElementById('btnAplicarRubroMasivo');
     if (btnAplicarRubroMasivo) {
         btnAplicarRubroMasivo.onclick = handleAsignarRubroMasivo;
+    }
+
+    const btnAplicarMarcaMasiva = document.getElementById('btnAplicarMarcaMasiva');
+    if (btnAplicarMarcaMasiva) {
+        btnAplicarMarcaMasiva.onclick = handleAsignarMarcaMasiva;
     }
 
     const btnFiltrarSinRubroRapido = document.getElementById('btnFiltrarSinRubroRapido');
@@ -2576,6 +2664,17 @@ function init() {
                 filtroRubro.value = '__SIN_RUBRO__';
                 aplicarFiltrosYRenderizar();
                 showToast('Mostrando productos sin rubro asignado.', 'fa-filter', '#f6c23e');
+            }
+        };
+    }
+
+    const btnFiltrarSinMarcaRapido = document.getElementById('btnFiltrarSinMarcaRapido');
+    if (btnFiltrarSinMarcaRapido) {
+        btnFiltrarSinMarcaRapido.onclick = () => {
+            if (filtroMarca) {
+                filtroMarca.value = '__SIN_MARCA__';
+                aplicarFiltrosYRenderizar();
+                showToast('Mostrando productos sin marca asignada.', 'fa-filter', '#f6c23e');
             }
         };
     }
@@ -2668,57 +2767,94 @@ function init() {
 }
 
 // ============================================================================
-// --- CENTRO DE NORMALIZACIÓN, FUSIÓN Y GESTIÓN DE RUBROS (CATÁLOGO 4500+) ---
+// --- CENTRO DE NORMALIZACIÓN, FUSIÓN Y GESTIÓN DE RUBROS Y MARCAS (4500+) ---
 // ============================================================================
 
-function analizarCatalogoRubros() {
-    const productos = getProductos() || [];
-    const rubrosColeccion = new Set((getRubros() || []).map(r => normalizeString(r)).filter(Boolean));
-    const conteoPorRubro = new Map();
-    let sinRubroCount = 0;
+let activeCatalogEntity = 'rubros'; // 'rubros' | 'marcas'
 
-    rubrosColeccion.forEach(r => conteoPorRubro.set(r, 0));
+function getEntityMeta(entity = activeCatalogEntity) {
+    if (entity === 'marcas') {
+        return {
+            entity: 'marcas',
+            field: 'marca',
+            collection: 'marcas',
+            singular: 'marca',
+            singularCap: 'Marca',
+            plural: 'marcas',
+            pluralCap: 'Marcas',
+            articulo: 'la',
+            sinValorToken: '__SIN_MARCA__',
+            filtroId: 'filtro-marca',
+            getList: getMarcas,
+            getOficiales: getListaMarcasOficiales,
+            placeholderNuevo: 'Nueva marca oficial (ej: Logitech, Samsung, Bic, Faber-Castell)...'
+        };
+    }
+    return {
+        entity: 'rubros',
+        field: 'rubro',
+        collection: 'rubros',
+        singular: 'rubro',
+        singularCap: 'Rubro',
+        plural: 'rubros',
+        pluralCap: 'Rubros',
+        articulo: 'el',
+        sinValorToken: '__SIN_RUBRO__',
+        filtroId: 'filtro-rubro',
+        getList: getRubros,
+        getOficiales: getListaRubrosOficiales,
+        placeholderNuevo: 'Nuevo rubro oficial (ej: Librería, Informática, Juguetería)...'
+    };
+}
+
+function analizarCatalogoEntidad(entity = activeCatalogEntity) {
+    const meta = getEntityMeta(entity);
+    const productos = getProductos() || [];
+    const itemsColeccion = new Set((meta.getList() || []).map(r => normalizeString(r)).filter(Boolean));
+    const conteoPorItem = new Map();
+    let sinValorCount = 0;
+
+    itemsColeccion.forEach(r => conteoPorItem.set(r, 0));
 
     productos.forEach(p => {
-        const r = normalizeString(p.rubro || '');
-        if (!r) {
-            sinRubroCount++;
+        const val = normalizeString(p[meta.field] || '');
+        if (!val) {
+            sinValorCount++;
         } else {
-            conteoPorRubro.set(r, (conteoPorRubro.get(r) || 0) + 1);
+            conteoPorItem.set(val, (conteoPorItem.get(val) || 0) + 1);
         }
     });
 
-    const todosLosRubros = Array.from(conteoPorRubro.keys()).sort((a, b) => a.localeCompare(b, 'es'));
+    const todosLosItems = Array.from(conteoPorItem.keys()).sort((a, b) => a.localeCompare(b, 'es'));
 
-    // Detectar posibles errores tipográficos (ej. "liberia", "lireria" vs "libreria")
-    const sugerenciasMap = new Map(); // typoRubro -> { target, dist, countTypo, countTarget }
-    for (let i = 0; i < todosLosRubros.length; i++) {
-        for (let j = i + 1; j < todosLosRubros.length; j++) {
-            const rA = todosLosRubros[i];
-            const rB = todosLosRubros[j];
+    // Detectar posibles errores tipográficos (ej. "liberia" vs "libreria" o "logitec" vs "logitech")
+    const sugerenciasMap = new Map();
+    for (let i = 0; i < todosLosItems.length; i++) {
+        for (let j = i + 1; j < todosLosItems.length; j++) {
+            const rA = todosLosItems[i];
+            const rB = todosLosItems[j];
             if (rA.length < 3 || rB.length < 3) continue;
             const dist = levenshteinDistance(rA, rB);
             const maxLen = Math.max(rA.length, rB.length);
             const isSimilar = (maxLen >= 5 && dist <= 2) || (maxLen >= 4 && dist === 1);
             if (isSimilar) {
-                const countA = conteoPorRubro.get(rA) || 0;
-                const countB = conteoPorRubro.get(rB) || 0;
-                // El que tiene más productos (o está en la colección oficial) es el rubro principal sugerido
+                const countA = conteoPorItem.get(rA) || 0;
+                const countB = conteoPorItem.get(rB) || 0;
                 let principal = rA;
                 let posibleTypo = rB;
-                if (countB > countA || (countB === countA && rubrosColeccion.has(rB) && !rubrosColeccion.has(rA))) {
+                if (countB > countA || (countB === countA && itemsColeccion.has(rB) && !itemsColeccion.has(rA))) {
                     principal = rB;
                     posibleTypo = rA;
                 }
-                if ((conteoPorRubro.get(posibleTypo) || 0) > 0 || rubrosColeccion.has(posibleTypo)) {
+                if ((conteoPorItem.get(posibleTypo) || 0) > 0 || itemsColeccion.has(posibleTypo)) {
                     const prev = sugerenciasMap.get(posibleTypo);
                     if (!prev || dist < prev.dist) {
                         sugerenciasMap.set(posibleTypo, {
                             typo: posibleTypo,
                             target: principal,
                             dist,
-                            countTypo: conteoPorRubro.get(posibleTypo) || 0,
-                            countTarget: conteoPorRubro.get(principal) || 0
+                            countTypo: conteoPorItem.get(posibleTypo) || 0,
+                            countTarget: conteoPorItem.get(principal) || 0
                         });
                     }
                 }
@@ -2727,10 +2863,10 @@ function analizarCatalogoRubros() {
     }
 
     return {
-        todosLosRubros,
-        rubrosColeccion,
-        conteoPorRubro,
-        sinRubroCount,
+        todosLosItems,
+        itemsColeccion,
+        conteoPorItem,
+        sinValorCount,
         sugerencias: Array.from(sugerenciasMap.values()).sort((a, b) => b.countTypo - a.countTypo)
     };
 }
@@ -2738,15 +2874,155 @@ function analizarCatalogoRubros() {
 function actualizarBadgeAlertasRubros() {
     const badge = document.getElementById('badge-alertas-rubros');
     if (!badge) return;
-    const { sinRubroCount, sugerencias } = analizarCatalogoRubros();
-    const totalAlertas = (sinRubroCount > 0 ? 1 : 0) + sugerencias.length;
-    if (sinRubroCount > 0 || sugerencias.length > 0) {
-        badge.textContent = sinRubroCount > 0 ? `${sinRubroCount}` : `${totalAlertas}`;
-        badge.title = `${sinRubroCount} productos sin rubro | ${sugerencias.length} posibles duplicados/errores de tipeo`;
+    const { sinValorCount, sugerencias } = analizarCatalogoEntidad('rubros');
+    if (sinValorCount > 0 || sugerencias.length > 0) {
+        badge.textContent = sinValorCount > 0 ? `${sinValorCount}` : `${sugerencias.length}`;
+        badge.title = `${sinValorCount} productos sin rubro | ${sugerencias.length} posibles duplicados/errores de tipeo`;
         badge.classList.remove('d-none');
     } else {
         badge.classList.add('d-none');
     }
+}
+
+function actualizarBadgeAlertasMarcas() {
+    const badge = document.getElementById('badge-alertas-marcas');
+    if (!badge) return;
+    const { sugerencias } = analizarCatalogoEntidad('marcas');
+    if (sugerencias.length > 0) {
+        badge.textContent = `${sugerencias.length}`;
+        badge.title = `${sugerencias.length} posibles marcas duplicadas o mal escritas`;
+        badge.classList.remove('d-none');
+    } else {
+        badge.classList.add('d-none');
+    }
+}
+
+function handleInlineMarcaEdit(badgeEl) {
+    const prodId = badgeEl.dataset.id;
+    const producto = listaCompletaProductos.find(p => p.id === prodId);
+    if (!producto) return;
+
+    const td = badgeEl.closest('td');
+    if (!td || td.querySelector('select')) return;
+
+    const currentMarcaNorm = normalizeString(producto.marca || '');
+    const wrapper = document.createElement('div');
+    wrapper.className = 'd-flex align-items-center gap-1';
+
+    const select = document.createElement('select');
+    select.className = 'form-select form-select-sm py-0 px-2';
+    select.style.minWidth = '140px';
+    populateMarcaSelect(select, { placeholder: '-- Sin Marca --', preserveValue: false });
+
+    if (currentMarcaNorm && !Array.from(select.options).some(o => o.value === currentMarcaNorm)) {
+        const opt = document.createElement('option');
+        opt.value = currentMarcaNorm;
+        opt.textContent = capitalizeFirstLetter(currentMarcaNorm);
+        select.appendChild(opt);
+    }
+    select.value = currentMarcaNorm;
+
+    const btnAdd = document.createElement('button');
+    btnAdd.type = 'button';
+    btnAdd.className = 'btn btn-sm btn-outline-primary py-0 px-1';
+    btnAdd.title = 'Crear nueva marca';
+    btnAdd.innerHTML = '<i class="fas fa-plus fa-xs"></i>';
+
+    wrapper.appendChild(select);
+    wrapper.appendChild(btnAdd);
+
+    const originalHtml = td.innerHTML;
+    td.innerHTML = '';
+    td.appendChild(wrapper);
+    select.focus();
+
+    let isSaving = false;
+
+    const restoreCell = (marcaNorm) => {
+        const m = normalizeString(marcaNorm || '');
+        td.innerHTML = m
+            ? `<span class="badge bg-light text-dark border btn-inline-marca" style="cursor: pointer;" data-id="${producto.id}" data-marca="${m}" title="Clic para cambiar la marca">${capitalizeFirstLetter(m)} <i class="fas fa-pen fa-2xs ms-1 opacity-50"></i></span>`
+            : `<span class="badge bg-light text-muted border border-dashed btn-inline-marca" style="cursor: pointer;" data-id="${producto.id}" data-marca="" title="Sin marca asignada - Clic para asignar">Sin Marca <i class="fas fa-plus fa-2xs ms-1 opacity-50"></i></span>`;
+    };
+
+    const saveMarcaChange = async (nuevoVal) => {
+        if (isSaving) return;
+        const nuevaMarcaNorm = normalizeString(nuevoVal || '');
+        if (nuevaMarcaNorm === currentMarcaNorm) {
+            restoreCell(currentMarcaNorm);
+            return;
+        }
+        isSaving = true;
+        select.disabled = true;
+        btnAdd.disabled = true;
+        try {
+            await updateDoc(doc(db, 'productos', producto.id), { marca: nuevaMarcaNorm });
+            if (nuevaMarcaNorm) await addUniqueItem('marcas', nuevaMarcaNorm);
+            producto.marca = nuevaMarcaNorm;
+            restoreCell(nuevaMarcaNorm);
+            actualizarBadgeAlertasMarcas();
+            showToast(nuevaMarcaNorm ? `Marca actualizada a "${capitalizeFirstLetter(nuevaMarcaNorm)}"` : 'Marca quitada (Sin Marca)', 'fa-check', '#1cc88a');
+        } catch (err) {
+            console.error('Error al actualizar marca inline:', err);
+            showToast('No se pudo actualizar la marca.', 'fa-times-circle', '#dc3545');
+            td.innerHTML = originalHtml;
+        }
+    };
+
+    select.onchange = () => saveMarcaChange(select.value);
+    select.onkeydown = (ev) => {
+        if (ev.key === 'Escape') restoreCell(currentMarcaNorm);
+    };
+    select.onblur = (ev) => {
+        if (ev.relatedTarget === btnAdd) return;
+        setTimeout(() => {
+            if (!isSaving && td.contains(wrapper)) restoreCell(currentMarcaNorm);
+        }, 180);
+    };
+
+    btnAdd.onclick = async (ev) => {
+        ev.stopPropagation();
+        isSaving = true;
+        const creada = await promptCrearNuevaMarca(select);
+        isSaving = false;
+        if (creada) {
+            await saveMarcaChange(creada);
+        } else {
+            restoreCell(currentMarcaNorm);
+        }
+    };
+}
+
+async function handleAsignarMarcaMasiva() {
+    const massMarcaSelect = document.getElementById('mass-marca-select');
+    const nuevaMarcaNorm = normalizeString(massMarcaSelect?.value || '');
+    if (!nuevaMarcaNorm) {
+        await showAlertModal('Selecciona primero la Marca Destino que deseas asignar.', 'Marca Requerida');
+        return;
+    }
+    if (productosFiltradosActuales.length === 0) {
+        await showAlertModal('No hay productos en la vista filtrada actual para asignar.', 'Sin Productos');
+        return;
+    }
+
+    const aModificar = productosFiltradosActuales.filter(p => normalizeString(p.marca || '') !== nuevaMarcaNorm);
+    if (aModificar.length === 0) {
+        showToast(`Los ${productosFiltradosActuales.length} productos filtrados ya tienen la marca "${capitalizeFirstLetter(nuevaMarcaNorm)}".`, 'fa-info-circle', '#0dcaf0');
+        return;
+    }
+
+    const confirmado = await showConfirmationModal(
+        `¿Estás seguro de asignar la marca <strong class="text-primary">"${capitalizeFirstLetter(nuevaMarcaNorm)}"</strong> a <strong>${aModificar.length}</strong> productos filtrados?`,
+        'Confirmar Asignación Masiva de Marca'
+    );
+    if (!confirmado) return;
+
+    await ejecutarActualizacionLoteEntidad(
+        'marcas',
+        aModificar,
+        nuevaMarcaNorm,
+        `Asignando marca "${capitalizeFirstLetter(nuevaMarcaNorm)}"`
+    );
 }
 
 function handleInlineRubroEdit(badgeEl) {
@@ -2878,60 +3154,69 @@ async function handleAsignarRubroMasivo() {
     );
     if (!confirmado) return;
 
-    await ejecutarActualizacionLoteRubros(
+    await ejecutarActualizacionLoteEntidad(
+        'rubros',
         aModificar,
         nuevoRubroNorm,
         `Asignando rubro "${capitalizeFirstLetter(nuevoRubroNorm)}"`
     );
 }
 
-async function ejecutarActualizacionLoteRubros(productosTarget, nuevoRubroNorm, tituloProgreso = 'Actualizando Rubros') {
+async function ejecutarActualizacionLoteEntidad(entity, productosTarget, nuevoValorNorm, tituloProgreso = 'Actualizando Catálogo') {
+    const meta = getEntityMeta(entity);
     const progress = showProgressModal(tituloProgreso);
     const total = productosTarget.length;
     const CHUNK_SIZE = 400; // Firestore soporta hasta 500 operaciones por writeBatch
 
     try {
-        await addUniqueItem('rubros', nuevoRubroNorm);
+        if (nuevoValorNorm) {
+            await addUniqueItem(meta.collection, nuevoValorNorm);
+        }
 
         for (let i = 0; i < total; i += CHUNK_SIZE) {
             const chunk = productosTarget.slice(i, i + CHUNK_SIZE);
             const batch = writeBatch(db);
             chunk.forEach(p => {
                 const prodRef = doc(db, 'productos', p.id);
-                batch.update(prodRef, { rubro: nuevoRubroNorm });
+                batch.update(prodRef, { [meta.field]: nuevoValorNorm });
             });
             const procesados = Math.min(i + chunk.length, total);
             const pct = total > 0 ? Math.round((procesados / total) * 100) : 100;
-            progress.update(pct, `Actualizando lote (${procesados} de ${total} productos)...`, `Rubro destino: <strong>${capitalizeFirstLetter(nuevoRubroNorm)}</strong>`);
+            const destinoLabel = nuevoValorNorm ? capitalizeFirstLetter(nuevoValorNorm) : `Sin ${meta.singularCap}`;
+            progress.update(pct, `Actualizando lote (${procesados} de ${total} productos)...`, `${meta.singularCap} destino: <strong>${destinoLabel}</strong>`);
             await batch.commit();
         }
 
+        const destinoLabel = nuevoValorNorm ? `"${capitalizeFirstLetter(nuevoValorNorm)}"` : `Sin ${meta.singularCap}`;
         progress.finish(
-            '¡Rubros Estandarizados con Éxito!',
-            `Se actualizaron <strong>${total}</strong> productos al rubro <strong>"${capitalizeFirstLetter(nuevoRubroNorm)}"</strong>.`
+            `¡${meta.pluralCap} Estandarizados con Éxito!`,
+            `Se actualizaron <strong>${total}</strong> productos a ${meta.articulo} ${meta.singular} <strong>${destinoLabel}</strong>.`
         );
     } catch (error) {
-        console.error('Error en actualización masiva de rubros:', error);
+        console.error(`Error en actualización masiva de ${meta.plural}:`, error);
         progress.error('Ocurrió un error al actualizar los productos en lote. Revisa la consola para más detalles.');
     }
 }
 
-async function eliminarRubroDeColeccion(rubroNorm) {
-    const q = query(collection(db, 'rubros'), where('nombre', '==', normalizeString(rubroNorm)));
+async function eliminarItemDeColeccion(entity, itemNorm) {
+    const meta = getEntityMeta(entity);
+    const q = query(collection(db, meta.collection), where('nombre', '==', normalizeString(itemNorm)));
     const snap = await getDocs(q);
     const promesas = [];
-    snap.forEach(d => promesas.push(deleteDoc(doc(db, 'rubros', d.id))));
+    snap.forEach(d => promesas.push(deleteDoc(doc(db, meta.collection, d.id))));
     await Promise.all(promesas);
 }
 
-async function unificarORenombrarRubro(oldRubroNorm, newRubroNorm, tituloOperacion = 'Unificando Rubros') {
-    const oldNorm = normalizeString(oldRubroNorm);
-    const newNorm = normalizeString(newRubroNorm);
-    if (!oldNorm || !newNorm || oldNorm === newNorm) return;
+async function unificarORenombrarEntidad(entity, oldItemNorm, newItemNorm, tituloOperacion = 'Unificando Catálogo') {
+    const meta = getEntityMeta(entity);
+    const oldNorm = normalizeString(oldItemNorm);
+    const newNorm = normalizeString(newItemNorm);
+    if (!oldNorm || oldNorm === newNorm) return;
+    if (entity === 'rubros' && !newNorm) return;
 
-    const afectados = (getProductos() || []).filter(p => normalizeString(p.rubro || '') === oldNorm);
-    await ejecutarActualizacionLoteRubros(afectados, newNorm, tituloOperacion);
-    await eliminarRubroDeColeccion(oldNorm);
+    const afectados = (getProductos() || []).filter(p => normalizeString(p[meta.field] || '') === oldNorm);
+    await ejecutarActualizacionLoteEntidad(entity, afectados, newNorm, tituloOperacion);
+    await eliminarItemDeColeccion(entity, oldNorm);
     renderTablaGestionRubros();
 }
 
@@ -2939,21 +3224,38 @@ function renderTablaGestionRubros() {
     const tbody = document.getElementById('tbody-gestion-rubros');
     if (!tbody) return;
 
-    const { todosLosRubros, rubrosColeccion, conteoPorRubro, sinRubroCount, sugerencias } = analizarCatalogoRubros();
+    const meta = getEntityMeta(activeCatalogEntity);
+    const { todosLosItems, itemsColeccion, conteoPorItem, sinValorCount, sugerencias } = analizarCatalogoEntidad(activeCatalogEntity);
     const mapaSugerencias = new Map(sugerencias.map(s => [s.typo, s]));
+
+    // Actualizar textos y pestañas según entidad activa ('rubros' | 'marcas')
+    const btnTabRubros = document.getElementById('btn-tab-gestor-rubros');
+    const btnTabMarcas = document.getElementById('btn-tab-gestor-marcas');
+    if (btnTabRubros && btnTabMarcas) {
+        btnTabRubros.className = activeCatalogEntity === 'rubros' ? 'btn btn-light btn-sm fw-bold px-3 active' : 'btn btn-outline-light btn-sm fw-bold px-3';
+        btnTabMarcas.className = activeCatalogEntity === 'marcas' ? 'btn btn-light btn-sm fw-bold px-3 active' : 'btn btn-outline-light btn-sm fw-bold px-3';
+    }
+    const kpiLabelTotal = document.getElementById('kpi-label-total');
+    const kpiLabelVacios = document.getElementById('kpi-label-vacios');
+    const thNombre = document.getElementById('th-gestor-nombre');
+    const inputNuevoGestor = document.getElementById('input-nuevo-rubro-gestor');
+    if (kpiLabelTotal) kpiLabelTotal.textContent = `${meta.pluralCap} en Uso / Oficiales`;
+    if (kpiLabelVacios) kpiLabelVacios.textContent = `Productos Sin ${meta.singularCap}`;
+    if (thNombre) thNombre.textContent = `Nombre de ${meta.articulo} ${meta.singularCap}`;
+    if (inputNuevoGestor) inputNuevoGestor.placeholder = meta.placeholderNuevo;
 
     // Actualizar KPIs
     const kpiTotal = document.getElementById('kpi-rubros-total');
-    const kpiSinRubro = document.getElementById('kpi-productos-sin-rubro');
+    const kpiSinValor = document.getElementById('kpi-productos-sin-rubro');
     const kpiSimilares = document.getElementById('kpi-rubros-similares');
-    const btnGestorSinRubro = document.getElementById('btn-gestor-filtrar-sin-rubro');
+    const btnGestorSinValor = document.getElementById('btn-gestor-filtrar-sin-rubro');
 
-    if (kpiTotal) kpiTotal.textContent = todosLosRubros.length;
-    if (kpiSinRubro) kpiSinRubro.textContent = sinRubroCount;
+    if (kpiTotal) kpiTotal.textContent = todosLosItems.length;
+    if (kpiSinValor) kpiSinValor.textContent = sinValorCount;
     if (kpiSimilares) kpiSimilares.textContent = sugerencias.length;
-    if (btnGestorSinRubro) {
-        if (sinRubroCount > 0) btnGestorSinRubro.classList.remove('d-none');
-        else btnGestorSinRubro.classList.add('d-none');
+    if (btnGestorSinValor) {
+        if (sinValorCount > 0) btnGestorSinValor.classList.remove('d-none');
+        else btnGestorSinValor.classList.add('d-none');
     }
 
     // Renderizar bloque de sugerencias inteligentes de fusión (1 clic)
@@ -2986,16 +3288,16 @@ function renderTablaGestionRubros() {
 
     // Filtrar por buscador interno del modal
     const filtroTexto = normalizeString(document.getElementById('input-buscar-rubro-gestor')?.value || '');
-    const rubrosFiltrados = todosLosRubros.filter(r => !filtroTexto || r.includes(filtroTexto));
+    const itemsFiltrados = todosLosItems.filter(r => !filtroTexto || r.includes(filtroTexto));
 
-    if (rubrosFiltrados.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="4" class="text-center py-4 text-muted">No se encontraron rubros con ese criterio.</td></tr>`;
+    if (itemsFiltrados.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="4" class="text-center py-4 text-muted">No se encontraron ${meta.plural} con ese criterio.</td></tr>`;
         return;
     }
 
-    tbody.innerHTML = rubrosFiltrados.map(r => {
-        const count = conteoPorRubro.get(r) || 0;
-        const esOficial = rubrosColeccion.has(r);
+    tbody.innerHTML = itemsFiltrados.map(r => {
+        const count = conteoPorItem.get(r) || 0;
+        const esOficial = itemsColeccion.has(r);
         const sug = mapaSugerencias.get(r);
 
         let estadoBadge = '';
@@ -3008,7 +3310,7 @@ function renderTablaGestionRubros() {
         }
 
         const btnOficializar = !esOficial
-            ? `<button type="button" class="btn btn-sm btn-outline-success btn-gestor-oficializar" data-rubro="${r}" title="Guardar en catálogo oficial de rubros"><i class="fas fa-check"></i></button>`
+            ? `<button type="button" class="btn btn-sm btn-outline-success btn-gestor-oficializar" data-rubro="${r}" title="Guardar en catálogo oficial"><i class="fas fa-check"></i></button>`
             : '';
 
         return `
@@ -3027,10 +3329,10 @@ function renderTablaGestionRubros() {
                         <button type="button" class="btn btn-outline-primary btn-gestor-renombrar" data-rubro="${r}" data-count="${count}" title="Corregir / Renombrar en todos los productos">
                             <i class="fas fa-pen me-1"></i>Renombrar
                         </button>
-                        <button type="button" class="btn btn-outline-info btn-gestor-fusionar" data-rubro="${r}" data-count="${count}" title="Unificar / Mover productos a otro rubro existente">
+                        <button type="button" class="btn btn-outline-info btn-gestor-fusionar" data-rubro="${r}" data-count="${count}" title="Unificar / Mover productos a otro existente">
                             <i class="fas fa-compress-arrows-alt me-1"></i>Unificar
                         </button>
-                        <button type="button" class="btn btn-outline-danger btn-gestor-eliminar" data-rubro="${r}" data-count="${count}" title="Eliminar rubro">
+                        <button type="button" class="btn btn-outline-danger btn-gestor-eliminar" data-rubro="${r}" data-count="${count}" title="Eliminar">
                             <i class="fas fa-trash"></i>
                         </button>
                     </div>
@@ -3040,18 +3342,19 @@ function renderTablaGestionRubros() {
     }).join('');
 }
 
-function abrirModalGestionRubros() {
+function abrirModalGestionRubros(entity = 'rubros') {
+    activeCatalogEntity = entity === 'marcas' ? 'marcas' : 'rubros';
     const modalEl = document.getElementById('modalGestionRubros');
     if (!modalEl) return;
-    // Aseguramos que viva directo bajo <body> para no heredar display:none ni z-index de otros contenedores
     if (modalEl.parentElement !== document.body) {
         document.body.appendChild(modalEl);
     }
+    const inputBuscar = document.getElementById('input-buscar-rubro-gestor');
+    if (inputBuscar) inputBuscar.value = '';
     setupGestorRubrosListeners();
     renderTablaGestionRubros();
     const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
     modal.show();
-    // Si se abrió encima de otro modal (ej. #productoModal), ajustamos el z-index del último backdrop
     setTimeout(() => {
         const backdrops = document.querySelectorAll('.modal-backdrop');
         if (backdrops.length > 1) {
@@ -3061,6 +3364,25 @@ function abrirModalGestionRubros() {
 }
 
 function setupGestorRubrosListeners() {
+    const btnTabRubros = document.getElementById('btn-tab-gestor-rubros');
+    const btnTabMarcas = document.getElementById('btn-tab-gestor-marcas');
+    if (btnTabRubros) {
+        btnTabRubros.onclick = () => {
+            activeCatalogEntity = 'rubros';
+            const inputBuscar = document.getElementById('input-buscar-rubro-gestor');
+            if (inputBuscar) inputBuscar.value = '';
+            renderTablaGestionRubros();
+        };
+    }
+    if (btnTabMarcas) {
+        btnTabMarcas.onclick = () => {
+            activeCatalogEntity = 'marcas';
+            const inputBuscar = document.getElementById('input-buscar-rubro-gestor');
+            if (inputBuscar) inputBuscar.value = '';
+            renderTablaGestionRubros();
+        };
+    }
+
     const inputBuscar = document.getElementById('input-buscar-rubro-gestor');
     if (inputBuscar) {
         inputBuscar.oninput = () => renderTablaGestionRubros();
@@ -3070,34 +3392,35 @@ function setupGestorRubrosListeners() {
     const inputNuevoGestor = document.getElementById('input-nuevo-rubro-gestor');
     if (btnCrearGestor && inputNuevoGestor) {
         const crearDesdeGestor = async () => {
+            const meta = getEntityMeta(activeCatalogEntity);
             const raw = inputNuevoGestor.value.trim();
             const norm = normalizeString(raw);
             if (!norm) {
-                showToast('Escribe un nombre para el nuevo rubro.', 'fa-exclamation-triangle', '#f6c23e');
+                showToast(`Escribe un nombre para ${meta.articulo} nuev${meta.articulo === 'la' ? 'a' : 'o'} ${meta.singular}.`, 'fa-exclamation-triangle', '#f6c23e');
                 return;
             }
-            const existentes = getListaRubrosOficiales();
+            const existentes = meta.getOficiales();
             if (existentes.includes(norm)) {
-                await addUniqueItem('rubros', norm);
+                await addUniqueItem(meta.collection, norm);
                 inputNuevoGestor.value = '';
                 renderTablaGestionRubros();
-                showToast(`El rubro "${capitalizeFirstLetter(norm)}" ya existe y está activo.`, 'fa-info-circle', '#0dcaf0');
+                showToast(`${capitalizeFirstLetter(meta.articulo)} ${meta.singular} "${capitalizeFirstLetter(norm)}" ya existe y está activ${meta.articulo === 'la' ? 'a' : 'o'}.`, 'fa-info-circle', '#0dcaf0');
                 return;
             }
             const similar = findSimilarRubro(norm, existentes);
             if (similar) {
                 const usarExistente = await showConfirmationModal(
-                    `Ya existe un rubro muy parecido: <strong class="text-primary">"${capitalizeFirstLetter(similar)}"</strong>.<br><br>
-                    ¿Seguro que deseas crear <strong>"${capitalizeFirstLetter(norm)}"</strong> como un rubro separado?`,
-                    'Posible Rubro Duplicado',
+                    `Ya existe un${meta.articulo === 'la' ? 'a' : ''} ${meta.singular} muy parecid${meta.articulo === 'la' ? 'a' : 'o'}: <strong class="text-primary">"${capitalizeFirstLetter(similar)}"</strong>.<br><br>
+                    ¿Seguro que deseas crear <strong>"${capitalizeFirstLetter(norm)}"</strong> por separado?`,
+                    `Posible ${meta.singularCap} Duplicad${meta.articulo === 'la' ? 'a' : 'o'}`,
                     { confirmText: `Sí, crear "${capitalizeFirstLetter(norm)}"`, cancelText: 'Cancelar' }
                 );
                 if (!usarExistente) return;
             }
-            await addUniqueItem('rubros', norm);
+            await addUniqueItem(meta.collection, norm);
             inputNuevoGestor.value = '';
             renderTablaGestionRubros();
-            showToast(`Rubro "${capitalizeFirstLetter(norm)}" creado correctamente.`, 'fa-check-circle', '#1cc88a');
+            showToast(`${meta.singularCap} "${capitalizeFirstLetter(norm)}" cread${meta.articulo === 'la' ? 'a' : 'o'} correctamente.`, 'fa-check-circle', '#1cc88a');
         };
 
         btnCrearGestor.onclick = crearDesdeGestor;
@@ -3109,23 +3432,25 @@ function setupGestorRubrosListeners() {
         };
     }
 
-    const btnGestorSinRubro = document.getElementById('btn-gestor-filtrar-sin-rubro');
-    if (btnGestorSinRubro) {
-        btnGestorSinRubro.onclick = () => {
+    const btnGestorSinValor = document.getElementById('btn-gestor-filtrar-sin-rubro');
+    if (btnGestorSinValor) {
+        btnGestorSinValor.onclick = () => {
+            const meta = getEntityMeta(activeCatalogEntity);
             const modalEl = document.getElementById('modalGestionRubros');
             if (modalEl) bootstrap.Modal.getInstance(modalEl)?.hide();
-            if (filtroRubro && document.body.contains(filtroRubro)) {
-                filtroRubro.value = '__SIN_RUBRO__';
+            const targetFiltro = document.getElementById(meta.filtroId);
+            if (targetFiltro && document.body.contains(targetFiltro)) {
+                targetFiltro.value = meta.sinValorToken;
                 aplicarFiltrosYRenderizar();
             } else {
                 const navProductos = document.querySelector('a[data-section="productos"]');
                 if (navProductos) {
                     navProductos.click();
                     setTimeout(() => {
-                        const fr = document.getElementById('filtro-rubro');
-                        if (fr) {
-                            fr.value = '__SIN_RUBRO__';
-                            fr.dispatchEvent(new Event('change'));
+                        const tf = document.getElementById(meta.filtroId);
+                        if (tf) {
+                            tf.value = meta.sinValorToken;
+                            tf.dispatchEvent(new Event('change'));
                         }
                     }, 350);
                 }
@@ -3138,15 +3463,16 @@ function setupGestorRubrosListeners() {
         sugList.onclick = async (e) => {
             const btn = e.target.closest('.btn-unificar-sugerencia');
             if (!btn) return;
+            const meta = getEntityMeta(activeCatalogEntity);
             const typo = btn.dataset.typo;
             const target = btn.dataset.target;
             const confirmado = await showConfirmationModal(
-                `¿Deseas unificar todos los productos del rubro <strong class="text-danger">"${capitalizeFirstLetter(typo)}"</strong> dentro del rubro oficial <strong class="text-primary">"${capitalizeFirstLetter(target)}"</strong>?<br><br>
-                El rubro mal escrito se eliminará automáticamente del listado.`,
+                `¿Deseas unificar todos los productos de ${meta.articulo} ${meta.singular} <strong class="text-danger">"${capitalizeFirstLetter(typo)}"</strong> dentro de ${meta.articulo} ${meta.singular} oficial <strong class="text-primary">"${capitalizeFirstLetter(target)}"</strong>?<br><br>
+                Se eliminará automáticamente el nombre mal escrito del listado.`,
                 'Confirmar Unificación Inteligente'
             );
             if (confirmado) {
-                await unificarORenombrarRubro(typo, target, `Unificando "${capitalizeFirstLetter(typo)}" en "${capitalizeFirstLetter(target)}"`);
+                await unificarORenombrarEntidad(activeCatalogEntity, typo, target, `Unificando "${capitalizeFirstLetter(typo)}" en "${capitalizeFirstLetter(target)}"`);
             }
         };
     }
@@ -3154,32 +3480,35 @@ function setupGestorRubrosListeners() {
     const tbody = document.getElementById('tbody-gestion-rubros');
     if (tbody) {
         tbody.onclick = async (e) => {
+            const meta = getEntityMeta(activeCatalogEntity);
+
             const btnOficializar = e.target.closest('.btn-gestor-oficializar');
             if (btnOficializar) {
-                const rubro = btnOficializar.dataset.rubro;
-                await addUniqueItem('rubros', rubro);
+                const item = btnOficializar.dataset.rubro;
+                await addUniqueItem(meta.collection, item);
                 renderTablaGestionRubros();
-                showToast(`Rubro "${capitalizeFirstLetter(rubro)}" guardado como oficial.`, 'fa-check', '#1cc88a');
+                showToast(`${meta.singularCap} "${capitalizeFirstLetter(item)}" guardad${meta.articulo === 'la' ? 'a' : 'o'} como oficial.`, 'fa-check', '#1cc88a');
                 return;
             }
 
             const btnVer = e.target.closest('.btn-gestor-ver');
             if (btnVer) {
-                const rubro = btnVer.dataset.rubro;
+                const item = btnVer.dataset.rubro;
                 const modalEl = document.getElementById('modalGestionRubros');
                 if (modalEl) bootstrap.Modal.getInstance(modalEl)?.hide();
-                if (filtroRubro && document.body.contains(filtroRubro)) {
-                    filtroRubro.value = rubro;
+                const targetFiltro = document.getElementById(meta.filtroId);
+                if (targetFiltro && document.body.contains(targetFiltro)) {
+                    targetFiltro.value = item;
                     aplicarFiltrosYRenderizar();
                 } else {
                     const navProductos = document.querySelector('a[data-section="productos"]');
                     if (navProductos) {
                         navProductos.click();
                         setTimeout(() => {
-                            const fr = document.getElementById('filtro-rubro');
-                            if (fr) {
-                                fr.value = rubro;
-                                fr.dispatchEvent(new Event('change'));
+                            const tf = document.getElementById(meta.filtroId);
+                            if (tf) {
+                                tf.value = item;
+                                tf.dispatchEvent(new Event('change'));
                             }
                         }, 350);
                     }
@@ -3189,103 +3518,116 @@ function setupGestorRubrosListeners() {
 
             const btnRenombrar = e.target.closest('.btn-gestor-renombrar');
             if (btnRenombrar) {
-                const oldRubro = btnRenombrar.dataset.rubro;
+                const oldItem = btnRenombrar.dataset.rubro;
                 const count = parseInt(btnRenombrar.dataset.count) || 0;
                 const nuevoRaw = await showInputModal(
-                    `Renombrar Rubro "${capitalizeFirstLetter(oldRubro)}"`,
+                    `Renombrar ${meta.singularCap} "${capitalizeFirstLetter(oldItem)}"`,
                     `Ingresa el nuevo nombre corregido. Se actualizarán automáticamente los ${count} productos asociados:`,
                     {
-                        defaultValue: capitalizeFirstLetter(oldRubro),
+                        defaultValue: capitalizeFirstLetter(oldItem),
                         confirmText: 'Renombrar en Cascada'
                     }
                 );
                 if (!nuevoRaw) return;
                 const nuevoNorm = normalizeString(nuevoRaw);
-                if (!nuevoNorm || nuevoNorm === oldRubro) return;
+                if (!nuevoNorm || nuevoNorm === oldItem) return;
 
                 const confirmado = await showConfirmationModal(
-                    `¿Confirmas cambiar el rubro <strong>"${capitalizeFirstLetter(oldRubro)}"</strong> por <strong class="text-primary">"${capitalizeFirstLetter(nuevoNorm)}"</strong> en <strong>${count}</strong> productos?`,
+                    `¿Confirmas cambiar ${meta.articulo} ${meta.singular} <strong>"${capitalizeFirstLetter(oldItem)}"</strong> por <strong class="text-primary">"${capitalizeFirstLetter(nuevoNorm)}"</strong> en <strong>${count}</strong> productos?`,
                     'Confirmar Cambio de Nombre'
                 );
                 if (confirmado) {
-                    await unificarORenombrarRubro(oldRubro, nuevoNorm, `Renombrando "${capitalizeFirstLetter(oldRubro)}" a "${capitalizeFirstLetter(nuevoNorm)}"`);
+                    await unificarORenombrarEntidad(activeCatalogEntity, oldItem, nuevoNorm, `Renombrando "${capitalizeFirstLetter(oldItem)}" a "${capitalizeFirstLetter(nuevoNorm)}"`);
                 }
                 return;
             }
 
             const btnFusionar = e.target.closest('.btn-gestor-fusionar');
             if (btnFusionar) {
-                const oldRubro = btnFusionar.dataset.rubro;
+                const oldItem = btnFusionar.dataset.rubro;
                 const count = parseInt(btnFusionar.dataset.count) || 0;
-                const otrosRubros = getListaRubrosOficiales().filter(r => r !== oldRubro);
-                if (otrosRubros.length === 0) {
-                    await showAlertModal('No hay otros rubros disponibles para fusionar.');
+                const otrosItems = meta.getOficiales().filter(r => r !== oldItem);
+                if (otrosItems.length === 0) {
+                    await showAlertModal(`No hay otr${meta.articulo === 'la' ? 'as' : 'os'} ${meta.plural} disponibles para fusionar.`);
                     return;
                 }
 
-                const destinoNorm = await promptSeleccionarRubroDestino(oldRubro, count, otrosRubros);
+                const destinoNorm = await promptSeleccionarDestinoEntidad(activeCatalogEntity, oldItem, count, otrosItems);
                 if (!destinoNorm) return;
 
-                await unificarORenombrarRubro(oldRubro, destinoNorm, `Unificando "${capitalizeFirstLetter(oldRubro)}" en "${capitalizeFirstLetter(destinoNorm)}"`);
+                await unificarORenombrarEntidad(activeCatalogEntity, oldItem, destinoNorm, `Unificando "${capitalizeFirstLetter(oldItem)}" en "${capitalizeFirstLetter(destinoNorm)}"`);
                 return;
             }
 
             const btnEliminar = e.target.closest('.btn-gestor-eliminar');
             if (btnEliminar) {
-                const rubro = btnEliminar.dataset.rubro;
+                const item = btnEliminar.dataset.rubro;
                 const count = parseInt(btnEliminar.dataset.count) || 0;
                 if (count > 0) {
-                    const otrosRubros = getListaRubrosOficiales().filter(r => r !== rubro);
+                    const otrosItems = meta.getOficiales().filter(r => r !== item);
+                    if (activeCatalogEntity === 'marcas') {
+                        const accion = await showConfirmationModal(
+                            `La marca <strong>"${capitalizeFirstLetter(item)}"</strong> tiene <strong>${count} productos</strong> asociados.<br><br>
+                            ¿Deseas quitarles esta marca (dejarlos como <em>Sin Marca</em>) y eliminar <strong>"${capitalizeFirstLetter(item)}"</strong> del catálogo?`,
+                            'Eliminar Marca con Productos',
+                            { confirmText: 'Sí, quitar marca y eliminar', cancelText: 'Cancelar' }
+                        );
+                        if (accion) {
+                            await unificarORenombrarEntidad('marcas', item, '', `Quitando marca "${capitalizeFirstLetter(item)}"`);
+                        }
+                        return;
+                    }
                     const reasignar = await showConfirmationModal(
-                        `El rubro <strong>"${capitalizeFirstLetter(rubro)}"</strong> tiene <strong>${count} productos</strong> asociados.<br><br>
-                        Para mantener todos los productos con un rubro obligatorio, selecciona a qué rubro deseas moverlos antes de eliminar <strong>"${capitalizeFirstLetter(rubro)}"</strong>.`,
+                        `El rubro <strong>"${capitalizeFirstLetter(item)}"</strong> tiene <strong>${count} productos</strong> asociados.<br><br>
+                        Para mantener todos los productos con un rubro obligatorio, selecciona a qué rubro deseas moverlos antes de eliminar <strong>"${capitalizeFirstLetter(item)}"</strong>.`,
                         'Rubro con Productos Asociados',
                         { confirmText: 'Elegir Rubro Destino', cancelText: 'Cancelar' }
                     );
-                    if (reasignar && otrosRubros.length > 0) {
-                        const destinoNorm = await promptSeleccionarRubroDestino(rubro, count, otrosRubros);
+                    if (reasignar && otrosItems.length > 0) {
+                        const destinoNorm = await promptSeleccionarDestinoEntidad('rubros', item, count, otrosItems);
                         if (destinoNorm) {
-                            await unificarORenombrarRubro(rubro, destinoNorm, `Reasignando y eliminando "${capitalizeFirstLetter(rubro)}"`);
+                            await unificarORenombrarEntidad('rubros', item, destinoNorm, `Reasignando y eliminando "${capitalizeFirstLetter(item)}"`);
                         }
                     }
                     return;
                 }
 
                 const confirmado = await showConfirmationModal(
-                    `¿Deseas eliminar el rubro vacío <strong>"${capitalizeFirstLetter(rubro)}"</strong> del catálogo?`,
-                    'Eliminar Rubro'
+                    `¿Deseas eliminar ${meta.articulo} ${meta.singular} vací${meta.articulo === 'la' ? 'a' : 'o'} <strong>"${capitalizeFirstLetter(item)}"</strong> del catálogo?`,
+                    `Eliminar ${meta.singularCap}`
                 );
                 if (confirmado) {
-                    await eliminarRubroDeColeccion(rubro);
+                    await eliminarItemDeColeccion(activeCatalogEntity, item);
                     renderTablaGestionRubros();
-                    showToast(`Rubro "${capitalizeFirstLetter(rubro)}" eliminado.`, 'fa-trash', '#1cc88a');
+                    showToast(`${meta.singularCap} "${capitalizeFirstLetter(item)}" eliminad${meta.articulo === 'la' ? 'a' : 'o'}.`, 'fa-trash', '#1cc88a');
                 }
             }
         };
     }
 }
 
-function promptSeleccionarRubroDestino(oldRubroNorm, count, opcionesRubros) {
+function promptSeleccionarDestinoEntidad(entity, oldItemNorm, count, opciones) {
+    const meta = getEntityMeta(entity);
     return new Promise((resolve) => {
         let modalEl = document.getElementById('selectRubroDestinoModal');
         if (modalEl) modalEl.remove();
 
-        const optionsHtml = opcionesRubros.map(r => `<option value="${r}">${capitalizeFirstLetter(r)}</option>`).join('');
-        const similar = findSimilarRubro(oldRubroNorm, opcionesRubros);
+        const optionsHtml = opciones.map(r => `<option value="${r}">${capitalizeFirstLetter(r)}</option>`).join('');
+        const similar = findSimilarRubro(oldItemNorm, opciones);
 
         const modalHtml = `
             <div class="modal fade" id="selectRubroDestinoModal" tabindex="-1" aria-hidden="true" style="z-index: 1080;">
               <div class="modal-dialog modal-dialog-centered">
                 <div class="modal-content shadow-lg border-0" style="border-radius: 1rem;">
                   <div class="modal-header bg-primary text-white" style="border-top-left-radius: 1rem; border-top-right-radius: 1rem;">
-                    <h5 class="modal-title fw-bold"><i class="fas fa-compress-arrows-alt me-2"></i>Unificar Rubro</h5>
+                    <h5 class="modal-title fw-bold"><i class="fas fa-compress-arrows-alt me-2"></i>Unificar ${meta.singularCap}</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                   </div>
                   <div class="modal-body p-4">
-                    <p class="mb-3">Se moverán <strong>${count} productos</strong> del rubro <span class="badge bg-secondary">${capitalizeFirstLetter(oldRubroNorm)}</span> hacia el siguiente rubro oficial:</p>
-                    <label class="form-label fw-bold small text-muted">Seleccionar Rubro Destino:</label>
+                    <p class="mb-3">Se moverán <strong>${count} productos</strong> de ${meta.articulo} ${meta.singular} <span class="badge bg-secondary">${capitalizeFirstLetter(oldItemNorm)}</span> hacia ${meta.articulo} siguiente ${meta.singular} oficial:</p>
+                    <label class="form-label fw-bold small text-muted">Seleccionar ${meta.singularCap} Destino:</label>
                     <select class="form-select form-select-lg mb-2" id="select-rubro-destino-input">
-                        <option value="">-- Elegir Rubro Destino --</option>
+                        <option value="">-- Elegir ${meta.singularCap} Destino --</option>
                         ${optionsHtml}
                     </select>
                     ${similar ? `<div class="form-text text-primary fw-bold"><i class="fas fa-magic me-1"></i>Sugerencia automática: "${capitalizeFirstLetter(similar)}"</div>` : ''}

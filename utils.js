@@ -4,7 +4,7 @@ import {
     collection, addDoc, getDocs, runTransaction, doc, query, orderBy, where, updateDoc, deleteDoc, getDoc, setDoc
 } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
 import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-storage.js";
-import { getAppConfig, getClientes, getRubros, getProductos } from './secciones/dataManager.js'; // <-- IMPORTAMOS LOS GETTERS
+import { getAppConfig, getClientes, getRubros, getMarcas, getProductos } from './secciones/dataManager.js'; // <-- IMPORTAMOS LOS GETTERS
 
 /**
  * Obtiene los datos más actualizados del cliente combinando el snapshot de la venta con el caché en vivo.
@@ -2474,6 +2474,164 @@ export async function promptCrearNuevoRubro(targetSelect = null) {
     } catch (error) {
         console.error("Error al crear nuevo rubro:", error);
         showToast("No se pudo crear el rubro.", "fa-times-circle", "#dc3545");
+        return null;
+    }
+}
+
+/**
+ * Obtiene la lista unificada y ordenada de marcas oficiales (de la colección 'marcas')
+ */
+export function getListaMarcasOficiales() {
+    const rawMarcas = getMarcas() || [];
+    const setNorm = new Set();
+    rawMarcas.forEach(m => {
+        const n = normalizeString(String(m || '').trim());
+        if (n) setNorm.add(n);
+    });
+    return [...setNorm].sort((a, b) => a.localeCompare(b, 'es'));
+}
+
+/**
+ * Puebla un elemento <select> con las marcas oficiales estandarizadas.
+ */
+export function populateMarcaSelect(selectEl, opts = {}) {
+    if (!selectEl) return;
+    const {
+        placeholder = '-- Sin Marca / Genérica --',
+        includeTodos = false,
+        includeSinMarca = false,
+        showCounts = false,
+        preserveValue = true
+    } = opts;
+
+    const prevValue = preserveValue ? normalizeString(selectEl.value || '').trim() : '';
+    const marcasOficiales = getListaMarcasOficiales();
+
+    const countsMap = new Map();
+    let sinMarcaCount = 0;
+    if (showCounts || includeSinMarca) {
+        const prods = getProductos() || [];
+        prods.forEach(p => {
+            const m = normalizeString(String(p.marca || '').trim());
+            if (!m) {
+                sinMarcaCount++;
+            } else {
+                countsMap.set(m, (countsMap.get(m) || 0) + 1);
+            }
+        });
+    }
+
+    let html = `<option value="">${placeholder}</option>`;
+
+    if (includeSinMarca) {
+        html += `<option value="__SIN_MARCA__" class="text-danger fw-bold">⚠️ Sin Marca / En blanco (${sinMarcaCount})</option>`;
+    }
+
+    const allMarcasToRender = new Set(marcasOficiales);
+    if (showCounts) {
+        countsMap.forEach((_, mKey) => allMarcasToRender.add(mKey));
+    }
+
+    const sortedMarcas = [...allMarcasToRender].sort((a, b) => a.localeCompare(b, 'es'));
+    sortedMarcas.forEach(m => {
+        const label = capitalizeFirstLetter(m);
+        const countSuffix = showCounts ? ` (${countsMap.get(m) || 0})` : '';
+        html += `<option value="${m}">${label}${countSuffix}</option>`;
+    });
+
+    selectEl.innerHTML = html;
+
+    if (prevValue) {
+        if (prevValue === '__sin_marca__' && includeSinMarca) {
+            selectEl.value = '__SIN_MARCA__';
+        } else if (sortedMarcas.includes(prevValue)) {
+            selectEl.value = prevValue;
+        }
+    }
+}
+
+/**
+ * Abre un diálogo rápido para crear una nueva marca oficial con detección inteligente anti-errores de tipeo.
+ */
+export async function promptCrearNuevaMarca(targetSelect = null) {
+    const rawInput = await showInputModal(
+        'Crear Nueva Marca Oficial',
+        'Ingresa el nombre de la marca (se normalizará automáticamente para evitar duplicados por mayúsculas o tildes):',
+        {
+            inputType: 'text',
+            placeholder: 'Ej: Logitech, Samsung, Faber-Castell, Bic...',
+            confirmText: 'Guardar Marca'
+        }
+    );
+
+    if (!rawInput || !rawInput.trim()) return null;
+
+    const nuevaMarcaNorm = normalizeString(rawInput.trim()).replace(/\s+/g, ' ');
+    if (!nuevaMarcaNorm) return null;
+
+    const oficiales = getListaMarcasOficiales();
+
+    if (oficiales.includes(nuevaMarcaNorm)) {
+        showToast(`La marca <strong>${capitalizeFirstLetter(nuevaMarcaNorm)}</strong> ya existe y fue seleccionada.`, 'fa-info-circle', '#0dcaf0');
+        if (targetSelect) {
+            populateMarcaSelect(targetSelect, { preserveValue: false });
+            targetSelect.value = nuevaMarcaNorm;
+            targetSelect.dispatchEvent(new Event('change'));
+        }
+        return nuevaMarcaNorm;
+    }
+
+    const similar = findSimilarRubro(nuevaMarcaNorm, oficiales);
+    if (similar) {
+        const usarExistente = await showConfirmationModal(
+            `<div class="text-center mb-2">
+                <i class="fas fa-spell-check fa-2x text-warning mb-2"></i>
+                <h6 class="fw-bold">Posible Error de Escritura Detectado</h6>
+            </div>
+            Ingresaste <strong>"${capitalizeFirstLetter(nuevaMarcaNorm)}"</strong>, que es muy parecida a la marca existente <strong class="text-primary">"${capitalizeFirstLetter(similar)}"</strong>.<br><br>
+            ¿Deseas usar la marca existente <strong>"${capitalizeFirstLetter(similar)}"</strong> para evitar duplicados?`,
+            'Prevención de Duplicados',
+            {
+                confirmText: `Sí, usar "${capitalizeFirstLetter(similar)}"`,
+                cancelText: `No, crear "${capitalizeFirstLetter(nuevaMarcaNorm)}" igual`
+            }
+        );
+
+        if (usarExistente) {
+            if (targetSelect) {
+                populateMarcaSelect(targetSelect, { preserveValue: false });
+                targetSelect.value = similar;
+                targetSelect.dispatchEvent(new Event('change'));
+            }
+            showToast(`Se seleccionó la marca <strong>${capitalizeFirstLetter(similar)}</strong>.`, 'fa-check-circle', '#198754');
+            return similar;
+        }
+    }
+
+    try {
+        const marcasRef = collection(db, 'marcas');
+        const q = query(marcasRef, where('nombre', '==', nuevaMarcaNorm));
+        const snap = await getDocs(q);
+        if (snap.empty) {
+            await addDoc(marcasRef, { nombre: nuevaMarcaNorm });
+        }
+
+        if (targetSelect) {
+            if (!Array.from(targetSelect.options).some(o => o.value === nuevaMarcaNorm)) {
+                const opt = document.createElement('option');
+                opt.value = nuevaMarcaNorm;
+                opt.textContent = capitalizeFirstLetter(nuevaMarcaNorm);
+                targetSelect.appendChild(opt);
+            }
+            targetSelect.value = nuevaMarcaNorm;
+            targetSelect.dispatchEvent(new Event('change'));
+        }
+
+        showToast(`Marca oficial <strong>${capitalizeFirstLetter(nuevaMarcaNorm)}</strong> creada con éxito.`, 'fa-check-circle', '#198754');
+        return nuevaMarcaNorm;
+    } catch (error) {
+        console.error("Error al crear nueva marca:", error);
+        showToast("No se pudo crear la marca.", "fa-times-circle", "#dc3545");
         return null;
     }
 }

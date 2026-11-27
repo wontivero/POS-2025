@@ -3,7 +3,7 @@ import { getFirestore, doc, updateDoc, increment, collection, query, orderBy, li
 import { db } from '../firebase.js';
 import { getProductos, getRubros, getMarcas, getAppConfig } from './dataManager.js';
 import { getActiveUserProfile } from '../app.js';
-import { formatCurrency, roundUpToNearest50, showToast, showConfirmationModal, normalizeString, capitalizeFirstLetter, populateRubroSelect, promptCrearNuevoRubro } from '../utils.js';
+import { formatCurrency, roundUpToNearest50, showToast, showConfirmationModal, normalizeString, capitalizeFirstLetter, populateRubroSelect, promptCrearNuevoRubro, populateMarcaSelect, promptCrearNuevaMarca } from '../utils.js';
 
 let productosPlanos = [];
 let activeProduct = null;
@@ -93,13 +93,13 @@ export async function init() {
     productosPlanos = aplanarProductos(getProductos());
     previousProductIds = new Set(getProductos().map(p => p.id));
 
-    // Cargar datalists y selector de rubros
+    // Cargar selectores de rubros y marcas
     const populateDatalists = () => {
         if (inRubro) {
             populateRubroSelect(inRubro, { placeholder: '-- Seleccionar Rubro --', preserveValue: true });
         }
-        if (datalistMarcas) {
-            datalistMarcas.innerHTML = getMarcas().map(m => `<option value="${capitalizeFirstLetter(m)}"></option>`).join('');
+        if (inMarca) {
+            populateMarcaSelect(inMarca, { placeholder: '-- Sin Marca --', preserveValue: true });
         }
     };
     populateDatalists();
@@ -112,6 +112,26 @@ export async function init() {
         btnNuevoRubroRecepcion.onclick = async () => {
             await promptCrearNuevoRubro(inRubro);
             inRubro.classList.remove('is-invalid');
+        };
+    }
+    const btnNuevaMarcaRecepcion = document.getElementById('btn-nueva-marca-recepcion');
+    if (btnNuevaMarcaRecepcion) {
+        btnNuevaMarcaRecepcion.onclick = async () => {
+            await promptCrearNuevaMarca(inMarca);
+        };
+    }
+    const btnGestorRubrosRec = document.getElementById('btn-gestionar-rubros-recepcion');
+    if (btnGestorRubrosRec) {
+        btnGestorRubrosRec.onclick = async () => {
+            const pm = await import('./productos.js');
+            pm.abrirModalGestionRubros?.('rubros');
+        };
+    }
+    const btnGestorMarcasRec = document.getElementById('btn-gestionar-marcas-recepcion');
+    if (btnGestorMarcasRec) {
+        btnGestorMarcasRec.onclick = async () => {
+            const pm = await import('./productos.js');
+            pm.abrirModalGestionRubros?.('marcas');
         };
     }
     if (inRubro) {
@@ -481,7 +501,16 @@ function cargarProductoEnTarjeta(producto) {
     inRubro.value = normRubroRec;
     if (!normRubroRec) inRubro.classList.add('is-invalid');
     else inRubro.classList.remove('is-invalid');
-    inMarca.value = capitalizeFirstLetter(producto.marca) || '';
+
+    const normMarcaRec = normalizeString(producto.marca || '');
+    populateMarcaSelect(inMarca, { placeholder: '-- Sin Marca --', preserveValue: false });
+    if (normMarcaRec && !Array.from(inMarca.options).some(o => o.value === normMarcaRec)) {
+        const optM = document.createElement('option');
+        optM.value = normMarcaRec;
+        optM.textContent = capitalizeFirstLetter(normMarcaRec);
+        inMarca.appendChild(optM);
+    }
+    inMarca.value = normMarcaRec;
     inStockSumar.value = 0;
     if (inStockCalculado) {
         inStockCalculado.value = (parseInt(producto.stock) || 0);

@@ -45,8 +45,17 @@
                             <div class="row g-2 mb-3">
                                 <div class="col-6">
                                     <label class="form-label text-muted small fw-bold mb-1">Marca: <span id="recepcionMarcaActual" class="text-dark"></span></label>
-                                    <input type="text" class="form-control recepcion-input text-dark" id="recepcionMarca" list="recepcionMarcasList">
-                                    <datalist id="recepcionMarcasList"></datalist>
+                                    <div class="input-group">
+                                        <select class="form-select recepcion-input text-dark" id="recepcionMarca">
+                                            <option value="">-- Sin Marca --</option>
+                                        </select>
+                                        <button class="btn btn-outline-primary px-2" type="button" id="btn-nueva-marca-recepcion" title="Crear nueva marca oficial">
+                                            <i class="fas fa-plus"></i>
+                                        </button>
+                                        <button class="btn btn-outline-secondary px-2" type="button" id="btn-gestionar-marcas-recepcion" title="Gestionar marcas">
+                                            <i class="fas fa-sliders-h"></i>
+                                        </button>
+                                    </div>
                                 </div>
                                 <div class="col-6">
                                     <label class="form-label text-muted small fw-bold mb-1">Rubro <span class="text-danger">*</span>: <span id="recepcionRubroActual" class="text-dark"></span></label>
@@ -56,6 +65,9 @@
                                         </select>
                                         <button class="btn btn-outline-primary px-2" type="button" id="btn-nuevo-rubro-recepcion" title="Crear nuevo rubro oficial">
                                             <i class="fas fa-plus"></i>
+                                        </button>
+                                        <button class="btn btn-outline-secondary px-2" type="button" id="btn-gestionar-rubros-recepcion" title="Gestionar rubros">
+                                            <i class="fas fa-sliders-h"></i>
                                         </button>
                                     </div>
                                 </div>

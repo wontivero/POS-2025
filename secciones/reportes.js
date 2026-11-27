@@ -1,6 +1,6 @@
 // secciones/reportes.js
 import { getFirestore, collection, query, where, getDocs, orderBy, runTransaction, doc, getDoc } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
-import { getCollection, getDocumentById, formatCurrency, getTodayDate, generatePDF, printThermalTicket, showConfirmationModal, showAlertModal, normalizeString, facturarEnArca, marcarVentaFacturada, saveDocument, anularFacturaEnArca, marcarVentaAnuladaConNC, printReciboCobranzaThermal, generateReciboCobranzaPDF } from '../utils.js';
+import { getCollection, getDocumentById, formatCurrency, getTodayDate, generatePDF, printThermalTicket, showConfirmationModal, showAlertModal, normalizeString, facturarEnArca, marcarVentaFacturada, saveDocument, anularFacturaEnArca, marcarVentaAnuladaConNC, printReciboCobranzaThermal, generateReciboCobranzaPDF, populateRubroSelect } from '../utils.js';
 import { getAuth } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-auth.js";
 import { haySesionActiva, getSesionActivaId } from './caja.js';
 import { getCurrentUserRole } from '../app.js';
@@ -921,7 +921,7 @@ async function filtrarReporte() {
     try {
         const desde = reporteFechaDesde.value;
         const hasta = reporteFechaHasta.value;
-        const rubroFiltro = filtroReporteRubro.value.trim().toLowerCase();
+        const rubroFiltro = normalizeString(filtroReporteRubro.value.trim());
         const clienteFiltro = filtroReporteCliente.value.trim().toLowerCase();
         const vendedorFiltro = filtroReporteVendedor.value;
 
@@ -946,7 +946,7 @@ async function filtrarReporte() {
         if (rubroFiltro) {
             ventasProcesadas = [];
             ventasFetched.forEach(venta => {
-                const productosFiltrados = (venta.productos || []).filter(p => (p.rubro || 'desconocido').toLowerCase() === rubroFiltro);
+                const productosFiltrados = (venta.productos || []).filter(p => normalizeString(p.rubro || 'desconocido') === rubroFiltro);
                 if (productosFiltrados.length > 0) {
                     const totalOriginal = venta.total;
                     const nuevoTotal = productosFiltrados.reduce((sum, p) => sum + (p.precio * p.cantidad), 0);
@@ -1050,10 +1050,14 @@ function limpiarFiltros(filtrar = true) {
 }
 
 async function renderDatalistRubros() {
-    if (!datalistRubrosReporte) return;
-    const productos = await getCollection('productos');
-    const rubros = [...new Set(productos.map(p => p.rubro).filter(r => r))];
-    datalistRubrosReporte.innerHTML = rubros.map(rubro => `<option value="${rubro}"></option>`).join('');
+    if (!filtroReporteRubro) return;
+    populateRubroSelect(filtroReporteRubro, {
+        placeholder: 'Todos los Rubros',
+        includeTodos: true,
+        includeSinRubro: false,
+        showCounts: false,
+        preserveValue: true
+    });
 }
 
 async function renderDatalistClientes() {
@@ -1270,9 +1274,11 @@ export async function init() {
 
     btnGenerarReporte.addEventListener('click', filtrarReporte);
     btnQuitarFiltro.addEventListener('click', limpiarFiltros);
-    filtroReporteRubro.addEventListener('input', filtrarReporte);
+    filtroReporteRubro.addEventListener('change', filtrarReporte);
     filtroReporteCliente.addEventListener('input', filtrarReporte);
     if (filtroReporteVendedor) filtroReporteVendedor.addEventListener('change', filtrarReporte);
+    document.addEventListener('rubros-updated', renderDatalistRubros);
+    document.addEventListener('productos-updated', renderDatalistRubros);
     if (btnExportarReporteDiario) {
         btnExportarReporteDiario.addEventListener('click', exportarReporteDiarioAExcel);
     }

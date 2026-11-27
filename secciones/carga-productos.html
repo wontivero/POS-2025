@@ -1,9 +1,14 @@
 <section id="seccion-carga-productos">
     <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
         <h2 class="mb-0">Carga y Preparación de Productos</h2>
-        <button type="button" class="btn btn-outline-primary rounded-pill shadow-sm fw-bold" id="btn-gestionar-rubros-carga-header" title="Crear, renombrar o fusionar rubros oficiales">
-            <i class="fas fa-tags me-2"></i>Gestionar Rubros
-        </button>
+        <div class="d-flex gap-2">
+            <button type="button" class="btn btn-outline-primary rounded-pill shadow-sm fw-bold" id="btn-gestionar-rubros-carga-header" title="Crear, renombrar o fusionar rubros oficiales">
+                <i class="fas fa-tags me-2"></i>Gestionar Rubros
+            </button>
+            <button type="button" class="btn btn-outline-secondary rounded-pill shadow-sm fw-bold" id="btn-gestionar-marcas-carga-header" title="Crear, renombrar o fusionar marcas oficiales">
+                <i class="fas fa-copyright me-2"></i>Gestionar Marcas
+            </button>
+        </div>
     </div>
 
     <div class="card shadow-sm mb-4">
@@ -39,11 +44,19 @@
                     </div>
                     <div class="row">
                         <div class="col-md-4 mb-3">
-                            <div class="form-floating">
-                                <input class="form-control" list="marcas-list-carga" id="prod-marca"
-                                    placeholder="Marca">
-                                <label for="prod-marca">Marca</label>
-                                <datalist id="marcas-list-carga"></datalist>
+                            <div class="input-group">
+                                <div class="form-floating flex-grow-1">
+                                    <select class="form-select" id="prod-marca">
+                                        <option value="">-- Sin Marca / Genérica --</option>
+                                    </select>
+                                    <label for="prod-marca">Marca</label>
+                                </div>
+                                <button class="btn btn-outline-primary" type="button" id="btn-nueva-marca-carga" title="Crear nueva marca oficial">
+                                    <i class="fas fa-plus"></i>
+                                </button>
+                                <button class="btn btn-outline-secondary" type="button" id="btn-gestionar-marcas-carga" title="Gestionar, renombrar o fusionar marcas">
+                                    <i class="fas fa-sliders-h"></i>
+                                </button>
                             </div>
                         </div>
                         <div class="col-md-4 mb-3">

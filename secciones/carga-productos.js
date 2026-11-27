@@ -2,7 +2,7 @@
 import { db, functions } from '../firebase.js';
 import { collection, writeBatch, doc, getDocs, query, where, addDoc, orderBy, Timestamp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js";
 import { httpsCallable } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-functions.js";
-import { showAlertModal, showConfirmationModal, roundUpToNearest50, formatCurrency, normalizeString, capitalizeFirstLetter, showToast, fetchAndSquareImageUrl, showInputModal, populateRubroSelect, promptCrearNuevoRubro, getListaRubrosOficiales } from '../utils.js';
+import { showAlertModal, showConfirmationModal, roundUpToNearest50, formatCurrency, normalizeString, capitalizeFirstLetter, showToast, fetchAndSquareImageUrl, showInputModal, populateRubroSelect, promptCrearNuevoRubro, getListaRubrosOficiales, populateMarcaSelect, promptCrearNuevaMarca, getListaMarcasOficiales } from '../utils.js';
 import { getProductos, getMarcas, getColores, getRubros } from './dataManager.js';
 // --- ESTADO Y ELEMENTOS DEL DOM ---
 let productosEnPreparacion = [];
@@ -77,13 +77,16 @@ export async function init() {
                 elemento.innerHTML = lista.map(item => `<option value="${capitalizeFirstLetter(item)}"></option>`).join('');
             }
         };
-        poblar(datalistMarcas, getMarcas());
         poblar(datalistColores, getColores());
+        populateMarcaSelect(prodMarca, { placeholder: '-- Sin Marca / Genérica --', preserveValue: true });
         populateRubroSelect(prodRubro, { placeholder: '-- Seleccionar Rubro --', preserveValue: true });
     };
 
     // Suscripción a los eventos de actualización
-    document.addEventListener('marcas-updated', actualizarDatalistsCarga);
+    document.addEventListener('marcas-updated', () => {
+        actualizarDatalistsCarga();
+        renderizarGrilla();
+    });
     document.addEventListener('colores-updated', actualizarDatalistsCarga);
     document.addEventListener('rubros-updated', () => {
         actualizarDatalistsCarga();
@@ -159,16 +162,28 @@ function setupEventListeners() {
         };
     }
 
-    const abrirGestorDesdeCarga = async () => {
+    const abrirGestorDesdeCarga = async (entity = 'rubros') => {
         const productosModule = await import('./productos.js');
         if (productosModule.abrirModalGestionRubros) {
-            productosModule.abrirModalGestionRubros();
+            productosModule.abrirModalGestionRubros(entity);
         }
     };
     const btnGestionarRubrosCarga = document.getElementById('btn-gestionar-rubros-carga');
-    if (btnGestionarRubrosCarga) btnGestionarRubrosCarga.onclick = abrirGestorDesdeCarga;
+    if (btnGestionarRubrosCarga) btnGestionarRubrosCarga.onclick = () => abrirGestorDesdeCarga('rubros');
     const btnGestionarRubrosCargaHeader = document.getElementById('btn-gestionar-rubros-carga-header');
-    if (btnGestionarRubrosCargaHeader) btnGestionarRubrosCargaHeader.onclick = abrirGestorDesdeCarga;
+    if (btnGestionarRubrosCargaHeader) btnGestionarRubrosCargaHeader.onclick = () => abrirGestorDesdeCarga('rubros');
+
+    const btnNuevaMarcaCarga = document.getElementById('btn-nueva-marca-carga');
+    if (btnNuevaMarcaCarga) {
+        btnNuevaMarcaCarga.onclick = async () => {
+            await promptCrearNuevaMarca(prodMarca);
+            renderizarGrilla();
+        };
+    }
+    const btnGestionarMarcasCarga = document.getElementById('btn-gestionar-marcas-carga');
+    if (btnGestionarMarcasCarga) btnGestionarMarcasCarga.onclick = () => abrirGestorDesdeCarga('marcas');
+    const btnGestionarMarcasCargaHeader = document.getElementById('btn-gestionar-marcas-carga-header');
+    if (btnGestionarMarcasCargaHeader) btnGestionarMarcasCargaHeader.onclick = () => abrirGestorDesdeCarga('marcas');
 
     if (prodRubro) {
         prodRubro.onchange = () => {
@@ -718,6 +733,7 @@ function handleEnterAsTab(e) {
 function renderizarGrilla() {
     grillaBody.innerHTML = '';
     const listaRubrosGrilla = getListaRubrosOficiales();
+    const listaMarcasGrilla = getListaMarcasOficiales();
     productosEnPreparacion.forEach(p => {
         const row = document.createElement('tr');
         row.dataset.id = p.id;
@@ -778,6 +794,16 @@ function renderizarGrilla() {
         const vStock = p.tieneVariantes ? `<span class="badge bg-info">${p.variantes.reduce((acc, v)=>acc+(parseInt(v.stock)||0),0)}</span>` : `<input type="number" class="form-control form-control-sm" value="${p.stock}" data-field="stock" step="1">`;
         const vStockMin = p.tieneVariantes ? `<span class="badge bg-light text-dark">N/A</span>` : `<input type="number" class="form-control form-control-sm" value="${p.stockMinimo}" data-field="stockMinimo" step="1">`;
 
+        const pMarcaNorm = normalizeString(p.marca || '');
+        const opcionesMarcaSet = new Set(listaMarcasGrilla);
+        if (pMarcaNorm) opcionesMarcaSet.add(pMarcaNorm);
+        const opcionesMarcaHtml = [
+            `<option value="" ${!pMarcaNorm ? 'selected' : ''}>-- Sin Marca --</option>`,
+            ...Array.from(opcionesMarcaSet).sort((a, b) => a.localeCompare(b, 'es')).map(m =>
+                `<option value="${m}" ${m === pMarcaNorm ? 'selected' : ''}>${capitalizeFirstLetter(m)}</option>`
+            )
+        ].join('');
+
         const pRubroNorm = normalizeString(p.rubro || '');
         const opcionesRubroSet = new Set(listaRubrosGrilla);
         if (pRubroNorm) opcionesRubroSet.add(pRubroNorm);
@@ -791,7 +817,7 @@ function renderizarGrilla() {
         row.innerHTML = `
             <td class="codigo-cell">${iconoEstado} ${vCodigo}</td>
             <td><input type="text" class="form-control form-control-sm" value="${p.nombre}" data-field="nombre"></td>
-            <td><input type="text" class="form-control form-control-sm" value="${p.marca}" data-field="marca"></td>
+            <td><select class="form-select form-select-sm" data-field="marca">${opcionesMarcaHtml}</select></td>
             <td><input type="text" class="form-control form-control-sm" value="${p.color}" data-field="color"></td>
             <td><select class="form-select form-select-sm ${!pRubroNorm ? 'is-invalid' : ''}" data-field="rubro">${opcionesRubroHtml}</select></td>
             <td>${vCosto}</td>
@@ -1031,7 +1057,15 @@ function limpiarFormulario() {
 function poblarFormulario(producto, modoDuplicar = false) {
     if (prodCodigo) prodCodigo.classList.remove('is-invalid');
     prodNombre.value = producto.nombre;
-    prodMarca.value = producto.marca;
+    const normMarcaCarga = normalizeString(producto.marca || '');
+    populateMarcaSelect(prodMarca, { placeholder: '-- Sin Marca / Genérica --', preserveValue: false });
+    if (normMarcaCarga && !Array.from(prodMarca.options).some(o => o.value === normMarcaCarga)) {
+        const optM = document.createElement('option');
+        optM.value = normMarcaCarga;
+        optM.textContent = capitalizeFirstLetter(normMarcaCarga);
+        prodMarca.appendChild(optM);
+    }
+    prodMarca.value = normMarcaCarga;
     prodColor.value = producto.color;
     const normRubroCarga = normalizeString(producto.rubro || '');
     const warnEl = document.getElementById('prod-rubro-warning');
